@@ -12,3 +12,4 @@ __pycache__/
 # Node and frontend builds
 node_modules/
 dist/
+*.tsbuildinfo
