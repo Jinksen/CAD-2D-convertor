@@ -8,3 +8,7 @@ __pycache__/
 .ruff_cache/
 .venv/
 *.py[cod]
+
+# Node and frontend builds
+node_modules/
+dist/
