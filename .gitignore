@@ -1,2 +1,18 @@
 .superpowers/
 .worktrees/
+
+# Python
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+*.py[cod]
+
+# Node and frontend builds
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Rust
+target/

@@ -1,0 +1,10 @@
+{
+  "name": "cad2maxwell",
+  "private": true,
+  "packageManager": "pnpm@10.17.1",
+  "scripts": {
+    "lint": "corepack pnpm --filter @cad2maxwell/frontend lint",
+    "typecheck": "corepack pnpm --filter @cad2maxwell/frontend typecheck",
+    "test": "corepack pnpm --filter @cad2maxwell/frontend test -- --run"
+  }
+}
