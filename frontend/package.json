@@ -18,6 +18,7 @@
     "zustand": "latest"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.8.5",
     "@eslint/js": "latest",
     "@testing-library/jest-dom": "latest",
     "@testing-library/react": "latest",
