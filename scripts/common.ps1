@@ -37,6 +37,12 @@ function New-SessionToken {
     return ([BitConverter]::ToString($bytes)).Replace('-', '')
 }
 
+function Get-BackendProcessArguments {
+    param([Parameter(Mandatory)][string]$BackendPath)
+
+    return "run --project `"$BackendPath`" uvicorn cad2maxwell_backend.api:app --host 127.0.0.1 --port 8000"
+}
+
 function Assert-DeveloperPrerequisites {
     foreach ($command in @('corepack', 'uv', 'cargo', 'rustc')) {
         Assert-CommandExists -Name $command

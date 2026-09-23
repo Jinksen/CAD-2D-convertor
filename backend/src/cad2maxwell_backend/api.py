@@ -6,6 +6,7 @@ from cad2maxwell_backend.models.health import HealthResponse
 ALLOWED_ORIGINS = (
     "http://127.0.0.1:1420",
     "http://localhost:1420",
+    "http://tauri.localhost",
     "tauri://localhost",
 )
 

@@ -10,10 +10,9 @@ $env:CAD2MAXWELL_SESSION_TOKEN = $token
 
 $backendProcess = $null
 try {
-    $backendProcess = Start-Process -FilePath 'uv' -ArgumentList @(
-        'run', '--project', $backend, 'uvicorn', 'cad2maxwell_backend.api:app',
-        '--host', '127.0.0.1', '--port', '8000'
-    ) -WorkingDirectory $root -WindowStyle Hidden -PassThru
+    $backendArguments = Get-BackendProcessArguments -BackendPath $backend
+    $backendProcess = Start-Process -FilePath 'uv' -ArgumentList $backendArguments `
+        -WorkingDirectory $root -WindowStyle Hidden -PassThru
 
     $ready = $false
     for ($attempt = 0; $attempt -lt 40; $attempt++) {

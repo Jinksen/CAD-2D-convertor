@@ -26,4 +26,10 @@ Describe 'Developer script helpers' {
     It 'creates a 256-bit hexadecimal session token' {
         New-SessionToken | Should Match '^[0-9A-F]{64}$'
     }
+
+    It 'quotes a backend path containing spaces for Start-Process' {
+        $arguments = Get-BackendProcessArguments -BackendPath 'C:\CAD Projects\Motor Tool\backend'
+
+        $arguments | Should Match '--project "C:\\CAD Projects\\Motor Tool\\backend"'
+    }
 }

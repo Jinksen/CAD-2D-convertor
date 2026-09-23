@@ -17,3 +17,12 @@ def test_health_returns_versioned_typed_payload() -> None:
 
 def test_external_host_is_not_configured() -> None:
     assert Settings().host == "127.0.0.1"
+
+
+def test_windows_tauri_origin_is_allowed() -> None:
+    response = TestClient(create_app()).get(
+        "/api/v1/health",
+        headers={"Origin": "http://tauri.localhost"},
+    )
+
+    assert response.headers["access-control-allow-origin"] == "http://tauri.localhost"
