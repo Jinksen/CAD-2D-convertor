@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Literal
 
+from OCP.TopoDS import TopoDS_Shape
+
 from cad2maxwell_backend.models.imports import BoundingBox, ImportDiagnostic, Rgb
 
 
@@ -8,7 +10,7 @@ from cad2maxwell_backend.models.imports import BoundingBox, ImportDiagnostic, Rg
 class ImportedBody:
     """A located exact shape and its source metadata, owned by the backend."""
 
-    shape: object
+    shape: TopoDS_Shape
     occurrence_key: str
     solid_ordinal: int
     source_id: str | None

@@ -1,0 +1,1 @@
+"""Exact OpenCascade geometry adapters."""

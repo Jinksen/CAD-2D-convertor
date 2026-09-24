@@ -1,10 +1,12 @@
+from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
+
 from cad2maxwell_backend.domain.import_result import ImportedBody
 from cad2maxwell_backend.models.imports import BoundingBox
 from cad2maxwell_backend.services.import_sessions import ImportSessions
 
 
 def test_session_keeps_exact_shape_and_can_be_removed() -> None:
-    solid = object()
+    solid = BRepPrimAPI_MakeBox(1, 2, 3).Shape()
     body = ImportedBody(
         shape=solid,
         occurrence_key="0:1:2",
