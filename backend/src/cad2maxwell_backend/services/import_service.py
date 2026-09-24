@@ -1,4 +1,5 @@
 import hashlib
+import ntpath
 from collections.abc import Callable
 from pathlib import Path
 
@@ -40,7 +41,13 @@ class RejectedStepFile(ImportServiceError):
 
 
 def _validated_path(raw_path: str) -> Path:
-    path = Path(raw_path)
+    _, path_tail = ntpath.splitdrive(raw_path)
+    if any(ord(char) < 32 or char in '<>:"|?*' for char in path_tail):
+        raise InvalidImportPath
+    try:
+        path = Path(raw_path)
+    except ValueError as exc:
+        raise InvalidImportPath from exc
     if not path.is_absolute() or path.suffix.casefold() not in {".step", ".stp"}:
         raise InvalidImportPath
     try:
@@ -51,6 +58,8 @@ def _validated_path(raw_path: str) -> Path:
             raise InvalidImportPath
     except PermissionError as exc:
         raise UnreadableImportFile from exc
+    except ValueError as exc:
+        raise InvalidImportPath from exc
     except OSError as exc:
         raise InvalidImportPath from exc
     return resolved

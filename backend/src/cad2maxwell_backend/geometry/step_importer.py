@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from OCP.IFSelect import IFSelect_ReturnStatus
+from OCP.Interface import Interface_CheckIterator
 from OCP.Quantity import Quantity_Color, Quantity_TypeOfColor
 from OCP.STEPCAFControl import STEPCAFControl_Reader
 from OCP.TCollection import TCollection_ExtendedString
@@ -35,6 +36,32 @@ _UNIT_TO_MM = {
     "inch": 25.4, "in": 25.4,
     "foot": 304.8, "ft": 304.8,
 }
+
+
+def _check_diagnostics(
+    checks: Interface_CheckIterator, phase: str,
+) -> list[ImportDiagnostic]:
+    """Summarize OCCT checks without exposing source file content in messages."""
+    warnings = 0
+    failures = 0
+    checks.Start()
+    while checks.More():
+        check = checks.Value()
+        warnings += check.NbWarnings()
+        failures += check.NbFails()
+        checks.Next()
+    diagnostics = []
+    if warnings:
+        diagnostics.append(ImportDiagnostic(
+            code=f"step_{phase}_warning", severity="warning",
+            message=f"OpenCascade reported {warnings} STEP {phase} warning(s).",
+        ))
+    if failures:
+        diagnostics.append(ImportDiagnostic(
+            code=f"step_{phase}_failure", severity="error",
+            message=f"OpenCascade reported {failures} STEP {phase} failure(s).",
+        ))
+    return diagnostics
 
 
 def _source_unit(
@@ -114,8 +141,12 @@ def read_step(path: Path) -> ImportedModel:
     if reader.ReadFile(str(path)) != IFSelect_ReturnStatus.IFSelect_RetDone:
         raise StepImportError("OpenCascade rejected STEP content")
     source_unit, scale, diagnostics = _source_unit(reader)
+    diagnostics.extend(_check_diagnostics(reader.Reader().WS().ModelCheckList(), "reader"))
     if not reader.Transfer(document):
         raise StepImportError("OpenCascade could not transfer STEP content")
+    diagnostics.extend(_check_diagnostics(
+        reader.Reader().WS().TransferReader().LastCheckList(), "transfer",
+    ))
 
     colors = XCAFDoc_DocumentTool.ColorTool_s(document.Main())
     explorer = XCAFPrs_DocumentExplorer(

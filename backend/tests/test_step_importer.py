@@ -1,6 +1,9 @@
 from pathlib import Path
 
 import pytest
+from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+from OCP.BRepPrimAPI import BRepPrimAPI_MakeHalfSpace
+from OCP.gp import gp_Dir, gp_Pln, gp_Pnt
 from OCP.TopoDS import TopoDS_Shape
 from step_fixtures import inch_box, named_colored_box, repeated_occurrences, unnamed_box
 
@@ -62,8 +65,34 @@ def test_malformed_step_is_rejected(tmp_path: Path) -> None:
         read_step(path)
 
 
+def test_reader_failure_survives_successful_partial_import(tmp_path: Path) -> None:
+    path = named_colored_box(tmp_path / "partial_failure.step")
+    source = path.read_text(encoding="utf-8")
+    data_end = source.rfind("ENDSEC;")
+    assert data_end >= 0
+    path.write_text(
+        source[:data_end] + "#9999=CARTESIAN_POINT('',('bad',0.,0.));\n" + source[data_end:],
+        encoding="utf-8",
+    )
+
+    model = read_step(path)
+
+    assert len(model.bodies) == 1
+    assert any(
+        diagnostic.code == "step_reader_failure" and diagnostic.severity == "error"
+        for diagnostic in model.diagnostics
+    )
+
+
 def test_void_shape_has_no_serializable_bounds() -> None:
     assert shape_bounds_mm(TopoDS_Shape()) is None
+
+
+def test_unbounded_halfspace_has_no_serializable_bounds() -> None:
+    face = BRepBuilderAPI_MakeFace(gp_Pln(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1))).Face()
+    halfspace = BRepPrimAPI_MakeHalfSpace(face, gp_Pnt(0, 0, 1)).Solid()
+
+    assert shape_bounds_mm(halfspace) is None
 
 
 def test_invalid_body_bounds_skip_only_that_body(

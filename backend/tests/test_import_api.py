@@ -31,6 +31,8 @@ def test_invalid_paths_and_missing_files_map_to_expected_errors(tmp_path: Path) 
     directory.mkdir()
     cases = [
         ("relative.step", 422, "invalid_import_path"),
+        ("C:/bad\x00.step", 422, "invalid_import_path"),
+        ("C:/bad?.step", 422, "invalid_import_path"),
         (str(tmp_path / "wrong.txt"), 422, "invalid_import_path"),
         (str(directory), 422, "invalid_import_path"),
         (str(tmp_path / "absent.step"), 404, "missing_import_file"),
