@@ -54,3 +54,12 @@ class ImportResponse(BaseModel):
     component_count: int = Field(ge=0)
     components: list[ImportComponent]
     diagnostics: list[ImportDiagnostic]
+
+
+class ImportErrorPayload(BaseModel):
+    code: str
+    message: str
+
+
+class ImportErrorResponse(BaseModel):
+    error: ImportErrorPayload
