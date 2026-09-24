@@ -1,6 +1,12 @@
 # Geometry
 
-Geometry is intentionally absent from Milestone 0. Python with OpenCascade/OCP will be the sole geometric authority.
+Python with OpenCascade/OCP is the sole geometric authority. The first Milestone 1 slice reads STEP/STP through XCAF, which preserves assembly occurrences and source labels that a flat shape import would lose. Each imported solid is retained as an exact, located B-Rep shape in a process-local backend session. The API returns metadata and bounds only; preview meshes and section curves are not yet produced.
+
+Import sets the XCAF document unit to millimetres before transfer. The STEP reader reports source units separately, and the response records the source-to-millimetre scale when recognized. Bounds and retained session shapes are in millimetres. Missing, conflicting, or unrecognized source units produce an `unknown_source_unit` diagnostic and no claimed scale. Void or non-finite body bounds are skipped with `invalid_body_bounds`; if no solids remain, import fails. No geometry healing is performed.
+
+For each body, occurrence metadata takes precedence over product metadata. Source names and colors stay nullable when unavailable; generated display and ASCII-safe export names are separate fields. Stable component IDs derive from the source SHA-256, the XCAF occurrence path, and the solid ordinal, so an unchanged file keeps component identity across imports regardless of its absolute location. The random `import_id` identifies only the current backend session.
+
+`POST /api/v1/imports/step` accepts `{"path":"C:/absolute/model.step"}`. Successful responses contain `import_id`, `path`, `sha256`, `source_unit`, `to_mm_scale`, `bounds_mm`, `component_count`, `components`, and `diagnostics`. Each component includes source/display/export names, source label reference, hierarchy, color and provenance where available, body ordinal, and bounds. Errors use a stable `{ "error": { "code": "...", "message": "..." } }` envelope. Non-absolute or non-file paths return 422, absent files 404, unreadable files 403, malformed or empty STEP content 400, and unexpected failures 500 without CAD data or tracebacks in the response.
 
 The future section pipeline will intersect source B-Rep bodies with a defined plane, assemble intersection edges into wires, transform those wires into a right-handed plane-local coordinate system, classify outer and inner loops, and retain source-component ownership. Analytic lines, arcs, circles, ellipses, and B-splines will be preserved where possible.
 

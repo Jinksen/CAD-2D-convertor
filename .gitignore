@@ -1,6 +1,11 @@
 .superpowers/
 .worktrees/
-
+.codex
+.pnpm-store
+.verification
+.uv-cache
+.codex
+data
 # Python
 __pycache__/
 .mypy_cache/
