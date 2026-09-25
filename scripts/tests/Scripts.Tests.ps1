@@ -35,6 +35,18 @@ Describe 'Developer script helpers' {
         $arguments | Should Match '^-m uvicorn cad2maxwell_backend.api:app --host 127\.0\.0\.1 --port 8000$'
     }
 
+    It 'finds the newest installed MSVC linker directory' {
+        $installation = Join-Path $TestDrive 'BuildTools'
+        foreach ($version in @('14.40.10000', '14.44.35207')) {
+            $directory = Join-Path $installation "VC/Tools/MSVC/$version/bin/Hostx64/x64"
+            New-Item -ItemType Directory -Path $directory -Force | Out-Null
+            New-Item -ItemType File -Path (Join-Path $directory 'link.exe') | Out-Null
+        }
+
+        Get-MSVCLinkerDirectory -InstallationPath $installation |
+            Should Be (Join-Path $installation 'VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64')
+    }
+
     It 'rejects a port already held by another backend process' {
         $listener = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, 0)
         $listener.Start()

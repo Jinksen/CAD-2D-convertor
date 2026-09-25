@@ -22,7 +22,7 @@ The backend accepts local `.step` and `.stp` files and exports draft DXF. `.c2mp
 - Visual Studio 2022 Build Tools with **Desktop development with C++**
 - WebView2 Runtime
 
-Use a Developer PowerShell so `link.exe` is available on `PATH`.
+The scripts locate the installed MSVC linker automatically, including from a regular PyCharm PowerShell terminal.
 
 ## Setup
 
@@ -33,6 +33,8 @@ Use a Developer PowerShell so `link.exe` is available on `PATH`.
 The script validates prerequisites, installs the pinned pnpm workspace, and synchronizes the Python environment.
 
 ## Development
+
+In PyCharm, open the **Terminal** tab at the repository root and run this in PowerShell:
 
 ```powershell
 .\scripts\dev.ps1

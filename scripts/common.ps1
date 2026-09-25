@@ -65,12 +65,44 @@ function Assert-BackendPortAvailable {
     }
 }
 
+function Get-MSVCLinkerDirectory {
+    param([Parameter(Mandatory)][string]$InstallationPath)
+
+    $toolsRoot = Join-Path $InstallationPath 'VC/Tools/MSVC'
+    if (-not (Test-Path -LiteralPath $toolsRoot -PathType Container)) { return $null }
+
+    foreach ($version in (Get-ChildItem -LiteralPath $toolsRoot -Directory | Sort-Object Name -Descending)) {
+        $directory = Join-Path $version.FullName 'bin/Hostx64/x64'
+        if (Test-Path -LiteralPath (Join-Path $directory 'link.exe') -PathType Leaf) {
+            return $directory
+        }
+    }
+    return $null
+}
+
+function Enable-MSVCLinker {
+    if ($null -ne (Get-Command 'link.exe' -ErrorAction SilentlyContinue)) { return }
+
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+    if (Test-Path -LiteralPath $vswhere -PathType Leaf) {
+        $installation = & $vswhere -latest -products '*' `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($installation)) {
+            $directory = Get-MSVCLinkerDirectory -InstallationPath $installation
+            if ($null -ne $directory) {
+                $env:PATH = "$directory;$env:PATH"
+                return
+            }
+        }
+    }
+
+    throw "Required MSVC linker 'link.exe' was not found. Install Visual Studio 2022 Build Tools with the Desktop development with C++ workload."
+}
+
 function Assert-DeveloperPrerequisites {
     foreach ($command in @('corepack', 'uv', 'cargo', 'rustc')) {
         Assert-CommandExists -Name $command
     }
 
-    if ($null -eq (Get-Command 'link.exe' -ErrorAction SilentlyContinue)) {
-        throw "Required MSVC linker 'link.exe' was not found. Install Visual Studio 2022 Build Tools with the Desktop development with C++ workload, then use a Developer PowerShell."
-    }
+    Enable-MSVCLinker
 }
