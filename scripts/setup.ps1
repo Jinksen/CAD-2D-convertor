@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 
 Assert-DeveloperPrerequisites
 $root = Get-RepositoryRoot
+$env:UV_CACHE_DIR = Join-Path $root '.uv-cache'
 
 Push-Location $root
 try {

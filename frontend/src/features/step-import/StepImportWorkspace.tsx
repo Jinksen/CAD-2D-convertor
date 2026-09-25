@@ -2,6 +2,7 @@ import { useState, type SyntheticEvent } from "react";
 
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { SectionView } from "../section/SectionView";
+import { PreviewView } from "../preview/PreviewView";
 import { importStep, importStepFile } from "./client";
 
 function dimensions(bounds: { min_xyz: [number, number, number]; max_xyz: [number, number, number] }): string {
@@ -14,6 +15,8 @@ export function StepImportWorkspace() {
   const [path, setPath] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [viewportMode, setViewportMode] = useState<"2d" | "3d">("2d");
+  const [previewOpened, setPreviewOpened] = useState(false);
   const { activePlane, imported, selectedComponentId, setImported, selectComponent } = useWorkspaceStore();
   const selected = imported?.components.find((item) => item.id === selectedComponentId);
 
@@ -72,10 +75,19 @@ export function StepImportWorkspace() {
         </nav>
         <main className="viewport" aria-label="Viewport">
           <div className="viewport-tabs" role="tablist" aria-label="Viewport mode">
-            <button type="button" role="tab" aria-selected={!imported} disabled={Boolean(imported)}>3D VIEW</button>
-            <button type="button" role="tab" aria-selected={Boolean(imported)} disabled={!imported}>2D SECTION</button>
+            <button type="button" role="tab" aria-selected={!imported || viewportMode === "3d"}
+              disabled={!imported} onClick={() => { setPreviewOpened(true); setViewportMode("3d"); }}>3D VIEW</button>
+            <button type="button" role="tab" aria-selected={Boolean(imported) && viewportMode === "2d"}
+              disabled={!imported} onClick={() => { setViewportMode("2d"); }}>2D SECTION</button>
           </div>
-          {imported ? <SectionView key={`${imported.import_id}-${activePlane}`} imported={imported} plane={activePlane} /> :
+          {imported ? <>
+            <div className="viewport-panel" hidden={viewportMode !== "2d"}>
+              <SectionView key={`${imported.import_id}-${activePlane}`} imported={imported} plane={activePlane} />
+            </div>
+            {previewOpened && <div className="viewport-panel" hidden={viewportMode !== "3d"}>
+              <PreviewView key={imported.import_id} imported={imported} />
+            </div>}
+          </> :
             <div className="viewport-empty"><h1>Engineering viewport</h1>
               <p>Exact CAD geometry will appear here after import.</p>
             </div>}

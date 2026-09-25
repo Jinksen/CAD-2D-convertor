@@ -5,8 +5,12 @@ import { StepImportWorkspace } from "./StepImportWorkspace";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { importStep, importStepFile } from "./client";
 import type { ImportSummary } from "./contracts";
+import { fetchPreview } from "../preview/client";
+import { computeSection } from "../section/client";
 
 vi.mock("./client", () => ({ importStep: vi.fn(), importStepFile: vi.fn() }));
+vi.mock("../preview/client", () => ({ fetchPreview: vi.fn() }));
+vi.mock("../section/client", () => ({ computeSection: vi.fn() }));
 
 const summary = {
   import_id: "session-1", path: "C:/motor.step", sha256: "abc", source_unit: "mm",
@@ -54,5 +58,39 @@ describe("STEP workspace", () => {
     fireEvent.change(chooser, { target: { files: [new File(["step"], "motor.step")] } });
 
     await waitFor(() => expect(screen.getByRole("button", { name: /rotor/i })).toBeInTheDocument());
+  });
+
+  it("opens the 3D tab and keeps the 2D section tab available", () => {
+    useWorkspaceStore.setState({ imported: summary });
+    vi.mocked(fetchPreview).mockReturnValue(new Promise(() => {}));
+    render(<StepImportWorkspace />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "3D VIEW" }));
+
+    expect(screen.getByText("Generating 3D preview…")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "3D VIEW" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("tab", { name: "2D SECTION" }));
+    expect(screen.getByRole("tab", { name: "2D SECTION" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("preserves a computed section while inspecting 3D", async () => {
+    useWorkspaceStore.setState({ imported: summary });
+    vi.mocked(fetchPreview).mockReturnValue(new Promise(() => {}));
+    vi.mocked(computeSection).mockResolvedValue({
+      section_id: "section-1", import_id: "session-1",
+      plane: { kind: "XY", offset_mm: 15 }, diagnostics: [],
+      components: [{ component_id: "body-1", wires: [{ closed: true, role: "outer", curves: [
+        { type: "line", start: [0, 0], end: [10, 0] },
+      ] }] }],
+    });
+    render(<StepImportWorkspace />);
+    fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
+    await screen.findByRole("button", { name: /export draft dxf/i });
+
+    fireEvent.click(screen.getByRole("tab", { name: "3D VIEW" }));
+    fireEvent.click(screen.getByRole("tab", { name: "2D SECTION" }));
+
+    expect(screen.getByRole("button", { name: /export draft dxf/i })).toBeInTheDocument();
+    expect(computeSection).toHaveBeenCalledTimes(1);
   });
 });

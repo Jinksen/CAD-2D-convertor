@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse, Response
 
 from cad2maxwell_backend.export.archive import export_archive
 from cad2maxwell_backend.export.dxf import DxfExportError
+from cad2maxwell_backend.geometry.preview_mesh import PreviewMeshError, generate_preview
 from cad2maxwell_backend.geometry.step_importer import read_step
 from cad2maxwell_backend.models.exports import ExportRequest
 from cad2maxwell_backend.models.health import HealthResponse
@@ -17,6 +18,7 @@ from cad2maxwell_backend.models.imports import (
     ImportRequest,
     ImportResponse,
 )
+from cad2maxwell_backend.models.preview import PreviewMeshResponse
 from cad2maxwell_backend.models.sections import SectionRequest, SectionResponse
 from cad2maxwell_backend.services.import_service import ImportService, ImportServiceError
 from cad2maxwell_backend.services.import_sessions import ImportSessions
@@ -98,6 +100,20 @@ def create_app(import_service: ImportService | None = None) -> FastAPI:
         except Exception as exc:
             LOGGER.error("Unexpected STEP upload failure (%s)", type(exc).__name__)
             return _error(500, "internal_import_error", "The STEP upload could not be completed.")
+
+    @app.get("/api/v1/imports/{import_id}/preview", response_model=PreviewMeshResponse)
+    def preview_import(import_id: str) -> PreviewMeshResponse | JSONResponse:
+        imported = service.sessions.get_response(import_id)
+        bodies = service.sessions.get(import_id)
+        if imported is None or bodies is None:
+            return _error(404, "unknown_import", "The import session was not found. Import again.")
+        try:
+            return generate_preview(imported, bodies)
+        except PreviewMeshError as exc:
+            return _error(422, "preview_unavailable", str(exc))
+        except Exception as exc:
+            LOGGER.error("Unexpected preview failure (%s)", type(exc).__name__)
+            return _error(500, "internal_preview_error", "The 3D preview could not be completed.")
 
     @app.post("/api/v1/section", response_model=SectionResponse)
     def create_section(request: SectionRequest) -> SectionResponse | JSONResponse:

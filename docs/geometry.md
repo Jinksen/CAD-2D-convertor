@@ -16,4 +16,4 @@ Exact positive-area cross-component overlap validation uses planar OpenCascade f
 
 `POST /api/v1/export/dxf` accepts typed `import_id` and `section_id` and returns a ZIP containing `section.dxf` and `section.json`. It reads both summaries from backend sessions, rejects mismatches, and never accepts a filesystem output path. The archive remains a draft until geometry validation and complex-model Maxwell checks are complete.
 
-Preview meshes are visualization artifacts only. Mesh slicing is not an acceptable substitute for exact sectioning. Significant repairs must be reported to the user rather than applied silently, and tolerances are centralized and unit-aware.
+`GET /api/v1/imports/{import_id}/preview` triangulates each retained component with OpenCascade and returns positions, normals, indices, component ID, and source color. The JSON preview has a 50,000-triangle cap and reports a clear error above that limit. Preview meshes are visualization artifacts only. Mesh slicing is not an acceptable substitute for exact sectioning. Significant repairs must be reported to the user rather than applied silently, and tolerances are centralized and unit-aware.

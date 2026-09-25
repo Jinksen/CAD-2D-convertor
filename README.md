@@ -2,11 +2,11 @@
 
 CAD2Maxwell is a Windows desktop engineering preprocessor for turning exact 3D CAD assemblies into validated, traceable 2D geometry for ANSYS Maxwell 2D.
 
-> Screenshot placeholder: STEP metadata and exact 2D section outlines are connected; the 3D preview is still pending.
+> Screenshot placeholder: STEP metadata, 3D preview, and exact 2D section outlines are connected.
 
 ## Status
 
-Milestone 0 established the Tauri/React desktop shell and local FastAPI service. The desktop workspace imports STEP/STP files into exact OpenCascade shapes, shows component metadata, and computes exact 2D section wires for XY, XZ, and YZ planes. The backend also accepts a custom plane. The UI and command line export draft analytic DXF with a traceability manifest. Preview meshes are not yet connected.
+Milestone 0 established the Tauri/React desktop shell and local FastAPI service. The desktop workspace imports STEP/STP files into exact OpenCascade shapes, shows component metadata and a selectable 3D preview, and computes exact 2D section wires for XY, XZ, and YZ planes. The backend also accepts a custom plane. The UI and command line export draft analytic DXF with a traceability manifest.
 
 ## Supported files
 
@@ -100,6 +100,8 @@ Content-Type: application/json
 
 Run `./scripts/dev.ps1`, choose a `.step` or `.stp` file with **Choose STEP file**, select XY/XZ/YZ, and click **Compute Section**. The initial offset is the midpoint of the model bounds; change it in millimetres as needed. When the section has closed, classified wires, click **Export draft DXF**. The app downloads `section.zip` containing `section.dxf` and `section.json`. The file chooser sends the selected file only to the local loopback geometry service and rejects uploads over 512 MiB. You can still paste an absolute path and use **Import STEP**.
 
+After import, use **3D VIEW** to orbit with the mouse, zoom with the wheel, and click a body to select it. The backend triangulates retained exact shapes for display only. Switching back to **2D SECTION** keeps the current section visible. The preview currently uses JSON transport with a 50,000-triangle limit; a larger model reports a preview error while exact sectioning remains available.
+
 The ZIP export uses the backend's retained import and section sessions. If the backend restarts, import and compute again. Exact positive-area overlaps between components block export and identify both components. Invalid planar faces, including self-intersecting contours, also block export. The draft is not yet a fully validated simulation model: duplicate and tiny-edge checks and complex-model Maxwell verification remain pending.
 
 ## Draft DXF conversion
@@ -118,18 +120,16 @@ The output path must be absolute and unused. The command writes `section.dxf` an
 ## Known limitations
 
 - STEP import supports the system file chooser and absolute-path entry. File chooser uploads are limited to 512 MiB.
-- The model tree lists and selects components and the 2D viewport shows exact section curves, but there is no preview mesh or selectable 3D viewer yet.
+- The 3D preview is selectable and linked to the model tree. Large models exceeding 50,000 preview triangles need a future binary mesh transport.
 - Closed section wires are classified as outer or hole by exact containment. Positive-area overlaps between components and invalid planar faces block export. Duplicate and tiny-edge checks are still pending. A simple 10 by 20 mm rectangle DXF was imported as a filled region in ANSYS Maxwell; complex assemblies still need verification.
 - The UI supports XY/XZ/YZ offsets; custom planes are available through the backend API.
 - Import sessions are lost on backend restart; packaged OCP runtime compatibility is not yet verified.
-- The 3D viewport remains a placeholder.
 - Windows is the only packaging target for the MVP.
 
 ## Roadmap
 
-1. Preview meshes and 3D selection.
-2. Region and hole classification, geometry validation, and clickable diagnostics.
-3. Complete DXF validation, Maxwell import verification, and UI export.
-4. Project save/load, recent files, and undo/redo.
+1. Complete duplicate/tiny-edge validation and complex-model Maxwell import verification.
+2. Project save/load, recent files, and undo/redo.
+3. Binary preview mesh transport for large assemblies and custom-plane controls in the UI.
 
 Read [CAD2Maxwell_PROJECT_SPEC.md](CAD2Maxwell_PROJECT_SPEC.md) for the authoritative product and implementation requirements.

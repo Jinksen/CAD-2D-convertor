@@ -66,13 +66,22 @@ button:disabled { color: #707983; cursor: not-allowed; }
 .empty-panel strong { color: #bbc3ca; font-size: 13px; }
 .empty-icon { color: #4f6577; font-size: 26px; }
 
-.viewport { position: relative; display: grid; grid-template-rows: 34px 1fr; min-width: 0; background-color: #12171c; background-image: linear-gradient(#1a222a 1px, transparent 1px), linear-gradient(90deg, #1a222a 1px, transparent 1px); background-size: 24px 24px; }
+.viewport { position: relative; display: grid; grid-template-rows: 34px minmax(0, 1fr); min-width: 0; background-color: #12171c; background-image: linear-gradient(#1a222a 1px, transparent 1px), linear-gradient(90deg, #1a222a 1px, transparent 1px); background-size: 24px 24px; }
+.viewport-panel { grid-row: 2; min-height: 0; }
+.viewport-panel[hidden] { display: none; }
+.viewport-panel > .section-view, .viewport-panel > .preview-view { height: 100%; }
 .viewport-tabs { display: flex; gap: 2px; padding: 4px 6px 0; border-bottom: 1px solid #303842; background: #1b2128; }
 .viewport-tabs button { border-bottom: 0; padding: 4px 12px; font-size: 11px; }
 .viewport-tabs button[aria-selected="true"] { color: #79c3f5; border-color: #466b85; background: #172530; }
 .viewport-empty { display: flex; align-items: center; justify-content: center; flex-direction: column; color: #74808b; }
 .viewport-empty h1 { margin: 16px 0 4px; color: #aab3bc; font-size: 18px; font-weight: 500; }
 .viewport-empty p { margin: 0; font-size: 13px; }
+.preview-view { position: relative; min-height: 0; }
+.preview-canvas { width: 100%; height: 100%; }
+.preview-help { position: absolute; z-index: 1; top: 8px; left: 10px; margin: 0; padding: 5px 8px;
+  border: 1px solid #354653; border-radius: 3px; background: #18212bd9; color: #acbdc9; font-size: 11px; pointer-events: none; }
+.preview-message { display: flex; align-items: center; justify-content: center; padding: 16px; color: #c7b481; font-size: 12px; }
+.preview-message[role="alert"] { color: #f2a09b; }
 .section-view { display: flex; flex-direction: column; position: relative; min-height: 0; }
 .section-controls { display: flex; align-items: center; gap: 8px; padding: 8px; border-bottom: 1px solid #303842; background: #1b2128; color: #aab3bc; font-size: 12px; }
 .section-controls input { width: 110px; padding: 5px; border: 1px solid #3a434d; border-radius: 3px; background: #12171c; color: #d8dde3; font: inherit; }
