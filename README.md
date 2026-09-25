@@ -34,6 +34,8 @@ The script validates prerequisites, installs the pinned pnpm workspace, and sync
 
 ## Development
 
+On Windows, double-click `START-APP.cmd` in the repository folder to open the desktop app. Keep the console window open while using it.
+
 In PyCharm, open the **Terminal** tab at the repository root and run this in PowerShell:
 
 ```powershell
