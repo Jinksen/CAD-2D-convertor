@@ -5,6 +5,7 @@ description = "Local geometry service for CAD2Maxwell"
 requires-python = ">=3.12"
 dependencies = [
     "cadquery-ocp-novtk>=7.9.3.1.1,<7.10",
+    "ezdxf>=1.4.4,<2",
     "fastapi>=0.116,<1",
     "pydantic-settings>=2.10,<3",
     "uvicorn[standard]>=0.35,<1",

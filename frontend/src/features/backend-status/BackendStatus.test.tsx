@@ -19,4 +19,11 @@ describe("BackendStatus", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent(/backend offline/i);
   });
+
+  it("reports the imported body count and source units", () => {
+    render(<BackendStatus health={{ state: "online", service: "cad2maxwell-backend", apiVersion: "v1" }}
+      bodyCount={2} sourceUnit="inch" />);
+    expect(screen.getByRole("status")).toHaveTextContent("Bodies: 2");
+    expect(screen.getByRole("status")).toHaveTextContent("Source: inch");
+  });
 });

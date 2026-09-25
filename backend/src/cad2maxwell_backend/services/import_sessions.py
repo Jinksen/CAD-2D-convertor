@@ -24,6 +24,10 @@ class ImportSessions:
             entry = self._entries.get(import_id)
             return entry[1] if entry is not None else None
 
+    def get_record(self, import_id: str) -> tuple[str, tuple[ImportedBody, ...]] | None:
+        with self._lock:
+            return self._entries.get(import_id)
+
     def remove(self, import_id: str) -> bool:
         with self._lock:
             return self._entries.pop(import_id, None) is not None
