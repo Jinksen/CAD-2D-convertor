@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { importStep } from "./client";
+import { importStep, importStepFile } from "./client";
 
 const imported = {
   import_id: "session-1", path: "C:/motor.step", sha256: "abc", source_unit: "mm",
@@ -33,5 +33,19 @@ describe("importStep", () => {
   it("rejects malformed success data", async () => {
     const fetcher: typeof fetch = () => Promise.resolve(new Response(JSON.stringify({ ...imported, components: [] })));
     await expect(importStep("C:/motor.step", fetcher)).rejects.toThrow("invalid import response");
+  });
+});
+
+describe("importStepFile", () => {
+  it("uploads selected STEP bytes to the local backend", async () => {
+    const file = new File(["ISO-10303-21"], "motor.step", { type: "application/octet-stream" });
+    const fetcher: typeof fetch = (url, init) => {
+      expect(url).toContain("/api/v1/imports/step/file?filename=motor.step");
+      expect(init?.method).toBe("POST");
+      expect(init?.body).toBe(file);
+      return Promise.resolve(new Response(JSON.stringify({ ...imported, path: "motor.step" })));
+    };
+
+    await expect(importStepFile(file, fetcher)).resolves.toMatchObject({ path: "motor.step" });
   });
 });

@@ -1,10 +1,15 @@
 import logging
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
+from cad2maxwell_backend.export.archive import export_archive
+from cad2maxwell_backend.export.dxf import DxfExportError
 from cad2maxwell_backend.geometry.step_importer import read_step
+from cad2maxwell_backend.models.exports import ExportRequest
 from cad2maxwell_backend.models.health import HealthResponse
 from cad2maxwell_backend.models.imports import (
     ImportErrorPayload,
@@ -19,6 +24,7 @@ from cad2maxwell_backend.services.section_service import SectionError, SectionSe
 from cad2maxwell_backend.services.section_sessions import SectionSessions
 
 LOGGER = logging.getLogger(__name__)
+MAX_UPLOAD_BYTES = 512 * 1024 * 1024
 
 ALLOWED_ORIGINS = (
     "http://127.0.0.1:1420",
@@ -62,6 +68,37 @@ def create_app(import_service: ImportService | None = None) -> FastAPI:
             ))
             return JSONResponse(status_code=500, content=payload.model_dump())
 
+    @app.post("/api/v1/imports/step/file", response_model=ImportResponse)
+    async def import_step_file(request: Request, filename: str) -> ImportResponse | JSONResponse:
+        if (not filename or Path(filename).name != filename or "\\" in filename
+                or any(ord(char) < 32 or char in '<>:"|?*' for char in filename)
+                or Path(filename).suffix.casefold() not in {".step", ".stp"}):
+            return _error(422, "invalid_import_path", "Choose a STEP or STP file.")
+        try:
+            with TemporaryDirectory(prefix="cad2maxwell-import-") as directory:
+                path = Path(directory) / filename
+                total = 0
+                with path.open("xb") as stream:
+                    async for chunk in request.stream():
+                        total += len(chunk)
+                        if total > MAX_UPLOAD_BYTES:
+                            return _error(413, "import_too_large", "The STEP file exceeds 512 MiB.")
+                        stream.write(chunk)
+                if total == 0:
+                    return _error(400, "rejected_step_file", "The STEP file is empty.")
+                imported = service.import_path(str(path))
+                response = imported.model_copy(update={"path": filename})
+                service.sessions.keep_response(response)
+                return response
+        except ImportServiceError as exc:
+            return _error(exc.status_code, exc.code, exc.public_message)
+        except OSError as exc:
+            LOGGER.error("STEP upload failed (%s)", type(exc).__name__)
+            return _error(500, "internal_import_error", "The STEP upload could not be completed.")
+        except Exception as exc:
+            LOGGER.error("Unexpected STEP upload failure (%s)", type(exc).__name__)
+            return _error(500, "internal_import_error", "The STEP upload could not be completed.")
+
     @app.post("/api/v1/section", response_model=SectionResponse)
     def create_section(request: SectionRequest) -> SectionResponse | JSONResponse:
         try:
@@ -84,7 +121,29 @@ def create_app(import_service: ImportService | None = None) -> FastAPI:
             ))
             return JSONResponse(status_code=500, content=payload.model_dump())
 
+    @app.post("/api/v1/export/dxf")
+    def download_dxf(request: ExportRequest) -> Response:
+        imported = service.sessions.get_response(request.import_id)
+        section = section_service.sections.get_response(request.section_id)
+        if imported is None or section is None:
+            return _error(404, "unknown_export_session", "Import and compute the section again.")
+        if section.import_id != request.import_id:
+            return _error(409, "export_session_mismatch", "The section belongs to another import.")
+        try:
+            archive = export_archive(imported, section)
+        except DxfExportError as exc:
+            return _error(422, "export_not_ready", str(exc))
+        return Response(
+            content=archive, media_type="application/zip",
+            headers={"Content-Disposition": 'attachment; filename="section.zip"'},
+        )
+
     return app
 
 
 app = create_app()
+
+
+def _error(status: int, code: str, message: str) -> JSONResponse:
+    payload = ImportErrorResponse(error=ImportErrorPayload(code=code, message=message))
+    return JSONResponse(status_code=status, content=payload.model_dump())

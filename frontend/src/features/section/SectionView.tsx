@@ -3,6 +3,7 @@ import { useState, type SyntheticEvent } from "react";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import type { ImportSummary } from "../step-import/contracts";
 import { computeSection } from "./client";
+import { downloadSectionArchive } from "./exportClient";
 import type { SectionResponse } from "./contracts";
 import { curvePath } from "./rendering";
 
@@ -19,12 +20,14 @@ export function SectionView({ imported, plane }: SectionViewProps) {
   const [section, setSection] = useState<SectionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const selectComponent = useWorkspaceStore((state) => state.selectComponent);
 
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setError(null);
+    setSection(null);
     try {
       setSection(await computeSection(imported.import_id, plane, offset));
     } catch (cause) {
@@ -33,6 +36,32 @@ export function SectionView({ imported, plane }: SectionViewProps) {
       setLoading(false);
     }
   }
+
+  async function exportSection() {
+    if (!section) return;
+    setError(null);
+    setExporting(true);
+    try {
+      const bundle = await downloadSectionArchive(imported.import_id, section.section_id);
+      const url = URL.createObjectURL(bundle);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "section.zip";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The DXF could not be exported.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  const exportable = section !== null && section.components.length > 0 &&
+    !section.diagnostics.some((item) => item.severity === "error") &&
+    section.components.every((component) => component.wires.length > 0 &&
+      component.wires.every((wire) => wire.closed && wire.role !== null));
 
   const xMin = imported.bounds_mm.min_xyz[xAxis];
   const xMax = imported.bounds_mm.max_xyz[xAxis];
@@ -50,7 +79,10 @@ export function SectionView({ imported, plane }: SectionViewProps) {
       <input id="section-offset" type="number" step="any" required value={offset}
         onChange={(event) => { setOffset(Number(event.target.value)); }} disabled={loading} />
       <button type="submit" disabled={loading}>{loading ? "Computing…" : "Compute Section"}</button>
+      {exportable && <button type="button" disabled={exporting}
+        onClick={() => { void exportSection(); }}>{exporting ? "Exporting..." : "Export draft DXF"}</button>}
     </form>
+    {exportable && <p className="section-draft">Draft DXF bundle: self-intersections and Maxwell import still need verification.</p>}
     {error && <p role="alert" className="import-error">{error}</p>}
     {section && <>
       <svg className="section-canvas" aria-label="2D section geometry" viewBox={viewBox}>
@@ -66,7 +98,13 @@ export function SectionView({ imported, plane }: SectionViewProps) {
       </svg>
       {section.components.length === 0 && <p className="section-empty">The plane does not intersect a body.</p>}
       {section.diagnostics.map((item, index) => <p key={`${item.code}-${String(index)}`}
-        className="section-diagnostic">{item.message}</p>)}
+        className={`section-diagnostic ${item.severity}`}>
+        {item.message}
+        {[item.component_id, item.related_component_id].filter((id): id is string => Boolean(id))
+          .map((id) => <button key={id} type="button" onClick={() => { selectComponent(id); }}>
+            Select {imported.components.find((component) => component.id === id)?.display_name ?? id}
+          </button>)}
+      </p>)}
     </>}
   </div>;
 }

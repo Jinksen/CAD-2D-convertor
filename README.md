@@ -6,11 +6,11 @@ CAD2Maxwell is a Windows desktop engineering preprocessor for turning exact 3D C
 
 ## Status
 
-Milestone 0 established the Tauri/React desktop shell and local FastAPI service. The desktop workspace imports STEP/STP files into exact OpenCascade shapes, shows component metadata, and computes exact 2D section wires for XY, XZ, and YZ planes. The backend also accepts a custom plane. A command-line draft DXF exporter preserves lines, circles, arcs, and ellipses with a traceability manifest. Preview meshes and UI export are not yet connected.
+Milestone 0 established the Tauri/React desktop shell and local FastAPI service. The desktop workspace imports STEP/STP files into exact OpenCascade shapes, shows component metadata, and computes exact 2D section wires for XY, XZ, and YZ planes. The backend also accepts a custom plane. The UI and command line export draft analytic DXF with a traceability manifest. Preview meshes are not yet connected.
 
 ## Supported files
 
-The backend accepts local `.step` and `.stp` files. `.c2mproj` project files and DXF export follow in later milestones.
+The backend accepts local `.step` and `.stp` files and exports draft DXF. `.c2mproj` project files follow in a later milestone.
 
 ## Prerequisites
 
@@ -60,7 +60,7 @@ Packaging first runs the full quality gate and then invokes the Tauri bundle bui
 
 - React and TypeScript own presentation and workspace state.
 - Rust is a thin Tauri lifecycle/process bridge.
-- Python is the future geometry authority and exposes versioned typed DTOs.
+- Python is the geometry authority and exposes versioned typed DTOs.
 - Python now imports exact STEP B-Rep bodies through XCAF, retaining shapes in process-local sessions.
 - The backend binds only to loopback; no CAD data is uploaded or telemetry collected.
 
@@ -92,6 +92,12 @@ Content-Type: application/json
 
 `XY` offsets are Z coordinates, `XZ` offsets are Y coordinates, and `YZ` offsets are X coordinates, all in millimetres. A custom plane uses `kind: "custom"` with `origin_xyz`, perpendicular `normal_xyz` and `x_dir_xyz`. The response returns component-owned closed/open wires and exact line, circle, and ellipse parameters. It reports an empty section or open wires explicitly. Unsupported curve types fail the request instead of being silently flattened. Section IDs and exact wires are process-local.
 
+## Try the desktop workflow
+
+Run `./scripts/dev.ps1`, choose a `.step` or `.stp` file with **Choose STEP file**, select XY/XZ/YZ, and click **Compute Section**. The initial offset is the midpoint of the model bounds; change it in millimetres as needed. When the section has closed, classified wires, click **Export draft DXF**. The app downloads `section.zip` containing `section.dxf` and `section.json`. The file chooser sends the selected file only to the local loopback geometry service and rejects uploads over 512 MiB. You can still paste an absolute path and use **Import STEP**.
+
+The ZIP export uses the backend's retained import and section sessions. If the backend restarts, import and compute again. Exact positive-area overlaps between components block export and identify both components. Invalid planar faces, including self-intersecting contours, also block export. The draft is not yet a fully validated simulation model: duplicate and tiny-edge checks and complex-model Maxwell verification remain pending.
+
 ## Draft DXF conversion
 
 From the repository root, after setup:
@@ -107,9 +113,9 @@ The output path must be absolute and unused. The command writes `section.dxf` an
 
 ## Known limitations
 
-- STEP import currently requires pasting an absolute local path; a native file picker is not yet connected.
+- STEP import supports the system file chooser and absolute-path entry. File chooser uploads are limited to 512 MiB.
 - The model tree lists and selects components and the 2D viewport shows exact section curves, but there is no preview mesh or selectable 3D viewer yet.
-- Closed section wires are classified as outer or hole by exact containment, but self-intersections and cross-component overlaps are not yet validated. Draft DXF export is CLI-only and has not been tested in ANSYS Maxwell.
+- Closed section wires are classified as outer or hole by exact containment. Positive-area overlaps between components and invalid planar faces block export. Duplicate and tiny-edge checks are still pending. A simple 10 by 20 mm rectangle DXF was imported as a filled region in ANSYS Maxwell; complex assemblies still need verification.
 - The UI supports XY/XZ/YZ offsets; custom planes are available through the backend API.
 - Import sessions are lost on backend restart; packaged OCP runtime compatibility is not yet verified.
 - The 3D viewport remains a placeholder.
@@ -117,7 +123,7 @@ The output path must be absolute and unused. The command writes `section.dxf` an
 
 ## Roadmap
 
-1. Native STEP file picker, preview meshes, and 3D selection.
+1. Preview meshes and 3D selection.
 2. Region and hole classification, geometry validation, and clickable diagnostics.
 3. Complete DXF validation, Maxwell import verification, and UI export.
 4. Project save/load, recent files, and undo/redo.

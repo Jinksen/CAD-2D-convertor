@@ -2,7 +2,7 @@ import { useState, type SyntheticEvent } from "react";
 
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { SectionView } from "../section/SectionView";
-import { importStep } from "./client";
+import { importStep, importStepFile } from "./client";
 
 function dimensions(bounds: { min_xyz: [number, number, number]; max_xyz: [number, number, number] }): string {
   return bounds.max_xyz.map((high, index) => (high - bounds.min_xyz[index]).toLocaleString(undefined, {
@@ -30,6 +30,20 @@ export function StepImportWorkspace() {
     }
   }
 
+  async function chooseFile(file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    setLoading(true);
+    try {
+      setImported(await importStepFile(file));
+      setPath("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The STEP file could not be imported.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <>
       <form className="import-form" onSubmit={(event) => { void submit(event); }}>
@@ -37,6 +51,10 @@ export function StepImportWorkspace() {
         <div className="import-controls">
           <input id="step-path" value={path} onChange={(event) => { setPath(event.target.value); }}
             placeholder="C:\\Projects\\motor.step" required disabled={loading} />
+          <label className="file-chooser">Choose STEP file
+            <input type="file" accept=".step,.stp" disabled={loading}
+              onChange={(event) => { void chooseFile(event.target.files?.[0]); event.target.value = ""; }} />
+          </label>
           <button type="submit" disabled={loading}>{loading ? "Importing…" : "Import STEP"}</button>
         </div>
         {error && <p role="alert" className="import-error">{error}</p>}

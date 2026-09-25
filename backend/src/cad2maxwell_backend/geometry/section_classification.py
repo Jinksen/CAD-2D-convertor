@@ -1,5 +1,6 @@
 from OCP.BRep import BRep_Tool
 from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+from OCP.BRepCheck import BRepCheck_Analyzer
 from OCP.BRepClass import BRepClass_FaceClassifier
 from OCP.BRepGProp import BRepGProp
 from OCP.gp import gp_Dir, gp_Pln, gp_Pnt
@@ -28,6 +29,8 @@ def classify_wires(
         if not builder.IsDone():
             raise SectionError("A section wire does not form a planar face")
         face = builder.Face()
+        if not BRepCheck_Analyzer(face).IsValid():
+            raise SectionError("A section wire self-intersects or forms an invalid face")
         properties = GProp_GProps()
         BRepGProp.SurfaceProperties_s(face, properties)
         area = abs(properties.Mass())

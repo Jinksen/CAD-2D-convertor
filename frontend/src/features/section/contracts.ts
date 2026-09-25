@@ -10,7 +10,8 @@ export interface SectionResponse {
   import_id: string;
   plane: { kind: "XY" | "XZ" | "YZ"; offset_mm: number };
   components: { component_id: string; wires: { closed: boolean; role: "outer" | "hole" | null; curves: SectionCurve[] }[] }[];
-  diagnostics: { code: string; severity: "warning" | "error"; message: string; component_id: string | null }[];
+  diagnostics: { code: string; severity: "warning" | "error"; message: string;
+    component_id: string | null; related_component_id?: string | null }[];
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -51,5 +52,7 @@ export function isSectionResponse(value: unknown): value is SectionResponse {
       record(diagnostic) && typeof diagnostic.code === "string" &&
       (diagnostic.severity === "warning" || diagnostic.severity === "error") &&
       typeof diagnostic.message === "string" &&
-      (diagnostic.component_id === null || typeof diagnostic.component_id === "string"));
+      (diagnostic.component_id === null || typeof diagnostic.component_id === "string") &&
+      (diagnostic.related_component_id === undefined || diagnostic.related_component_id === null ||
+        typeof diagnostic.related_component_id === "string"));
 }

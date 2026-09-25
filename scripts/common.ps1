@@ -37,10 +37,32 @@ function New-SessionToken {
     return ([BitConverter]::ToString($bytes)).Replace('-', '')
 }
 
-function Get-BackendProcessArguments {
+function Get-BackendPythonPath {
     param([Parameter(Mandatory)][string]$BackendPath)
 
-    return "run --project `"$BackendPath`" uvicorn cad2maxwell_backend.api:app --host 127.0.0.1 --port 8000"
+    return (Join-Path $BackendPath '.venv/Scripts/python.exe')
+}
+
+function Get-BackendProcessArguments {
+    return '-m uvicorn cad2maxwell_backend.api:app --host 127.0.0.1 --port 8000'
+}
+
+function Assert-BackendPortAvailable {
+    param([Parameter(Mandatory)][int]$Port)
+
+    $client = New-Object System.Net.Sockets.TcpClient
+    try {
+        try {
+            $client.Connect('127.0.0.1', $Port)
+        }
+        catch [System.Net.Sockets.SocketException] {
+            return
+        }
+        throw "Backend port $Port is already in use. Close the other CAD2Maxwell backend first."
+    }
+    finally {
+        $client.Dispose()
+    }
 }
 
 function Assert-DeveloperPrerequisites {

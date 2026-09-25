@@ -74,6 +74,21 @@ def repeated_occurrences(path: Path) -> Path:
     return _write(document, path)
 
 
+def overlapping_occurrences(path: Path) -> Path:
+    document = _document()
+    shapes = XCAFDoc_DocumentTool.ShapeTool_s(document.Main())
+    compound = TopoDS_Compound()
+    BRep_Builder().MakeCompound(compound)
+    assembly = shapes.AddShape(compound, True)
+    product = shapes.AddShape(BRepPrimAPI_MakeBox(10, 10, 20).Shape(), False)
+    for index, x_offset in enumerate((0.0, 5.0), start=1):
+        transform = gp_Trsf()
+        transform.SetTranslation(gp_Vec(x_offset, 0, 0))
+        occurrence = shapes.AddComponent(assembly, product, TopLoc_Location(transform))
+        _name(occurrence, f"Block {index}")
+    return _write(document, path)
+
+
 def inch_box(path: Path) -> Path:
     document = _document(0.0254)
     shapes = XCAFDoc_DocumentTool.ShapeTool_s(document.Main())

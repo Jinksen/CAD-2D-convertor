@@ -2,6 +2,7 @@ from dataclasses import replace
 
 from cad2maxwell_backend.geometry.section import SectionError, section_shape
 from cad2maxwell_backend.geometry.section_classification import classify_wires
+from cad2maxwell_backend.geometry.section_validation import find_region_overlaps
 from cad2maxwell_backend.models.sections import (
     SectionComponent,
     SectionDiagnostic,
@@ -38,11 +39,18 @@ class SectionService:
             if not wires:
                 continue
             if all(wire.dto.closed for wire in wires):
-                roles = classify_wires(wires, request.plane)
-                wires = tuple(
-                    replace(wire, dto=wire.dto.model_copy(update={"role": role}))
-                    for wire, role in zip(wires, roles, strict=True)
-                )
+                try:
+                    roles = classify_wires(wires, request.plane)
+                except SectionError as exc:
+                    diagnostics.append(SectionDiagnostic(
+                        code="invalid_section_topology", severity="error",
+                        message=str(exc), component_id=component_id,
+                    ))
+                else:
+                    wires = tuple(
+                        replace(wire, dto=wire.dto.model_copy(update={"role": role}))
+                        for wire, role in zip(wires, roles, strict=True)
+                    )
             components.append(SectionComponent(
                 component_id=component_id, wires=[wire.dto for wire in wires],
             ))
@@ -58,11 +66,27 @@ class SectionService:
                 code="empty_section", severity="warning",
                 message="The plane does not intersect any imported solid.",
             ))
+        classified = {
+            component_id: wires for component_id, wires in exact.items()
+            if all(wire.dto.closed and wire.dto.role is not None for wire in wires)
+        }
+        imported = self._imports.get_response(request.import_id)
+        names = ({component.id: component.display_name for component in imported.components}
+                 if imported is not None else {})
+        for first_id, second_id, area in find_region_overlaps(classified, request.plane):
+            diagnostics.append(SectionDiagnostic(
+                code="overlapping_regions", severity="error",
+                message=(f"{names.get(first_id, first_id)} and {names.get(second_id, second_id)} "
+                         f"overlap by {area:.6g} mm²."),
+                component_id=first_id, related_component_id=second_id,
+            ))
         section_id = self.sections.put(exact)
-        return SectionResponse(
+        response = SectionResponse(
             section_id=section_id, import_id=request.import_id, plane=request.plane,
             components=components, diagnostics=diagnostics,
         )
+        self.sections.keep_response(response)
+        return response
 
 
 __all__ = ["SectionError", "SectionService", "UnknownImport"]

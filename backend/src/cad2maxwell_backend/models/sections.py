@@ -95,6 +95,7 @@ class SectionDiagnostic(FiniteModel):
     severity: Literal["warning", "error"]
     message: str
     component_id: str | None = None
+    related_component_id: str | None = None
 
 
 class SectionResponse(FiniteModel):

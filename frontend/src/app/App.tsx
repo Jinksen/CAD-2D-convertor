@@ -46,9 +46,6 @@ export function App() {
           </button>
         ))}
         <div className="toolbar-separator" />
-        <button type="button" disabled>
-          Export DXF
-        </button>
       </header>
 
       <StepImportWorkspace />

@@ -10,8 +10,13 @@ $env:CAD2MAXWELL_SESSION_TOKEN = $token
 
 $backendProcess = $null
 try {
-    $backendArguments = Get-BackendProcessArguments -BackendPath $backend
-    $backendProcess = Start-Process -FilePath 'uv' -ArgumentList $backendArguments `
+    $python = Get-BackendPythonPath -BackendPath $backend
+    if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
+        throw 'Backend Python environment is missing. Run .\scripts\setup.ps1 first.'
+    }
+    Assert-BackendPortAvailable -Port 8000
+    $backendArguments = Get-BackendProcessArguments
+    $backendProcess = Start-Process -FilePath $python -ArgumentList $backendArguments `
         -WorkingDirectory $root -WindowStyle Hidden -PassThru
 
     $ready = $false
@@ -31,7 +36,7 @@ try {
 
     Push-Location $frontend
     try {
-        Invoke-NativeCommand -Command 'corepack' -Arguments @('pnpm', 'exec', 'tauri', 'dev')
+        Invoke-NativeCommand -Command (Join-Path $frontend 'node_modules/.bin/tauri.CMD') -Arguments @('dev')
     }
     finally {
         Pop-Location

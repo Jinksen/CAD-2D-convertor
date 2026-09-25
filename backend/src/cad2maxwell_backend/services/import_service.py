@@ -125,7 +125,7 @@ class ImportService:
             )
         ]
         import_id = self.sessions.put(source_sha256, model.bodies)
-        return ImportResponse(
+        response = ImportResponse(
             import_id=import_id,
             path=str(path),
             sha256=source_sha256,
@@ -136,3 +136,5 @@ class ImportService:
             components=components,
             diagnostics=list(model.diagnostics),
         )
+        self.sessions.keep_response(response)
+        return response

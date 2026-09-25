@@ -27,9 +27,23 @@ Describe 'Developer script helpers' {
         New-SessionToken | Should Match '^[0-9A-F]{64}$'
     }
 
-    It 'quotes a backend path containing spaces for Start-Process' {
-        $arguments = Get-BackendProcessArguments -BackendPath 'C:\CAD Projects\Motor Tool\backend'
+    It 'starts the installed backend Python process directly' {
+        $python = Get-BackendPythonPath -BackendPath 'C:\CAD Projects\Motor Tool\backend'
+        $arguments = Get-BackendProcessArguments
 
-        $arguments | Should Match '--project "C:\\CAD Projects\\Motor Tool\\backend"'
+        $python | Should Be 'C:\CAD Projects\Motor Tool\backend\.venv\Scripts\python.exe'
+        $arguments | Should Match '^-m uvicorn cad2maxwell_backend.api:app --host 127\.0\.0\.1 --port 8000$'
+    }
+
+    It 'rejects a port already held by another backend process' {
+        $listener = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, 0)
+        $listener.Start()
+        try {
+            $port = $listener.LocalEndpoint.Port
+            { Assert-BackendPortAvailable -Port $port } | Should Throw 'already in use'
+        }
+        finally {
+            $listener.Stop()
+        }
     }
 }

@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 $root = Get-RepositoryRoot
 Push-Location (Join-Path $root 'frontend')
 try {
-    Invoke-NativeCommand -Command 'corepack' -Arguments @('pnpm', 'exec', 'tauri', 'build')
+    Invoke-NativeCommand -Command (Join-Path $root 'frontend/node_modules/.bin/tauri.CMD') -Arguments @('build')
 }
 finally {
     Pop-Location

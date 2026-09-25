@@ -46,6 +46,11 @@ button:disabled { color: #707983; cursor: not-allowed; }
 .import-controls input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid #3a434d; border-radius: 3px; background: #12171c; color: #d8dde3; font: inherit; font-size: 12px; }
 .import-controls button { padding: 5px 12px; border: 1px solid #4e7898; border-radius: 3px; background: #344b5f; color: #e8f3fa; cursor: pointer; }
 .import-controls button:disabled { opacity: .6; cursor: wait; }
+.import-controls .file-chooser { position: relative; display: inline-flex; align-items: center; flex: none; margin: 0; padding: 5px 12px;
+  border: 1px solid #4e7898; border-radius: 3px; background: #344b5f; color: #e8f3fa;
+  cursor: pointer; font-size: 12px; }
+.file-chooser input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+.file-chooser:focus-within { outline: 2px solid #4bb3fd; outline-offset: 2px; }
 .import-error { margin: 6px 0 0; color: #f2a09b; font-size: 12px; }
 .component-list { margin: 0; padding: 0; list-style: none; overflow: auto; }
 .component-list button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 11px; border: 0; border-bottom: 1px solid #272f37; background: transparent; color: #d1d7dd; text-align: left; cursor: pointer; }
@@ -76,6 +81,11 @@ button:disabled { color: #707983; cursor: not-allowed; }
 .section-canvas path { cursor: pointer; }
 .section-canvas path:hover { stroke-width: 1.5; }
 .section-empty, .section-diagnostic { margin: 8px; color: #c7b481; font-size: 12px; }
+.section-diagnostic.error { color: #f2a09b; }
+.section-diagnostic button { margin-left: 8px; padding: 3px 6px; border: 1px solid #4e7898;
+  border-radius: 3px; background: #293c4b; color: #d8dde3; cursor: pointer; }
+.section-draft { margin: 0; padding: 4px 8px; border-bottom: 1px solid #303842;
+  color: #c7b481; font-size: 11px; }
 .axis-mark { position: relative; width: 54px; height: 54px; }
 .axis-mark i { position: absolute; left: 26px; bottom: 10px; width: 2px; height: 40px; transform-origin: bottom; background: #55758d; }
 .axis-mark i:nth-child(2) { transform: rotate(120deg); background: #775f5f; }

@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StepImportWorkspace } from "./StepImportWorkspace";
 import { useWorkspaceStore } from "../../app/workspaceStore";
-import { importStep } from "./client";
+import { importStep, importStepFile } from "./client";
 import type { ImportSummary } from "./contracts";
 
-vi.mock("./client", () => ({ importStep: vi.fn() }));
+vi.mock("./client", () => ({ importStep: vi.fn(), importStepFile: vi.fn() }));
 
 const summary = {
   import_id: "session-1", path: "C:/motor.step", sha256: "abc", source_unit: "mm",
@@ -45,5 +45,14 @@ describe("STEP workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: /import step/i }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("The STEP file was not found."));
     expect(screen.getByRole("button", { name: /rotor/i })).toBeInTheDocument();
+  });
+
+  it("imports a file selected through the system chooser", async () => {
+    vi.mocked(importStepFile).mockResolvedValue(summary);
+    render(<StepImportWorkspace />);
+    const chooser = screen.getByLabelText(/choose step file/i);
+    fireEvent.change(chooser, { target: { files: [new File(["step"], "motor.step")] } });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /rotor/i })).toBeInTheDocument());
   });
 });
