@@ -68,7 +68,7 @@ Packaging first runs the full quality gate and then invokes the Tauri bundle bui
 - Python now imports exact STEP B-Rep bodies through XCAF, retaining shapes in process-local sessions.
 - The backend binds only to loopback; no CAD data is uploaded or telemetry collected.
 
-See [architecture](docs/architecture.md), [geometry](docs/geometry.md), [DXF export](docs/dxf-export.md), and [UX](docs/ux.md).
+See [architecture](docs/architecture.md), [geometry](docs/geometry.md), [DXF export](docs/dxf-export.md), [UX](docs/ux.md), and the [FreeCAD 3D/2D research note](docs/research/freecad-3d-2d-workflow.md).
 
 ## STEP import API
 
