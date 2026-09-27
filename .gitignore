@@ -1,5 +1,6 @@
 # Local workspaces, downloads, and generated CAD outputs
 /.codex/
+/.idea/
 /.superpowers/
 /.worktrees/
 /.verification/
@@ -7,6 +8,22 @@
 /.test-tmp/
 /artifacts/
 /data/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+
+# User CAD inputs, projects, and generated exports
+*.step
+*.stp
+*.igs
+*.iges
+*.dxf
+*.c2mproj
 
 # Python
 __pycache__/

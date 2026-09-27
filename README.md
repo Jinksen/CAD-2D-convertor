@@ -2,8 +2,6 @@
 
 CAD2Maxwell is a Windows desktop engineering preprocessor for turning exact 3D CAD assemblies into validated, traceable 2D geometry for ANSYS Maxwell 2D.
 
-> Screenshot placeholder: STEP metadata, 3D preview, and exact 2D section outlines are connected.
-
 ## Status
 
 Milestone 0 established the Tauri/React desktop shell and local FastAPI service. The desktop workspace imports STEP/STP files into exact OpenCascade shapes, shows component metadata and a selectable 3D preview, and computes exact 2D section wires for XY, XZ, and YZ planes. The backend also accepts a custom plane. The UI and command line export draft analytic DXF with a traceability manifest.
@@ -133,3 +131,7 @@ The output path must be absolute and unused. The command writes `section.dxf` an
 3. Binary preview mesh transport for large assemblies and custom-plane controls in the UI.
 
 Read [CAD2Maxwell_PROJECT_SPEC.md](CAD2Maxwell_PROJECT_SPEC.md) for the authoritative product and implementation requirements.
+
+## Contributing and security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development and pull request guidance. Report vulnerabilities through the process in [SECURITY.md](SECURITY.md). This project is available under the [MIT License](LICENSE).
