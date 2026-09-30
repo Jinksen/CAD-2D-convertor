@@ -1,4 +1,4 @@
-import type { Point2, SectionCurve } from "./contracts";
+import type { Point2, SectionCurve, SectionResponse } from "./contracts";
 
 function ellipsePoint(
   center: Point2, xAxis: Point2, yAxis: Point2,
@@ -30,4 +30,12 @@ export function curvePath(curve: SectionCurve): string {
     pieces.push(`A ${String(major)} ${String(minor)} ${String(rotation)} 0 ${String(sweep)} ${String(end[0])} ${String(end[1])}`);
   }
   return pieces.join(" ");
+}
+
+export function closedWirePath(wire: SectionResponse["components"][number]["wires"][number]): string {
+  if (!wire.closed || wire.curves.length === 0) return "";
+  return `${wire.curves.map((curve, index) => {
+    const path = curvePath(curve);
+    return index === 0 ? path : path.replace(/^M \S+ \S+\s*/, "");
+  }).join(" ")} Z`;
 }

@@ -80,6 +80,8 @@ button:disabled { color: #707983; cursor: not-allowed; }
 .preview-canvas { width: 100%; height: 100%; }
 .preview-help { position: absolute; z-index: 1; top: 8px; left: 10px; margin: 0; padding: 5px 8px;
   border: 1px solid #354653; border-radius: 3px; background: #18212bd9; color: #acbdc9; font-size: 11px; pointer-events: none; }
+.preview-plane-label { position: absolute; z-index: 1; top: 38px; left: 10px; margin: 0; padding: 5px 8px;
+  border: 1px solid #3b6d8d; border-radius: 3px; background: #18212bd9; color: #9ad9ff; font-size: 11px; pointer-events: none; }
 .preview-message { display: flex; align-items: center; justify-content: center; padding: 16px; color: #c7b481; font-size: 12px; }
 .preview-message[role="alert"] { color: #f2a09b; }
 .section-view { display: flex; flex-direction: column; position: relative; min-height: 0; }

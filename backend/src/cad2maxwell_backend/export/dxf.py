@@ -4,9 +4,9 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-import ezdxf
 from ezdxf import colors, units
-from ezdxf.layouts import Modelspace
+from ezdxf.filemanagement import new
+from ezdxf.layouts.layout import Modelspace
 
 from cad2maxwell_backend.models.imports import ImportComponent, ImportResponse
 from cad2maxwell_backend.models.sections import (
@@ -142,7 +142,7 @@ def export_dxf(
     if len({source.export_name for source, _ in selected}) != len(selected):
         raise DxfExportError("Export layer names are not unique")
 
-    drawing = ezdxf.new(dxfversion="R2013")
+    drawing = new(dxfversion="R2013")
     drawing.units = units.MM
     modelspace = drawing.modelspace()
     entity_count = 0

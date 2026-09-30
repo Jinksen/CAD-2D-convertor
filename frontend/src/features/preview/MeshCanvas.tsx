@@ -4,17 +4,21 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 import type { BoundsMm } from "../step-import/contracts";
 import type { PreviewMeshResponse } from "./contracts";
+import { planeGuideFrame, type PrincipalPlane } from "./sectionPlane";
 
 interface Props {
   preview: PreviewMeshResponse;
   bounds: BoundsMm;
   selectedComponentId: string | null;
   onSelect: (componentId: string) => void;
+  plane: PrincipalPlane;
+  offsetMm: number;
 }
 
-export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect }: Props) {
+export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, plane, offsetMm }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const meshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
+  const guideRef = useRef<THREE.Group | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -51,6 +55,20 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect }: P
     const axes = new THREE.AxesHelper(radius * 0.2);
     axes.position.copy(center);
     scene.add(axes);
+
+    const guide = new THREE.Group();
+    const guideGeometry = new THREE.PlaneGeometry(1, 1);
+    const guideSurface = new THREE.Mesh(guideGeometry, new THREE.MeshBasicMaterial({
+      color: 0x4bb3fd, side: THREE.DoubleSide, transparent: true, opacity: 0.2,
+      depthTest: false, depthWrite: false,
+    }));
+    const guideEdges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(guideGeometry),
+      new THREE.LineBasicMaterial({ color: 0x7bd0ff, depthTest: false }),
+    );
+    guide.add(guideSurface, guideEdges);
+    scene.add(guide);
+    guideRef.current = guide;
 
     const meshes = new Map<string, THREE.Mesh>();
     for (const component of preview.components) {
@@ -111,6 +129,11 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect }: P
         (mesh.material as THREE.Material).dispose();
       }
       meshesRef.current = new Map();
+      guideGeometry.dispose();
+      guideSurface.material.dispose();
+      guideEdges.geometry.dispose();
+      guideEdges.material.dispose();
+      guideRef.current = null;
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };
@@ -122,6 +145,15 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect }: P
       material.emissive.setHex(componentId === selectedComponentId ? 0x254e67 : 0x000000);
     }
   }, [selectedComponentId, preview]);
+
+  useEffect(() => {
+    const guide = guideRef.current;
+    if (!guide) return;
+    const frame = planeGuideFrame(bounds, plane, offsetMm);
+    guide.position.set(...frame.center);
+    guide.rotation.set(...frame.rotation);
+    guide.scale.set(frame.width, frame.height, 1);
+  }, [bounds, plane, offsetMm, preview]);
 
   return <div ref={containerRef} className="preview-canvas" aria-label="3D model preview" />;
 }
