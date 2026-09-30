@@ -38,3 +38,23 @@ def test_invalid_face_becomes_component_diagnostic(monkeypatch: pytest.MonkeyPat
     assert response.diagnostics[0].severity == "error"
     assert response.diagnostics[0].component_id == response.components[0].component_id
     assert response.components[0].wires[0].role is None
+
+
+def test_tiny_edges_are_component_warnings_and_preserve_closed_regions() -> None:
+    body = ImportedBody(
+        shape=BRepPrimAPI_MakeBox(0.00005, 10, 20).Shape(), occurrence_key="foil",
+        solid_ordinal=0, source_id=None, source_name="Foil", name_provenance="product",
+        hierarchy_path=(), source_color=None, color_provenance=None,
+        bounds_mm=BoundingBox(min_xyz=(0, 0, 0), max_xyz=(0.00005, 10, 20)),
+    )
+    imports = ImportSessions()
+    import_id = imports.put("abc", (body,))
+    response = SectionService(imports, SectionSessions()).create(SectionRequest(
+        import_id=import_id, plane=SectionPlane(kind="XY", offset_mm=10),
+    ))
+    warning = next(d for d in response.diagnostics if d.code == "tiny_section_edge")
+    assert warning.severity == "warning"
+    assert warning.component_id == response.components[0].component_id
+    assert response.components[0].wires[0].closed
+    assert response.components[0].wires[0].role == "outer"
+    assert len(response.components[0].wires[0].curves) == 4

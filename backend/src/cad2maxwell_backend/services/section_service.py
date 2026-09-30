@@ -2,6 +2,7 @@ from dataclasses import replace
 
 from cad2maxwell_backend.geometry.section import SectionError, section_shape
 from cad2maxwell_backend.geometry.section_classification import classify_wires
+from cad2maxwell_backend.geometry.section_edges import check_section_edges
 from cad2maxwell_backend.geometry.section_validation import find_region_overlaps
 from cad2maxwell_backend.models.sections import (
     SectionComponent,
@@ -38,6 +39,7 @@ class SectionService:
             wires = section_shape(body.shape, request.plane)
             if not wires:
                 continue
+            diagnostics.extend(check_section_edges(wires, component_id))
             if all(wire.dto.closed for wire in wires):
                 try:
                     roles = classify_wires(wires, request.plane)
