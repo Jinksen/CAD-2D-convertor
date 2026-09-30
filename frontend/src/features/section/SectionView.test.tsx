@@ -22,11 +22,61 @@ const imported: ImportSummary = {
 };
 
 beforeEach(() => {
-  useWorkspaceStore.setState({ imported, activePlane: "XY", selectedComponentId: null });
+  useWorkspaceStore.setState({ imported, activePlane: "XY", sectionOffsetMm: null, selectedComponentId: null });
   vi.resetAllMocks();
 });
 
 describe("SectionView", () => {
+  it("shares the edited section offset with the 3D plane guide", () => {
+    render(<SectionView imported={imported} plane="XY" />);
+    fireEvent.change(screen.getByRole("spinbutton", { name: /offset/i }), { target: { value: "12.5" } });
+    expect(useWorkspaceStore.getState().sectionOffsetMm).toBe(12.5);
+  });
+
+  it("fills a classified region while leaving its hole empty", async () => {
+    vi.mocked(computeSection).mockResolvedValue({
+      section_id: "section-hole", import_id: "session-1",
+      plane: { kind: "XY", offset_mm: 15 }, diagnostics: [],
+      components: [{ component_id: "body-1", wires: [
+        { closed: true, role: "outer", curves: [
+          { type: "line", start: [0, 0], end: [10, 0] },
+          { type: "line", start: [10, 0], end: [10, 10] },
+          { type: "line", start: [10, 10], end: [0, 10] },
+          { type: "line", start: [0, 10], end: [0, 0] },
+        ] },
+        { closed: true, role: "hole", curves: [
+          { type: "line", start: [2, 2], end: [2, 4] },
+          { type: "line", start: [2, 4], end: [4, 4] },
+          { type: "line", start: [4, 4], end: [4, 2] },
+          { type: "line", start: [4, 2], end: [2, 2] },
+        ] },
+      ] }],
+    });
+    render(<SectionView imported={imported} plane="XY" />);
+    fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
+    const filled = await screen.findByLabelText("Rotor filled region");
+    expect(filled).toHaveAttribute("fill-rule", "evenodd");
+    expect(filled.getAttribute("d")).toContain("M 0 0 L 10 0 L 10 10 L 0 10 L 0 0 Z");
+    expect(filled.getAttribute("d")).toContain("M 2 2 L 2 4 L 4 4 L 4 2 L 2 2 Z");
+  });
+
+  it("removes the previous section and export when the plane moves", async () => {
+    vi.mocked(computeSection).mockResolvedValue({
+      section_id: "section-1", import_id: "session-1",
+      plane: { kind: "XY", offset_mm: 15 }, diagnostics: [],
+      components: [{ component_id: "body-1", wires: [{ closed: true, role: "outer", curves: [
+        { type: "circle", center: [5, 5], radius: 2, x_axis: [1, 0], y_axis: [0, 1],
+          start_parameter: 0, end_parameter: Math.PI * 2 },
+      ] }] }],
+    });
+    render(<SectionView imported={imported} plane="XY" />);
+    fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
+    expect(await screen.findByRole("button", { name: /export draft dxf/i })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("spinbutton", { name: /offset/i }), { target: { value: "12" } });
+    expect(screen.queryByRole("button", { name: /export draft dxf/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("2D section geometry")).not.toBeInTheDocument();
+  });
+
   it("requests an exact middle-plane section and draws its analytic line", async () => {
     vi.mocked(computeSection).mockResolvedValue({
       section_id: "section-1", import_id: "session-1",
@@ -39,7 +89,8 @@ describe("SectionView", () => {
     expect(screen.getByRole("spinbutton", { name: /offset/i })).toHaveValue(15);
     fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
     await waitFor(() => expect(screen.getByLabelText("2D section geometry")).toBeInTheDocument());
-    expect(screen.getByLabelText("2D section geometry").querySelector("path")).toHaveAttribute("d", "M 0 0 L 10 0");
+    expect(screen.getByLabelText("2D section geometry").querySelector("path:not([aria-label])"))
+      .toHaveAttribute("d", "M 0 0 L 10 0");
     expect(vi.mocked(computeSection)).toHaveBeenCalledWith("session-1", "XY", 15);
   });
 
@@ -91,6 +142,7 @@ describe("SectionView", () => {
 
     expect(await screen.findByText("Open wire")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /export draft dxf/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Rotor filled region")).not.toBeInTheDocument();
   });
 
   it("lets the engineer select both components named in an overlap diagnostic", async () => {
