@@ -110,3 +110,33 @@ def test_overlap_diagnostic_blocks_draft_export(tmp_path: Path) -> None:
     })
     assert exported.status_code == 422
     assert exported.json()["error"]["code"] == "export_not_ready"
+
+
+def test_duplicate_section_edges_block_export(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from OCP.TopoDS import TopoDS_Shape
+
+    from cad2maxwell_backend.geometry.section import ExactSectionWire, section_shape
+    from cad2maxwell_backend.models.sections import SectionPlane
+
+    def duplicated_section(
+        shape: TopoDS_Shape, plane: SectionPlane,
+    ) -> tuple[ExactSectionWire, ...]:
+        wires = section_shape(shape, plane)
+        return wires + wires
+
+    monkeypatch.setattr(
+        "cad2maxwell_backend.services.section_service.section_shape", duplicated_section,
+    )
+    client = TestClient(create_app())
+    source = named_colored_box(tmp_path / "duplicate.step")
+    imported = client.post("/api/v1/imports/step", json={"path": str(source)}).json()
+    section = client.post("/api/v1/section", json={
+        "import_id": imported["import_id"], "plane": {"kind": "XY", "offset_mm": 15},
+    }).json()
+    assert any(d["code"] == "duplicate_section_edge" for d in section["diagnostics"])
+    exported = client.post("/api/v1/export/dxf", json={
+        "import_id": imported["import_id"], "section_id": section["section_id"],
+    })
+    assert exported.status_code == 422
