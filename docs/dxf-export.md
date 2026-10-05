@@ -7,3 +7,5 @@ The manifest records source SHA-256, original names, hierarchy, color, section p
 The final exporter will add validated Maxwell region formation, configurable origin modes, and material/group labels to this analytic draft path.
 
 Export verification must include import into ANSYS Maxwell 2D, scale checks, closed-region checks, and separate object selectability.
+
+The compiled desktop saves the archive through a Windows Save dialog and reports its output path. Cancelling is harmless; existing files are refused rather than overwritten. Native saves are capped at 64 MiB. The browser development harness still uses an anchor download. Extract the archive before opening the DXF in Maxwell.

@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
+from cad2maxwell_backend.api_security import install_request_security
 from cad2maxwell_backend.export.archive import export_archive
 from cad2maxwell_backend.export.dxf import DxfExportError
 from cad2maxwell_backend.geometry.preview_mesh import PreviewMeshError, generate_preview
@@ -49,6 +50,7 @@ def create_app(import_service: ImportService | None = None) -> FastAPI:
         allow_methods=["GET", "POST"],
         allow_headers=["Content-Type", "X-Session-Token"],
     )
+    install_request_security(app, ALLOWED_ORIGINS)
 
     @app.get("/api/v1/health", response_model=HealthResponse)
     def health() -> HealthResponse:

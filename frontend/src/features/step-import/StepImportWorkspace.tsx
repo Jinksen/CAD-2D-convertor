@@ -1,4 +1,4 @@
-import { useState, type SyntheticEvent } from "react";
+import { useState, type Ref, type SyntheticEvent } from "react";
 
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { SectionView } from "../section/SectionView";
@@ -11,7 +11,7 @@ function dimensions(bounds: { min_xyz: [number, number, number]; max_xyz: [numbe
   })).join(" × ") + " mm";
 }
 
-export function StepImportWorkspace() {
+export function StepImportWorkspace({ fileInputRef }: { fileInputRef?: Ref<HTMLInputElement> }) {
   const [path, setPath] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -55,7 +55,7 @@ export function StepImportWorkspace() {
           <input id="step-path" value={path} onChange={(event) => { setPath(event.target.value); }}
             placeholder="C:\\Projects\\motor.step" required disabled={loading} />
           <label className="file-chooser">Choose STEP file
-            <input type="file" accept=".step,.stp" disabled={loading}
+            <input ref={fileInputRef} type="file" accept=".step,.stp" disabled={loading}
               onChange={(event) => { void chooseFile(event.target.files?.[0]); event.target.value = ""; }} />
           </label>
           <button type="submit" disabled={loading}>{loading ? "Importing…" : "Import STEP"}</button>

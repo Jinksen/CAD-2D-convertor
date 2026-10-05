@@ -1,4 +1,5 @@
 import { isImportSummary, type ImportSummary } from "./contracts";
+import { backendHeaders } from "../desktop/runtime";
 
 const DEFAULT_BACKEND_URL = "http://127.0.0.1:8000";
 
@@ -9,7 +10,7 @@ export async function importStep(path: string, fetcher: typeof fetch = fetch): P
   try {
     response = await fetcher(`${baseUrl}/api/v1/imports/step`, {
       method: "POST",
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      headers: await backendHeaders({ Accept: "application/json", "Content-Type": "application/json" }),
       body: JSON.stringify({ path }),
     });
   } catch {
@@ -26,7 +27,7 @@ export async function importStepFile(file: File, fetcher: typeof fetch = fetch):
   let response: Response;
   try {
     response = await fetcher(`${baseUrl}/api/v1/imports/step/file?filename=${encodeURIComponent(file.name)}`, {
-      method: "POST", headers: { Accept: "application/json", "Content-Type": "application/octet-stream" },
+      method: "POST", headers: await backendHeaders({ Accept: "application/json", "Content-Type": "application/octet-stream" }),
       body: file,
     });
   } catch {

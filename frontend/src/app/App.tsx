@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { BackendStatus } from "../features/backend-status/BackendStatus";
 import { fetchBackendHealth } from "../features/backend-status/client";
@@ -11,7 +11,8 @@ const planes = ["XY", "XZ", "YZ"] as const;
 
 export function App() {
   const [health, setHealth] = useState<BackendHealth>({ state: "offline" });
-  const { activePlane, setActivePlane, imported } = useWorkspaceStore();
+  const { activePlane, setActivePlane, imported, sectionStats } = useWorkspaceStore();
+  const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -27,14 +28,14 @@ export function App() {
     <div className="application-shell">
       <header className="toolbar" aria-label="Application toolbar">
         <div className="brand">CAD2Maxwell</div>
-        <span className="toolbar-label">STEP IMPORT</span>
-        <button type="button" disabled>
-          Save
-        </button>
+        <button type="button" onClick={() => { fileInput.current?.click(); }}>Open STEP</button>
         <div className="toolbar-separator" />
+        <div className="toolbar-group" role="group" aria-label="Section plane">
+        <span className="toolbar-label">PLANE</span>
         {planes.map((plane) => (
           <button
             type="button"
+            disabled={!imported}
             className={activePlane === plane ? "active" : ""}
             aria-pressed={activePlane === plane}
             onClick={() => {
@@ -45,12 +46,13 @@ export function App() {
             {plane}
           </button>
         ))}
+        </div>
         <div className="toolbar-separator" />
       </header>
 
-      <StepImportWorkspace />
+      <StepImportWorkspace fileInputRef={fileInput} />
 
-      <BackendStatus health={health} bodyCount={imported?.component_count ?? 0} sourceUnit={imported?.source_unit} />
+      <BackendStatus health={health} bodyCount={imported?.component_count ?? 0} sourceUnit={imported?.source_unit} sectionStats={sectionStats} />
     </div>
   );
 }

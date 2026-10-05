@@ -1,11 +1,14 @@
 import { isPreviewMeshResponse, type PreviewMeshResponse } from "./contracts";
+import { backendHeaders } from "../desktop/runtime";
 
 export async function fetchPreview(importId: string, fetcher: typeof fetch = fetch): Promise<PreviewMeshResponse> {
   const configuredUrl = import.meta.env.VITE_BACKEND_URL as string | undefined;
   const baseUrl = configuredUrl?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
   let response: Response;
   try {
-    response = await fetcher(`${baseUrl}/api/v1/imports/${encodeURIComponent(importId)}/preview`);
+    response = await fetcher(`${baseUrl}/api/v1/imports/${encodeURIComponent(importId)}/preview`, {
+      headers: await backendHeaders({ Accept: "application/json" }),
+    });
   } catch {
     throw new Error("The local geometry service is unavailable.");
   }
