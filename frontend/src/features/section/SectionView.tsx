@@ -1,11 +1,12 @@
-import { useState, type SyntheticEvent } from "react";
+import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 
 import { useWorkspaceStore } from "../../app/workspaceStore";
+import { saveSectionArchive } from "../desktop/runtime";
 import type { ImportSummary } from "../step-import/contracts";
 import { computeSection } from "./client";
 import { downloadSectionArchive } from "./exportClient";
 import type { SectionResponse } from "./contracts";
-import { closedWirePath, curvePath } from "./rendering";
+import { SectionViewport } from "./SectionViewport";
 
 interface SectionViewProps {
   imported: ImportSummary;
@@ -19,10 +20,17 @@ export function SectionView({ imported, plane }: SectionViewProps) {
   const offsetOverride = useWorkspaceStore((state) => state.sectionOffsetMm);
   const setSectionOffsetMm = useWorkspaceStore((state) => state.setSectionOffsetMm);
   const offset = offsetOverride ?? defaultOffset;
+  const setSectionStats = useWorkspaceStore((state) => state.setSectionStats);
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
   const [section, setSection] = useState<SectionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportLocation, setExportLocation] = useState<string | null>(null);
   const selectComponent = useWorkspaceStore((state) => state.selectComponent);
 
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
@@ -30,8 +38,13 @@ export function SectionView({ imported, plane }: SectionViewProps) {
     setLoading(true);
     setError(null);
     setSection(null);
+    setSectionStats(null);
+    setExportLocation(null);
     try {
-      setSection(await computeSection(imported.import_id, plane, offset));
+      const result = await computeSection(imported.import_id, plane, offset);
+      if (!active.current) return;
+      setSection(result);
+      setSectionStats(result);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The exact section could not be completed.");
     } finally {
@@ -43,16 +56,11 @@ export function SectionView({ imported, plane }: SectionViewProps) {
     if (!section) return;
     setError(null);
     setExporting(true);
+    setExportLocation(null);
     try {
       const bundle = await downloadSectionArchive(imported.import_id, section.section_id);
-      const url = URL.createObjectURL(bundle);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "section.zip";
-      document.body.append(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      if (!active.current) return;
+      setExportLocation(await saveSectionArchive(bundle));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The DXF could not be exported.");
     } finally {
@@ -69,12 +77,6 @@ export function SectionView({ imported, plane }: SectionViewProps) {
   const xMax = imported.bounds_mm.max_xyz[xAxis];
   const yMin = imported.bounds_mm.min_xyz[yAxis];
   const yMax = imported.bounds_mm.max_xyz[yAxis];
-  const span = Math.max(xMax - xMin, yMax - yMin, 1);
-  const margin = span * 0.05;
-  const viewBox = [xMin - margin, -yMax - margin, xMax - xMin + 2 * margin,
-    yMax - yMin + 2 * margin].join(" ");
-  const width = Math.max(span / 500, 0.15);
-
   return <div className="section-view">
     <form className="section-controls" onSubmit={(event) => { void submit(event); }}>
       <label htmlFor="section-offset">{plane} offset (mm)</label>
@@ -82,46 +84,33 @@ export function SectionView({ imported, plane }: SectionViewProps) {
         onChange={(event) => {
           setSectionOffsetMm(Number(event.target.value));
           setSection(null);
+          setSectionStats(null);
           setError(null);
-        }} disabled={loading} />
-      <button type="submit" disabled={loading}>{loading ? "Computing…" : "Compute Section"}</button>
+          setExportLocation(null);
+        }} disabled={loading || exporting} />
+      <button type="submit" disabled={loading || exporting}>{loading ? "Computing…" : "Compute Section"}</button>
       {exportable && <button type="button" disabled={exporting}
         onClick={() => { void exportSection(); }}>{exporting ? "Exporting..." : "Export draft DXF"}</button>}
     </form>
     {exportable && <p className="section-draft">Draft DXF bundle: complex Maxwell import still needs verification.</p>}
+    {exportLocation && <p role="status" className="section-draft">
+      DXF bundle: {exportLocation}. Extract section.dxf and section.json before importing into Maxwell.
+    </p>}
     {error && <p role="alert" className="import-error">{error}</p>}
+    {!section && <div className="empty-panel section-placeholder"><strong>{loading ? "Computing exact section…" : "No section computed"}</strong><span>Choose a plane and offset, then click Compute Section.</span><span>{plane} moves along {plane === "XY" ? "Z" : plane === "XZ" ? "Y" : "X"}; the initial offset is the model midpoint.</span></div>}
     {section && <>
-      <svg className="section-canvas" aria-label="2D section geometry" viewBox={viewBox}>
-        <g transform="scale(1,-1)" fill="none" strokeWidth={width}>
-          {section.diagnostics.every((item) => item.severity !== "error") &&
-            section.components.map((component) => {
-              if (!component.wires.every((wire) => wire.closed && wire.role !== null)) return null;
-              const source = imported.components.find((item) => item.id === component.component_id);
-              const color = source?.source_color ? `rgb(${source.source_color.map(String).join(",")})` : "#79c3f5";
-              return <path key={`${component.component_id}-fill`}
-                aria-label={`${source?.display_name ?? component.component_id} filled region`}
-                d={component.wires.map(closedWirePath).join(" ")} fill={color} fillOpacity={0.28}
-                fillRule="evenodd" stroke="none"
-                onClick={() => { selectComponent(component.component_id); }} />;
-            })}
-          {section.components.flatMap((component) => component.wires.flatMap((wire, wireIndex) =>
-            wire.curves.map((curve, curveIndex) => {
-              const source = imported.components.find((item) => item.id === component.component_id);
-              return <path key={`${component.component_id}-${String(wireIndex)}-${String(curveIndex)}`}
-                d={curvePath(curve)} stroke={source?.source_color ? `rgb(${source.source_color.map(String).join(",")})` : "#79c3f5"}
-                onClick={() => { selectComponent(component.component_id); }} />;
-            }))) }
-        </g>
-      </svg>
+      <p className="section-draft">{section.components.length} of {imported.component_count} bodies intersected · {section.components.reduce((sum, component) => sum + component.wires.filter((wire) => wire.closed && wire.role === "outer").length, 0)} closed regions</p>
+      <SectionViewport key={section.section_id} section={section} imported={imported}
+        bounds={{ x: xMin, y: -yMax, width: xMax - xMin, height: yMax - yMin }} />
       {section.components.length === 0 && <p className="section-empty">The plane does not intersect a body.</p>}
-      {section.diagnostics.map((item, index) => <p key={`${item.code}-${String(index)}`}
+      <div className="section-diagnostics">{section.diagnostics.map((item, index) => <p key={`${item.code}-${String(index)}`}
         className={`section-diagnostic ${item.severity}`}>
         {item.message}
         {[item.component_id, item.related_component_id].filter((id): id is string => Boolean(id))
           .map((id) => <button key={id} type="button" onClick={() => { selectComponent(id); }}>
             Select {imported.components.find((component) => component.id === id)?.display_name ?? id}
           </button>)}
-      </p>)}
+      </p>)}</div>
     </>}
   </div>;
 }

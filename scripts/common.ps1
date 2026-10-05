@@ -65,6 +65,31 @@ function Assert-BackendPortAvailable {
     }
 }
 
+function Wait-BackendReady {
+    param(
+        [Parameter(Mandatory)]$BackendProcess,
+        [Parameter(Mandatory)][string]$Token,
+        [int]$Attempts = 120
+    )
+
+    for ($attempt = 0; $attempt -lt $Attempts; $attempt++) {
+        if ($BackendProcess.HasExited) {
+            throw "Backend exited during startup with code $($BackendProcess.ExitCode)."
+        }
+        try {
+            $response = Invoke-RestMethod -Uri 'http://127.0.0.1:8000/api/v1/health' `
+                -Headers @{ 'X-Session-Token' = $Token } -TimeoutSec 1
+            if ($response.status -eq 'ok' -and $response.service -eq 'cad2maxwell-backend' `
+                -and $response.api_version -eq 'v1') { return }
+        }
+        catch {
+            # Retry while this launcher-owned process is starting.
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    throw 'Backend did not become ready. Check artifacts/logs for the startup error.'
+}
+
 function Get-MSVCLinkerDirectory {
     param([Parameter(Mandatory)][string]$InstallationPath)
 

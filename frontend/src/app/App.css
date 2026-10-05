@@ -13,7 +13,7 @@ button:focus-visible { outline: 2px solid #4bb3fd; outline-offset: 2px; }
 .application-shell {
   display: grid;
   grid-template-rows: 44px auto minmax(0, 1fr) auto 28px;
-  min-height: 100vh;
+  height: 100dvh;
   background: #151a20;
 }
 
@@ -39,7 +39,7 @@ button:focus-visible { outline: 2px solid #4bb3fd; outline-offset: 2px; }
 button:disabled { color: #707983; cursor: not-allowed; }
 .toolbar-separator { width: 1px; height: 24px; margin: 0 5px; background: #3a434d; }
 
-.workspace { display: grid; grid-template-columns: 230px minmax(320px, 1fr) 250px; min-height: 0; }
+.workspace { grid-row: 3; display: grid; grid-template-columns: 230px minmax(320px, 1fr) 250px; min-height: 0; }
 .import-form { padding: 8px 11px; border-bottom: 1px solid #303842; background: #1b2128; }
 .import-form label { display: block; margin-bottom: 4px; color: #8f9ba6; font-size: 11px; font-weight: 700; }
 .import-controls { display: flex; gap: 8px; }
@@ -52,15 +52,15 @@ button:disabled { color: #707983; cursor: not-allowed; }
 .file-chooser input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
 .file-chooser:focus-within { outline: 2px solid #4bb3fd; outline-offset: 2px; }
 .import-error { margin: 6px 0 0; color: #f2a09b; font-size: 12px; }
-.component-list { margin: 0; padding: 0; list-style: none; overflow: auto; }
+.component-list { flex: 1; min-height: 0; margin: 0; padding: 0; list-style: none; overflow: auto; }
 .component-list button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 11px; border: 0; border-bottom: 1px solid #272f37; background: transparent; color: #d1d7dd; text-align: left; cursor: pointer; }
 .component-list button:hover, .component-list button[aria-pressed="true"] { background: #293c4b; }
 .color-swatch { width: 11px; height: 11px; flex: none; border: 1px solid #77828b; border-radius: 2px; }
 .import-diagnostics { max-height: 92px; overflow: auto; padding: 4px 11px; border-top: 1px solid #303842; color: #c7b481; font-size: 11px; }
 .import-diagnostics .error { color: #f2a09b; }
 .panel { background: #1b2128; }
-.model-tree { border-right: 1px solid #303842; }
-.properties { border-left: 1px solid #303842; }
+.model-tree { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid #303842; }
+.properties { overflow: auto; border-left: 1px solid #303842; }
 .panel-title { padding: 9px 11px; border-bottom: 1px solid #303842; color: #8f9ba6; font-size: 11px; font-weight: 700; letter-spacing: .12em; }
 .empty-panel { display: flex; min-height: 180px; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 20px; color: #7e8994; text-align: center; font-size: 12px; }
 .empty-panel strong { color: #bbc3ca; font-size: 13px; }
@@ -118,3 +118,15 @@ button:disabled { color: #707983; cursor: not-allowed; }
   .workspace { grid-template-columns: 190px minmax(300px, 1fr); }
   .properties { display: none; }
 }
+
+.import-diagnostics { grid-row: 4; }
+.status-bar { grid-row: 5; white-space: nowrap; }
+.toolbar-group { display: flex; gap: 6px; align-items: center; }
+.section-controls { flex-shrink: 0; flex-wrap: wrap; }
+.section-draft, .section-view-tools { flex-shrink: 0; }
+.section-placeholder { flex: 1; }
+.section-view-tools { display: flex; align-items: center; gap: 6px; padding: 5px 8px; font-size: 11px; color: #9da7b0; }
+.section-view-tools button { padding: 4px 8px; border: 1px solid #3a434d; border-radius: 3px; background: #29313a; color: #d8dde3; }
+.viewport { min-height: 0; overflow: hidden; }
+.section-canvas { display: block; height: 0; overflow: hidden; }
+.section-diagnostics { max-height: 120px; overflow: auto; flex-shrink: 0; }

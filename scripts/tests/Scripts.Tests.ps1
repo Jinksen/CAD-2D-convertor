@@ -58,4 +58,24 @@ Describe 'Developer script helpers' {
             $listener.Stop()
         }
     }
+
+    It 'authenticates readiness and checks the expected service identity' {
+        Mock Invoke-RestMethod { return @{ status = 'ok'; service = 'cad2maxwell-backend'; api_version = 'v1' } }
+        Wait-BackendReady -BackendProcess ([pscustomobject]@{ HasExited = $false }) -Token 'test-session' -Attempts 1
+        Assert-MockCalled Invoke-RestMethod -Times 1 -Exactly -ParameterFilter {
+            $Headers['X-Session-Token'] -eq 'test-session'
+        }
+    }
+
+    It 'does not mistake another service for the geometry backend' {
+        Mock Invoke-RestMethod { return @{ status = 'ok'; service = 'another-service'; api_version = 'v1' } }
+        Mock Start-Sleep {}
+        { Wait-BackendReady -BackendProcess ([pscustomobject]@{ HasExited = $false }) -Token 'test-session' -Attempts 1 } |
+            Should Throw 'did not become ready'
+    }
+
+    It 'reports an early backend exit instead of opening an unusable window' {
+        { Wait-BackendReady -BackendProcess ([pscustomobject]@{ HasExited = $true; ExitCode = 7 }) -Token 'test-session' } |
+            Should Throw 'code 7'
+    }
 }

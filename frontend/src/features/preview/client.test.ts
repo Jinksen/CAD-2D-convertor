@@ -16,7 +16,9 @@ describe("preview client", () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(preview)));
 
     expect(await fetchPreview("import-1", fetcher)).toEqual(preview);
-    expect(fetcher).toHaveBeenCalledWith("http://127.0.0.1:8000/api/v1/imports/import-1/preview");
+    expect(fetcher).toHaveBeenCalledWith("http://127.0.0.1:8000/api/v1/imports/import-1/preview", {
+      headers: { Accept: "application/json" },
+    });
   });
 
   it("rejects malformed triangle indices", async () => {

@@ -1,3 +1,5 @@
+import { backendHeaders } from "../desktop/runtime";
+
 const DEFAULT_BACKEND_URL = "http://127.0.0.1:8000";
 
 export async function downloadSectionArchive(
@@ -8,7 +10,7 @@ export async function downloadSectionArchive(
   let response: Response;
   try {
     response = await fetcher(`${baseUrl}/api/v1/export/dxf`, {
-      method: "POST", headers: { Accept: "application/zip", "Content-Type": "application/json" },
+      method: "POST", headers: await backendHeaders({ Accept: "application/zip", "Content-Type": "application/json" }),
       body: JSON.stringify({ import_id: importId, section_id: sectionId }),
     });
   } catch {

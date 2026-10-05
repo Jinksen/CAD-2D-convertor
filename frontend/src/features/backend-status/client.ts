@@ -1,4 +1,5 @@
 import { type BackendHealth, isHealthResponse } from "./contracts";
+import { backendHeaders } from "../desktop/runtime";
 
 const DEFAULT_BACKEND_URL = "http://127.0.0.1:8000";
 
@@ -8,7 +9,7 @@ export async function fetchBackendHealth(fetcher: typeof fetch = fetch): Promise
 
   try {
     const response = await fetcher(`${baseUrl}/api/v1/health`, {
-      headers: { Accept: "application/json" },
+      headers: await backendHeaders({ Accept: "application/json" }),
     });
     if (!response.ok) return { state: "offline" };
 
