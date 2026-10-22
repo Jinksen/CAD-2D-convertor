@@ -1,3 +1,5 @@
+import type { Vec3 } from "./plane";
+
 export type Point2 = [number, number];
 
 export type SectionCurve =
@@ -5,10 +7,21 @@ export type SectionCurve =
   | { type: "circle"; center: Point2; radius: number; x_axis: Point2; y_axis: Point2; start_parameter: number; end_parameter: number }
   | { type: "ellipse"; center: Point2; major_radius: number; minor_radius: number; x_axis: Point2; y_axis: Point2; start_parameter: number; end_parameter: number };
 
+export type SectionResponsePlane =
+  | { kind: "XY" | "XZ" | "YZ"; offset_mm: number }
+  | { kind: "custom"; origin_xyz: Vec3; normal_xyz: Vec3; x_dir_xyz: Vec3 };
+
+export interface ComponentPlane {
+  component_id: string;
+  normal_xyz: Vec3;
+  offset_mm: number;
+  planar_area_mm2: number;
+}
+
 export interface SectionResponse {
   section_id: string;
   import_id: string;
-  plane: { kind: "XY" | "XZ" | "YZ"; offset_mm: number };
+  plane: SectionResponsePlane;
   components: { component_id: string; wires: { closed: boolean; role: "outer" | "hole" | null; curves: SectionCurve[] }[] }[];
   diagnostics: { code: string; severity: "warning" | "error"; message: string;
     component_id: string | null; related_component_id?: string | null }[];
@@ -22,6 +35,27 @@ function point(value: unknown): value is Point2 {
   return Array.isArray(value) && value.length === 2 && value.every(
     (n) => typeof n === "number" && Number.isFinite(n),
   );
+}
+
+function finite(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function vector(value: unknown): value is Vec3 {
+  return Array.isArray(value) && value.length === 3 && value.every(finite);
+}
+
+function sectionPlane(value: unknown): value is SectionResponsePlane {
+  if (!record(value)) return false;
+  if (value.kind === "custom") {
+    return vector(value.origin_xyz) && vector(value.normal_xyz) && vector(value.x_dir_xyz);
+  }
+  return (value.kind === "XY" || value.kind === "XZ" || value.kind === "YZ") && finite(value.offset_mm);
+}
+
+export function isComponentPlane(value: unknown): value is ComponentPlane {
+  return record(value) && typeof value.component_id === "string" && vector(value.normal_xyz) &&
+    finite(value.offset_mm) && finite(value.planar_area_mm2);
 }
 
 function curve(value: unknown): value is SectionCurve {
@@ -39,9 +73,7 @@ function curve(value: unknown): value is SectionCurve {
 
 export function isSectionResponse(value: unknown): value is SectionResponse {
   return record(value) && typeof value.section_id === "string" &&
-    typeof value.import_id === "string" && record(value.plane) &&
-    (value.plane.kind === "XY" || value.plane.kind === "XZ" || value.plane.kind === "YZ") &&
-    typeof value.plane.offset_mm === "number" && Number.isFinite(value.plane.offset_mm) &&
+    typeof value.import_id === "string" && sectionPlane(value.plane) &&
     Array.isArray(value.components) && value.components.every((component: unknown) =>
       record(component) && typeof component.component_id === "string" &&
       Array.isArray(component.wires) && component.wires.every((wire: unknown) =>

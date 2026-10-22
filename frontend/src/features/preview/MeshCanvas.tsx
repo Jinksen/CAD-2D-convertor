@@ -4,18 +4,20 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 import type { BoundsMm } from "../step-import/contracts";
 import type { PreviewMeshResponse } from "./contracts";
-import { planeGuideFrame, type PrincipalPlane } from "./sectionPlane";
+import type { SectionPlaneKind, Vec3 } from "../section/plane";
+import { planeGuideFrame } from "./sectionPlane";
 
 interface Props {
   preview: PreviewMeshResponse;
   bounds: BoundsMm;
   selectedComponentId: string | null;
   onSelect: (componentId: string) => void;
-  plane: PrincipalPlane;
+  plane: SectionPlaneKind;
   offsetMm: number;
+  normal: Vec3;
 }
 
-export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, plane, offsetMm }: Props) {
+export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, plane, offsetMm, normal }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const meshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const guideRef = useRef<THREE.Group | null>(null);
@@ -24,7 +26,7 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
     const container = containerRef.current;
     if (!container) return;
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#12171c");
+    scene.background = new THREE.Color("#ffffff");
     const center = new THREE.Vector3(...bounds.min_xyz).add(new THREE.Vector3(...bounds.max_xyz)).multiplyScalar(0.5);
     const diagonal = new THREE.Vector3(...bounds.max_xyz).sub(new THREE.Vector3(...bounds.min_xyz)).length();
     const radius = Math.max(diagonal, 1);
@@ -48,7 +50,7 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
     const light = new THREE.DirectionalLight(0xffffff, 2);
     light.position.copy(center).add(new THREE.Vector3(radius, -radius, radius * 2));
     scene.add(light);
-    const grid = new THREE.GridHelper(radius * 2, 10, 0x355063, 0x253541);
+    const grid = new THREE.GridHelper(radius * 2, 10, 0xb9bec4, 0xdfe2e5);
     grid.rotation.x = Math.PI / 2;
     grid.position.z = bounds.min_xyz[2];
     scene.add(grid);
@@ -64,7 +66,7 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
     }));
     const guideEdges = new THREE.LineSegments(
       new THREE.EdgesGeometry(guideGeometry),
-      new THREE.LineBasicMaterial({ color: 0x7bd0ff, depthTest: false }),
+      new THREE.LineBasicMaterial({ color: 0x1a5fb4, depthTest: false }),
     );
     guide.add(guideSurface, guideEdges);
     scene.add(guide);
@@ -142,18 +144,18 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
   useEffect(() => {
     for (const [componentId, mesh] of meshesRef.current) {
       const material = mesh.material as THREE.MeshStandardMaterial;
-      material.emissive.setHex(componentId === selectedComponentId ? 0x254e67 : 0x000000);
+      material.emissive.setHex(componentId === selectedComponentId ? 0x1a3f6b : 0x000000);
     }
   }, [selectedComponentId, preview]);
 
   useEffect(() => {
     const guide = guideRef.current;
     if (!guide) return;
-    const frame = planeGuideFrame(bounds, plane, offsetMm);
+    const frame = planeGuideFrame(bounds, plane, offsetMm, normal);
     guide.position.set(...frame.center);
     guide.rotation.set(...frame.rotation);
     guide.scale.set(frame.width, frame.height, 1);
-  }, [bounds, plane, offsetMm, preview]);
+  }, [bounds, plane, offsetMm, normal, preview]);
 
   return <div ref={containerRef} className="preview-canvas" aria-label="3D model preview" />;
 }

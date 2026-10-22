@@ -37,7 +37,8 @@ describe("STEP workspace", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /rotor/i })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /rotor/i }));
     expect(screen.getByText("Partial transfer")).toBeInTheDocument();
-    expect(screen.getAllByText("Rotor", { selector: "dd" })).toHaveLength(3);
+    expect(screen.getByText("Body: Rotor")).toBeInTheDocument();
+    expect(screen.getAllByText("Rotor", { selector: "dd" })).toHaveLength(2);
     expect(screen.getByText("10 × 20 × 30 mm")).toBeInTheDocument();
   });
 
@@ -45,6 +46,7 @@ describe("STEP workspace", () => {
     useWorkspaceStore.setState({ imported: summary, selectedComponentId: "body-1" });
     vi.mocked(importStep).mockRejectedValue(new Error("The STEP file was not found."));
     render(<StepImportWorkspace />);
+    fireEvent.click(screen.getByRole("button", { name: "motor.step" }));
     fireEvent.change(screen.getByRole("textbox", { name: /step path/i }), { target: { value: "C:/missing.step" } });
     fireEvent.click(screen.getByRole("button", { name: /import step/i }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("The STEP file was not found."));
@@ -65,12 +67,12 @@ describe("STEP workspace", () => {
     vi.mocked(fetchPreview).mockReturnValue(new Promise(() => {}));
     render(<StepImportWorkspace />);
 
-    fireEvent.click(screen.getByRole("tab", { name: "3D VIEW" }));
+    fireEvent.click(screen.getByRole("tab", { name: "3D Preview" }));
 
     expect(screen.getByText("Generating 3D preview…")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "3D VIEW" })).toHaveAttribute("aria-selected", "true");
-    fireEvent.click(screen.getByRole("tab", { name: "2D SECTION" }));
-    expect(screen.getByRole("tab", { name: "2D SECTION" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "3D Preview" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("tab", { name: "2D Section" }));
+    expect(screen.getByRole("tab", { name: "2D Section" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("preserves a computed section while inspecting 3D", async () => {
@@ -84,13 +86,51 @@ describe("STEP workspace", () => {
       ] }] }],
     });
     render(<StepImportWorkspace />);
+    fireEvent.click(screen.getByRole("button", { name: "Section XY" }));
     fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
     await screen.findByRole("button", { name: /export draft dxf/i });
 
-    fireEvent.click(screen.getByRole("tab", { name: "3D VIEW" }));
-    fireEvent.click(screen.getByRole("tab", { name: "2D SECTION" }));
+    fireEvent.click(screen.getByRole("tab", { name: "3D Preview" }));
+    fireEvent.click(screen.getByRole("tab", { name: "2D Section" }));
 
     expect(screen.getByRole("button", { name: /export draft dxf/i })).toBeInTheDocument();
     expect(computeSection).toHaveBeenCalledTimes(1);
+  });
+
+  it("groups bodies by parent assembly and returns to model settings from the file node", () => {
+    const stator = { ...summary.components[0], id: "body-2", display_name: "Stator", export_name: "Stator",
+      source_name: "Stator", hierarchy_path: ["Motor", "Housing", "Stator"] };
+    useWorkspaceStore.setState({ imported: { ...summary, component_count: 2, components: [summary.components[0], stator] } });
+    render(<StepImportWorkspace />);
+
+    expect(screen.getByText("Motor (1)")).toBeInTheDocument();
+    expect(screen.getByText("Housing (1)")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /stator/i }));
+    expect(screen.getByText("Body: Stator")).toBeInTheDocument();
+    expect(screen.getByText("Motor / Housing / Stator")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "motor.step" }));
+    expect(useWorkspaceStore.getState().selectedComponentId).toBeNull();
+    expect(screen.getByRole("textbox", { name: /step path/i })).toBeInTheDocument();
+  });
+
+  it("lists import diagnostics in the messages pane", () => {
+    useWorkspaceStore.setState({ imported: summary });
+    render(<StepImportWorkspace />);
+    expect(screen.getByRole("region", { name: /messages/i })).toHaveTextContent(/warning\s*Partial transfer/i);
+  });
+
+  it("shows section controls in Settings and keeps the body selection for alignment", () => {
+    useWorkspaceStore.setState({ imported: summary, selectedComponentId: "body-1" });
+    render(<StepImportWorkspace />);
+    expect(screen.queryByRole("button", { name: /compute section/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Section XY" }));
+
+    const settings = screen.getByRole("region", { name: /settings/i });
+    expect(settings).toHaveTextContent("Exact planar cut of all bodies");
+    expect(screen.getByRole("button", { name: /compute section/i })).toBeInTheDocument();
+    expect(screen.getByRole("main", { name: /graphics/i })).toHaveTextContent("No section computed");
+    expect(useWorkspaceStore.getState().selectedComponentId).toBe("body-1");
   });
 });

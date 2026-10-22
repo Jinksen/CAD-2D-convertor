@@ -8,9 +8,10 @@ describe("CAD2Maxwell workspace", () => {
     render(<App />);
 
     expect(screen.getByRole("banner", { name: /application toolbar/i })).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: /model tree/i })).toBeInTheDocument();
-    expect(screen.getByRole("main", { name: /viewport/i })).toBeInTheDocument();
-    expect(screen.getByRole("complementary", { name: /properties/i })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: /model builder/i })).toBeInTheDocument();
+    expect(screen.getByRole("main", { name: /graphics/i })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: /settings/i })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: /messages/i })).toBeInTheDocument();
     expect(screen.getByRole("status")).toBeInTheDocument();
   });
 

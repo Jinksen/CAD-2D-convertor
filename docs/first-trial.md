@@ -10,10 +10,10 @@ If the build is missing, run `scripts/build-trial.ps1` after setup. If Python de
 
 ## Import and inspect
 
-1. Click **Open STEP** in the toolbar (or **Choose STEP file**) and select a `.step` or `.stp` file. Alternatively, paste an absolute local path into **STEP path** and click **Import STEP**.
+1. Click **Open STEP** in the ribbon (or **Browse…** in the Model settings) and select a `.step` or `.stp` file. Alternatively, paste an absolute local path into **STEP path** and click **Import STEP**.
 2. Check the body count and import diagnostics. STEP metadata may be missing even when all solids import; inspect the reported diagnostics.
-3. Click **3D VIEW** to orbit, zoom, and select a body. The model tree and properties track that selection.
-4. Click **2D SECTION**. Choose **XY**, **XZ**, or **YZ** in the toolbar. The offset is a Z, Y, or X coordinate respectively, in millimetres. Initially it is the midpoint of the corresponding model bounds.
+3. Click **3D Preview** to orbit, zoom, and select a body. Model Builder and Settings track that selection.
+4. Click the **Section** node in Model Builder. Choose **XY**, **XZ**, **YZ**, or **Custom** in the ribbon. For XY/XZ/YZ the offset is a Z, Y, or X coordinate respectively, in millimetres. Initially it is the midpoint of the corresponding model bounds. **Custom** cuts the plane n · p = offset. Select a sheet and click **Align to selected body** to use its sheet plane at mid-thickness, or type the normal and offset yourself.
 5. Click **Compute Section**. Only bodies intersected by that plane produce section geometry. The view fits the resulting curves; use **Fit section**, **+**, **−**, or the mouse wheel to adjust the view. The result reports intersected bodies and closed regions. A section with fewer components than the imported assembly is normal. Holes should stay empty within filled regions.
 6. Change the offset as needed. Moving the plane clears the previous result; compute again before export. The 3D view shows the corresponding translucent plane guide.
 
@@ -37,6 +37,6 @@ Import `section.dxf` into Maxwell 2D. Check its dimensions, closed-region format
 - **Service restarted:** reimport the CAD and compute again. Exact geometry sessions live in memory.
 - **3D preview too large:** the current 50,000-triangle limit affects display only. Exact sectioning remains available.
 - **No section:** move the offset inside a body or choose a different principal plane.
-- Project save/load, recent files, undo/redo, custom-plane UI, and a self-contained installer are pending. No project state persists between launches.
+- Project save/load, recent files, undo/redo, and a self-contained installer are pending. No project state persists between launches.
 
 Source CAD stays local. The launch token changes each time and is required for service requests; unapproved browser origins are rejected. No geometry is repaired automatically.
