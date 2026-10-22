@@ -104,3 +104,12 @@ class SectionResponse(FiniteModel):
     plane: SectionPlane
     components: list[SectionComponent]
     diagnostics: list[SectionDiagnostic]
+
+
+class ComponentPlaneResponse(FiniteModel):
+    """The sheet plane of one body: a custom section plane is n . p = offset_mm."""
+
+    component_id: str
+    normal_xyz: Point3
+    offset_mm: float
+    planar_area_mm2: float

@@ -13,12 +13,13 @@ No Inventor, no drawing setup, no extra modelling steps: open the STEP file, pic
 
 1. Complete the one-time [setup](#one-time-setup).
 2. Start the app with **CAD2Maxwell** on the Desktop or in the Start menu (or double-click `START-APP.cmd` in this folder).
-3. Click **Choose STEP file** and open a `.step` / `.stp` model.
-4. Check the model in **3D VIEW**, then switch to **2D SECTION**.
-5. Choose **XY**, **XZ**, or **YZ** and an offset in millimetres (Z, Y, or X coordinate). The default is the middle of the model.
-6. Click **Compute Section**. Filled regions are closed contours; holes stay empty.
-7. Click **Export draft DXF** and save a new ZIP. It contains `section.dxf` (1:1, mm) and `section.json`.
-8. Import `section.dxf` into Maxwell 2D.
+3. Click **Open STEP** and open a `.step` / `.stp` model. Its bodies appear in **Model Builder**; check them in **3D Preview**.
+4. Choose a plane in the ribbon:
+   - **XY**, **XZ**, or **YZ** with an offset in millimetres (Z, Y, or X coordinate). The default is the middle of the model.
+   - **Custom** for a tilted plane, for example laminations that do not lie in XY. Select one sheet in Model Builder or 3D Preview, open the **Section** node, and click **Align to selected body**. The plane snaps to the sheet plane at mid-thickness. You can also type the normal and the offset along it.
+5. Open the **Section** node in Model Builder and click **Compute Section**. Filled regions are closed contours; holes stay empty.
+6. Click **Export draft DXF** and save a new ZIP. It contains `section.dxf` (1:1, mm) and `section.json`.
+7. Import `section.dxf` into Maxwell 2D.
 
 Close the app window to stop it. The minimized launcher console stops the geometry service automatically. Startup logs are written to `artifacts/logs`.
 
@@ -74,7 +75,7 @@ The output path must be absolute and unused. The command writes `section.dxf` an
 ## Known limitations
 
 - Exports are marked `draft_unvalidated`. A simple rectangle imports into Maxwell as a filled region; complex assemblies still need verification.
-- The UI offers XY/XZ/YZ planes. Custom planes are available through the backend API (`POST /api/v1/section`).
+- **Align to selected body** uses the body's largest planar face family. It needs a body with planar faces, such as a sheet.
 - The 3D preview is limited to 50,000 triangles. Sectioning still works for larger models.
 - No project save/load yet. Re-import after restarting the app.
 - Port 8000 must be free, so only one instance runs at a time.

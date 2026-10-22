@@ -1,8 +1,9 @@
 from pathlib import Path
 
 from OCP.BRep import BRep_Builder
+from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
-from OCP.gp import gp_Trsf, gp_Vec
+from OCP.gp import gp_Ax1, gp_Dir, gp_Pnt, gp_Trsf, gp_Vec
 from OCP.IFSelect import IFSelect_ReturnStatus
 from OCP.Interface import Interface_Static
 from OCP.Quantity import Quantity_Color, Quantity_TypeOfColor
@@ -101,4 +102,17 @@ def unnamed_box(path: Path) -> Path:
     document = _document()
     shapes = XCAFDoc_DocumentTool.ShapeTool_s(document.Main())
     shapes.AddShape(BRepPrimAPI_MakeBox(3, 4, 5).Shape(), False)
+    return _write(document, path)
+
+
+def tilted_plate(path: Path, degrees: float = 20.0) -> Path:
+    """A 40 x 30 x 2 mm lamination rotated about Y, like a sheet stack not aligned to XY."""
+    import math
+
+    transform = gp_Trsf()
+    transform.SetRotation(gp_Ax1(gp_Pnt(0, 0, 0), gp_Dir(0, 1, 0)), math.radians(degrees))
+    plate = BRepBuilderAPI_Transform(BRepPrimAPI_MakeBox(40, 30, 2).Shape(), transform).Shape()
+    document = _document()
+    shapes = XCAFDoc_DocumentTool.ShapeTool_s(document.Main())
+    _name(shapes.AddShape(plate, False), "Lamination")
     return _write(document, path)

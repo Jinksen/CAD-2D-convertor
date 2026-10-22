@@ -20,10 +20,20 @@ from cad2maxwell_backend.models.imports import (
     ImportResponse,
 )
 from cad2maxwell_backend.models.preview import PreviewMeshResponse
-from cad2maxwell_backend.models.sections import SectionRequest, SectionResponse
+from cad2maxwell_backend.models.sections import (
+    ComponentPlaneResponse,
+    SectionRequest,
+    SectionResponse,
+)
 from cad2maxwell_backend.services.import_service import ImportService, ImportServiceError
 from cad2maxwell_backend.services.import_sessions import ImportSessions
-from cad2maxwell_backend.services.section_service import SectionError, SectionService, UnknownImport
+from cad2maxwell_backend.services.section_service import (
+    NoPlanarFaceError,
+    SectionError,
+    SectionService,
+    UnknownComponent,
+    UnknownImport,
+)
 from cad2maxwell_backend.services.section_sessions import SectionSessions
 
 LOGGER = logging.getLogger(__name__)
@@ -116,6 +126,23 @@ def create_app(import_service: ImportService | None = None) -> FastAPI:
         except Exception as exc:
             LOGGER.error("Unexpected preview failure (%s)", type(exc).__name__)
             return _error(500, "internal_preview_error", "The 3D preview could not be completed.")
+
+    @app.get(
+        "/api/v1/imports/{import_id}/components/{component_id}/plane",
+        response_model=ComponentPlaneResponse,
+    )
+    def component_plane(import_id: str, component_id: str) -> ComponentPlaneResponse | JSONResponse:
+        try:
+            return section_service.component_plane(import_id, component_id)
+        except UnknownImport:
+            return _error(404, "unknown_import", "The import session was not found. Import again.")
+        except UnknownComponent:
+            return _error(404, "unknown_component", "The selected body is not part of this import.")
+        except NoPlanarFaceError as exc:
+            return _error(422, "no_planar_face", str(exc))
+        except Exception as exc:
+            LOGGER.error("Unexpected plane alignment failure (%s)", type(exc).__name__)
+            return _error(500, "internal_plane_error", "The body plane could not be determined.")
 
     @app.post("/api/v1/section", response_model=SectionResponse)
     def create_section(request: SectionRequest) -> SectionResponse | JSONResponse:

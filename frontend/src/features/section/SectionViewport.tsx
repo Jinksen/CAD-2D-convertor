@@ -23,8 +23,8 @@ export function SectionViewport({ section, imported, bounds }: Props) {
   useLayoutEffect(() => { fit(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   function color(id: string) {
     const source = imported.components.find((item) => item.id === id);
-    return selectedComponentId === id ? "#ffffff" : source?.source_color
-      ? `rgb(${source.source_color.map(String).join(",")})` : "#79c3f5";
+    return selectedComponentId === id ? "#1a5fb4" : source?.source_color
+      ? `rgb(${source.source_color.map(String).join(",")})` : "#4a6f8f";
   }
   return <>
     <div className="section-view-tools" aria-label="2D view controls">

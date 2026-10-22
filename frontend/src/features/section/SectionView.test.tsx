@@ -3,11 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import type { ImportSummary } from "../step-import/contracts";
-import { computeSection } from "./client";
+import { computeSection, fetchComponentPlane } from "./client";
 import { downloadSectionArchive } from "./exportClient";
+import type { SectionPlaneKind } from "./plane";
+import { SectionMessages, SectionSettings } from "./SectionSettings";
 import { SectionView } from "./SectionView";
+import { useSectionRun } from "./useSectionRun";
 
-vi.mock("./client", () => ({ computeSection: vi.fn() }));
+vi.mock("./client", () => ({ computeSection: vi.fn(), fetchComponentPlane: vi.fn() }));
 vi.mock("./exportClient", () => ({ downloadSectionArchive: vi.fn() }));
 
 const imported: ImportSummary = {
@@ -22,11 +25,18 @@ const imported: ImportSummary = {
 };
 
 beforeEach(() => {
-  useWorkspaceStore.setState({ imported, activePlane: "XY", sectionOffsetMm: null, selectedComponentId: null });
+  useWorkspaceStore.setState({ imported, activePlane: "XY", sectionOffsetMm: null, selectedComponentId: null, customNormal: [0, 0, 1] });
   vi.resetAllMocks();
 });
 
 afterEach(() => { vi.unstubAllGlobals(); });
+
+/** The Settings, Graphics and Messages parts of one section, as the workspace mounts them. */
+function SectionPanes({ imported, plane }: { imported: ImportSummary; plane: SectionPlaneKind }) {
+  const run = useSectionRun(imported, plane);
+  if (!run) return null;
+  return <><SectionSettings run={run} /><SectionView run={run} /><SectionMessages run={run} /></>;
+}
 
 describe("SectionView", () => {
   it("does not open a stale export dialog after leaving the section", async () => {
@@ -40,7 +50,7 @@ describe("SectionView", () => {
     vi.mocked(downloadSectionArchive).mockImplementation(() => new Promise((resolve) => { complete = resolve; }));
     const invoke = vi.fn();
     vi.stubGlobal("__TAURI__", { core: { invoke } });
-    const view = render(<SectionView imported={imported} plane="XY" />);
+    const view = render(<SectionPanes imported={imported} plane="XY" />);
     fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
     fireEvent.click(await screen.findByRole("button", { name: /export draft dxf/i }));
     view.unmount();
@@ -49,7 +59,7 @@ describe("SectionView", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
   it("explains how to generate a section instead of leaving a blank viewport", () => {
-    render(<SectionView imported={imported} plane="XY" />);
+    render(<SectionPanes imported={imported} plane="XY" />);
     expect(screen.getByText("No section computed")).toBeInTheDocument();
     expect(screen.getByText(/choose a plane and offset/i)).toBeInTheDocument();
   });
@@ -61,7 +71,7 @@ describe("SectionView", () => {
         { closed: true, role: "outer", curves: [{ type: "line", start: [0, 0], end: [10, 0] }] },
       ] }],
     });
-    render(<SectionView imported={imported} plane="XY" />);
+    render(<SectionPanes imported={imported} plane="XY" />);
     fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
     expect(await screen.findByRole("button", { name: /fit section/i })).toBeInTheDocument();
     const canvas = screen.getByLabelText("2D section geometry");
@@ -77,7 +87,7 @@ describe("SectionView", () => {
   });
 
   it("shares the edited section offset with the 3D plane guide", () => {
-    render(<SectionView imported={imported} plane="XY" />);
+    render(<SectionPanes imported={imported} plane="XY" />);
     fireEvent.change(screen.getByRole("spinbutton", { name: /offset/i }), { target: { value: "12.5" } });
     expect(useWorkspaceStore.getState().sectionOffsetMm).toBe(12.5);
   });
@@ -101,7 +111,7 @@ describe("SectionView", () => {
         ] },
       ] }],
     });
-    render(<SectionView imported={imported} plane="XY" />);
+    render(<SectionPanes imported={imported} plane="XY" />);
     fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
     const filled = await screen.findByLabelText("Rotor filled region");
     expect(filled).toHaveAttribute("fill-rule", "evenodd");
@@ -118,7 +128,7 @@ describe("SectionView", () => {
           start_parameter: 0, end_parameter: Math.PI * 2 },
       ] }] }],
     });
-    render(<SectionView imported={imported} plane="XY" />);
+    render(<SectionPanes imported={imported} plane="XY" />);
     fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
     expect(await screen.findByRole("button", { name: /export draft dxf/i })).toBeInTheDocument();
     fireEvent.change(screen.getByRole("spinbutton", { name: /offset/i }), { target: { value: "12" } });
@@ -134,18 +144,18 @@ describe("SectionView", () => {
         { type: "line", start: [0, 0], end: [10, 0] },
       ] }] }],
     });
-    render(<SectionView imported={imported} plane="XY" />);
+    render(<SectionPanes imported={imported} plane="XY" />);
     expect(screen.getByRole("spinbutton", { name: /offset/i })).toHaveValue(15);
     fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
     await waitFor(() => expect(screen.getByLabelText("2D section geometry")).toBeInTheDocument());
     expect(screen.getByLabelText("2D section geometry").querySelector("path:not([aria-label])"))
       .toHaveAttribute("d", "M 0 0 L 10 0");
-    expect(vi.mocked(computeSection)).toHaveBeenCalledWith("session-1", "XY", 15);
+    expect(vi.mocked(computeSection)).toHaveBeenCalledWith("session-1", { kind: "XY", offset_mm: 15 });
   });
 
   it("shows a section error without losing the imported model", async () => {
     vi.mocked(computeSection).mockRejectedValue(new Error("The section could not be completed."));
-    render(<SectionView imported={imported} plane="XY" />);
+    render(<SectionPanes imported={imported} plane="XY" />);
     fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("The section could not be completed."));
     expect(useWorkspaceStore.getState().imported?.import_id).toBe("session-1");
@@ -165,7 +175,7 @@ describe("SectionView", () => {
     Object.defineProperty(URL, "createObjectURL", { value: createObjectURL, configurable: true });
     Object.defineProperty(URL, "revokeObjectURL", { value: revokeObjectURL, configurable: true });
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => { /* download */ });
-    render(<SectionView imported={imported} plane="XY" />);
+    render(<SectionPanes imported={imported} plane="XY" />);
     fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
     const exportButton = await screen.findByRole("button", { name: /export draft dxf/i });
     fireEvent.click(exportButton);
@@ -186,7 +196,7 @@ describe("SectionView", () => {
         { type: "line", start: [0, 0], end: [10, 0] },
       ] }] }],
     });
-    render(<SectionView imported={imported} plane="XY" />);
+    render(<SectionPanes imported={imported} plane="XY" />);
     fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
 
     expect(await screen.findByText("Open wire")).toBeInTheDocument();
@@ -205,7 +215,7 @@ describe("SectionView", () => {
     let finishSave: (value: string | null) => void = () => { throw new Error("Save was not started"); };
     const invoke = vi.fn(() => new Promise<string | null>((resolve) => { finishSave = resolve; }));
     vi.stubGlobal("__TAURI__", { core: { invoke } });
-    render(<SectionView imported={imported} plane="XY" />);
+    render(<SectionPanes imported={imported} plane="XY" />);
     fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
     fireEvent.click(await screen.findByRole("button", { name: /export draft dxf/i }));
     await waitFor(() => { expect(invoke).toHaveBeenCalledOnce(); });
@@ -231,10 +241,65 @@ describe("SectionView", () => {
       ...imported.components,
       { ...imported.components[0], id: "body-2", display_name: "Stator" },
     ] };
-    render(<SectionView imported={withStator} plane="XY" />);
+    render(<SectionPanes imported={withStator} plane="XY" />);
     fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
     expect(await screen.findByText("Rotor and Stator overlap by 5 mm².")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Select Stator" }));
     expect(useWorkspaceStore.getState().selectedComponentId).toBe("body-2");
+  });
+
+  it("aligns a custom plane to the selected body and cuts it there", async () => {
+    useWorkspaceStore.setState({ activePlane: "custom", selectedComponentId: "body-1" });
+    vi.mocked(fetchComponentPlane).mockResolvedValue({
+      component_id: "body-1", normal_xyz: [0, 0, 1], offset_mm: 7.5, planar_area_mm2: 400,
+    });
+    vi.mocked(computeSection).mockResolvedValue({
+      section_id: "section-1", import_id: "session-1",
+      plane: { kind: "custom", origin_xyz: [0, 0, 7.5], normal_xyz: [0, 0, 1], x_dir_xyz: [1, 0, 0] },
+      diagnostics: [], components: [{ component_id: "body-1", wires: [
+        { closed: true, role: "outer", curves: [{ type: "line", start: [0, 0], end: [10, 0] }] },
+      ] }],
+    });
+    render(<SectionPanes imported={imported} plane="custom" />);
+    fireEvent.click(screen.getByRole("button", { name: /align to selected body/i }));
+    await waitFor(() => { expect(useWorkspaceStore.getState().sectionOffsetMm).toBe(7.5); });
+    expect(screen.getByRole("spinbutton", { name: /offset along normal/i })).toHaveValue(7.5);
+    fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
+    expect(await screen.findByText(/1 of 1 bodies intersected/)).toBeInTheDocument();
+    expect(computeSection).toHaveBeenCalledWith("session-1", {
+      kind: "custom", origin_xyz: [0, 0, 7.5], normal_xyz: [0, 0, 1], x_dir_xyz: [1, 0, 0],
+    });
+  });
+
+  it("requires a selected body before aligning", () => {
+    useWorkspaceStore.setState({ activePlane: "custom" });
+    render(<SectionPanes imported={imported} plane="custom" />);
+    expect(screen.getByRole("button", { name: /align to selected body/i })).toBeDisabled();
+  });
+
+  it("refuses a zero normal instead of computing a guessed plane", () => {
+    useWorkspaceStore.setState({ activePlane: "custom", customNormal: [0, 0, 0] });
+    render(<SectionPanes imported={imported} plane="custom" />);
+    fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
+    expect(screen.getByRole("alert")).toHaveTextContent(/normal must not be zero/i);
+    expect(computeSection).not.toHaveBeenCalled();
+  });
+
+  it("discards the computed section when the plane kind changes", async () => {
+    vi.mocked(computeSection).mockResolvedValue({
+      section_id: "section-1", import_id: "session-1", plane: { kind: "XY", offset_mm: 15 },
+      diagnostics: [], components: [{ component_id: "body-1", wires: [
+        { closed: true, role: "outer", curves: [{ type: "line", start: [0, 0], end: [10, 0] }] },
+      ] }],
+    });
+    const view = render(<SectionPanes imported={imported} plane="XY" />);
+    fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
+    expect(await screen.findByLabelText("2D section geometry")).toBeInTheDocument();
+
+    view.rerender(<SectionPanes imported={imported} plane="XZ" />);
+
+    expect(screen.queryByLabelText("2D section geometry")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /export draft dxf/i })).not.toBeInTheDocument();
+    expect(screen.getByText("No section computed")).toBeInTheDocument();
   });
 });

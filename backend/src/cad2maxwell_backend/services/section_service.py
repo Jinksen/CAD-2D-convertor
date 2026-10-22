@@ -1,10 +1,12 @@
 from dataclasses import replace
 
+from cad2maxwell_backend.geometry.dominant_plane import NoPlanarFaceError, dominant_plane
 from cad2maxwell_backend.geometry.section import SectionError, section_shape
 from cad2maxwell_backend.geometry.section_classification import classify_wires
 from cad2maxwell_backend.geometry.section_edges import check_section_edges
 from cad2maxwell_backend.geometry.section_validation import find_region_overlaps
 from cad2maxwell_backend.models.sections import (
+    ComponentPlaneResponse,
     SectionComponent,
     SectionDiagnostic,
     SectionRequest,
@@ -19,10 +21,30 @@ class UnknownImport(ValueError):
     """The process-local import session is no longer available."""
 
 
+class UnknownComponent(ValueError):
+    """The import session has no body with the requested component ID."""
+
+
 class SectionService:
     def __init__(self, imports: ImportSessions, sections: SectionSessions) -> None:
         self._imports = imports
         self.sections = sections
+
+    def component_plane(self, import_id: str, component_id: str) -> ComponentPlaneResponse:
+        record = self._imports.get_record(import_id)
+        if record is None:
+            raise UnknownImport
+        source_sha256, bodies = record
+        for body in bodies:
+            if stable_component_id(
+                source_sha256, body.occurrence_key, body.solid_ordinal,
+            ) == component_id:
+                plane = dominant_plane(body.shape)
+                return ComponentPlaneResponse(
+                    component_id=component_id, normal_xyz=plane.normal,
+                    offset_mm=plane.offset_mm, planar_area_mm2=plane.planar_area_mm2,
+                )
+        raise UnknownComponent
 
     def create(self, request: SectionRequest) -> SectionResponse:
         record = self._imports.get_record(request.import_id)
@@ -91,4 +113,6 @@ class SectionService:
         return response
 
 
-__all__ = ["SectionError", "SectionService", "UnknownImport"]
+__all__ = [
+    "NoPlanarFaceError", "SectionError", "SectionService", "UnknownComponent", "UnknownImport",
+]

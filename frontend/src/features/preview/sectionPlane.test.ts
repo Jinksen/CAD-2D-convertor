@@ -28,4 +28,13 @@ describe("3D section plane guide", () => {
     expect(Math.abs(edge.y)).toBeCloseTo(43.2);
     expect(Math.abs(edge.z)).toBeCloseTo(64.8);
   });
+
+  it("tilts a custom guide onto the requested plane", () => {
+    const normal: [number, number, number] = [0.331, 0.013, 0.944];
+    const frame = planeGuideFrame(bounds, "custom", 60, normal);
+    const unit = new Vector3(...normal).normalize();
+    expect(new Vector3(...frame.center).dot(unit)).toBeCloseTo(60);
+    const guideNormal = new Vector3(0, 0, 1).applyEuler(new Euler(...frame.rotation));
+    expect(guideNormal.dot(unit)).toBeCloseTo(1);
+  });
 });

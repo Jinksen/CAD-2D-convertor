@@ -4,6 +4,7 @@ import { useWorkspaceStore } from "../../app/workspaceStore";
 import type { ImportSummary } from "../step-import/contracts";
 import { fetchPreview } from "./client";
 import type { PreviewMeshResponse } from "./contracts";
+import { defaultOffset, formatNormal, normalize } from "../section/plane";
 import { MeshCanvas } from "./MeshCanvas";
 
 class GraphicsErrorBoundary extends Component<{ children: ReactNode }, { message: string | null }> {
@@ -22,10 +23,10 @@ class GraphicsErrorBoundary extends Component<{ children: ReactNode }, { message
 export function PreviewView({ imported }: { imported: ImportSummary }) {
   const [preview, setPreview] = useState<PreviewMeshResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { selectedComponentId, selectComponent, activePlane, sectionOffsetMm } = useWorkspaceStore();
-  const offsetAxis = activePlane === "XY" ? 2 : activePlane === "XZ" ? 1 : 0;
-  const offsetMm = sectionOffsetMm ??
-    (imported.bounds_mm.min_xyz[offsetAxis] + imported.bounds_mm.max_xyz[offsetAxis]) / 2;
+  const { selectedComponentId, selectComponent, activePlane, sectionOffsetMm, customNormal } = useWorkspaceStore();
+  const offsetMm = sectionOffsetMm ?? defaultOffset(imported.bounds_mm, activePlane, customNormal);
+  const planeName = activePlane === "custom"
+    ? `Custom plane (n = ${formatNormal(normalize(customNormal) ?? customNormal)})` : `${activePlane} plane`;
 
   useEffect(() => {
     let cancelled = false;
@@ -40,12 +41,12 @@ export function PreviewView({ imported }: { imported: ImportSummary }) {
   if (error) return <div className="preview-message" role="alert">{error}</div>;
   if (!preview) return <div className="preview-message">Generating 3D preview…</div>;
   return <div className="preview-view">
-    <p className="preview-plane-label">{activePlane} plane at {offsetMm.toFixed(3)} mm</p>
+    <p className="preview-plane-label">{planeName} at {offsetMm.toFixed(3)} mm</p>
     <p className="preview-help">Drag to orbit · wheel to zoom · click a body to select</p>
     <GraphicsErrorBoundary>
       <MeshCanvas preview={preview} bounds={imported.bounds_mm}
         selectedComponentId={selectedComponentId} onSelect={selectComponent}
-        plane={activePlane} offsetMm={offsetMm} />
+        plane={activePlane} offsetMm={offsetMm} normal={customNormal} />
     </GraphicsErrorBoundary>
   </div>;
 }
