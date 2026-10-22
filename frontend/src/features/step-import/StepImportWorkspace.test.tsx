@@ -7,10 +7,14 @@ import { importStep, importStepFile } from "./client";
 import type { ImportSummary } from "./contracts";
 import { fetchPreview } from "../preview/client";
 import { computeSection } from "../section/client";
+import { downloadSectionArchive } from "../section/exportClient";
+import { saveSectionArchive } from "../desktop/runtime";
 
 vi.mock("./client", () => ({ importStep: vi.fn(), importStepFile: vi.fn() }));
 vi.mock("../preview/client", () => ({ fetchPreview: vi.fn() }));
 vi.mock("../section/client", () => ({ computeSection: vi.fn() }));
+vi.mock("../section/exportClient", () => ({ downloadSectionArchive: vi.fn() }));
+vi.mock("../desktop/runtime", () => ({ saveSectionArchive: vi.fn() }));
 
 const summary = {
   import_id: "session-1", path: "C:/motor.step", sha256: "abc", source_unit: "mm",
@@ -132,5 +136,61 @@ describe("STEP workspace", () => {
     expect(screen.getByRole("button", { name: /compute section/i })).toBeInTheDocument();
     expect(screen.getByRole("main", { name: /graphics/i })).toHaveTextContent("No section computed");
     expect(useWorkspaceStore.getState().selectedComponentId).toBe("body-1");
+  });
+
+  it("computes and exports the section from the ribbon", async () => {
+    useWorkspaceStore.setState({ imported: summary, selectedComponentId: "body-1" });
+    vi.mocked(computeSection).mockResolvedValue({
+      section_id: "section-1", import_id: "session-1",
+      plane: { kind: "XY", offset_mm: 15 }, diagnostics: [],
+      components: [{ component_id: "body-1", wires: [{ closed: true, role: "outer", curves: [
+        { type: "line", start: [0, 0], end: [10, 0] },
+      ] }] }],
+    });
+    vi.mocked(downloadSectionArchive).mockResolvedValue(new Blob(["PK"]));
+    vi.mocked(saveSectionArchive).mockResolvedValue("C:\\Exports\\section.zip");
+    render(<StepImportWorkspace />);
+    const exportButton = screen.getByRole("button", { name: "DXF" });
+    expect(exportButton).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Compute" }));
+
+    expect(await screen.findByText(/1 of 1 bodies intersected/)).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: /settings/i })).toHaveTextContent("Exact planar cut of all bodies");
+    expect(computeSection).toHaveBeenCalledWith("session-1", { kind: "XY", offset_mm: 15 });
+    expect(exportButton).toBeEnabled();
+    fireEvent.click(exportButton);
+    expect(await screen.findByRole("status")).toHaveTextContent("C:\\Exports\\section.zip");
+    expect(downloadSectionArchive).toHaveBeenCalledWith("session-1", "section-1");
+  });
+
+  it("keeps ribbon export disabled for a section with an open wire", async () => {
+    useWorkspaceStore.setState({ imported: summary });
+    vi.mocked(computeSection).mockResolvedValue({
+      section_id: "section-1", import_id: "session-1",
+      plane: { kind: "XY", offset_mm: 15 }, diagnostics: [{ code: "open_section_wire", severity: "error",
+        message: "Open wire", component_id: "body-1" }],
+      components: [{ component_id: "body-1", wires: [{ closed: false, role: null, curves: [
+        { type: "line", start: [0, 0], end: [10, 0] },
+      ] }] }],
+    });
+    render(<StepImportWorkspace />);
+    fireEvent.click(screen.getByRole("button", { name: "Compute" }));
+    expect(await screen.findByText("Open wire")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "DXF" })).toBeDisabled();
+  });
+
+  it("shows export names next to duplicate body names", () => {
+    const sheet = { ...summary.components[0], display_name: "Plech:1", source_name: "Plech:1" };
+    useWorkspaceStore.setState({ imported: { ...summary, component_count: 3, components: [
+      { ...sheet, id: "body-1", export_name: "Plech_1" },
+      { ...sheet, id: "body-2", export_name: "Plech_1_02" },
+      { ...summary.components[0], id: "body-3" },
+    ] } });
+    render(<StepImportWorkspace />);
+    const tree = screen.getByRole("navigation", { name: /model builder/i });
+    expect(tree).toHaveTextContent("Plech_1_02");
+    expect(screen.getByRole("button", { name: "Plech:1 Plech_1_02" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rotor" })).toBeInTheDocument();
   });
 });

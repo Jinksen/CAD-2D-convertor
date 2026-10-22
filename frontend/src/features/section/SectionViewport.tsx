@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import type { ImportSummary } from "../step-import/contracts";
 import type { SectionResponse } from "./contracts";
-import { closedWirePath, curvePath } from "./rendering";
+import { closedWirePath, curvePath, outlineColor } from "./rendering";
 import { fitView, zoomView, type ViewBox } from "./viewCamera";
 
 interface Props { section: SectionResponse; imported: ImportSummary; bounds: ViewBox }
@@ -21,10 +21,11 @@ export function SectionViewport({ section, imported, bounds }: Props) {
   // Fit the rendered analytic paths; the source assembly can be much larger than its section.
   // This component is remounted for every computed section.
   useLayoutEffect(() => { fit(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  function color(id: string) {
+  function color(id: string, part: "fill" | "outline") {
     const source = imported.components.find((item) => item.id === id);
-    return selectedComponentId === id ? "#1a5fb4" : source?.source_color
-      ? `rgb(${source.source_color.map(String).join(",")})` : "#4a6f8f";
+    if (selectedComponentId === id) return "#1a5fb4";
+    if (!source?.source_color) return "#4a6f8f";
+    return part === "outline" ? outlineColor(source.source_color) : `rgb(${source.source_color.map(String).join(",")})`;
   }
   return <>
     <div className="section-view-tools" aria-label="2D view controls">
@@ -43,14 +44,14 @@ export function SectionViewport({ section, imported, bounds }: Props) {
             const source = imported.components.find((item) => item.id === component.component_id);
             return <path key={`${component.component_id}-fill`}
               aria-label={`${source?.display_name ?? component.component_id} filled region`}
-              d={component.wires.map(closedWirePath).join(" ")} fill={color(component.component_id)}
+              d={component.wires.map(closedWirePath).join(" ")} fill={color(component.component_id, "fill")}
               fillOpacity={0.28} fillRule="evenodd" stroke="none"
               onClick={() => { selectComponent(component.component_id); }} />;
           })}
         {section.components.flatMap((component) => component.wires.flatMap((wire, wireIndex) =>
           wire.curves.map((curve, curveIndex) => <path
             key={`${component.component_id}-${String(wireIndex)}-${String(curveIndex)}`}
-            d={curvePath(curve)} stroke={color(component.component_id)} vectorEffect="non-scaling-stroke"
+            d={curvePath(curve)} stroke={color(component.component_id, "outline")} vectorEffect="non-scaling-stroke"
             onClick={() => { selectComponent(component.component_id); }} />)))}
       </g>
     </svg>

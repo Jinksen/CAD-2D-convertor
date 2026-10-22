@@ -17,8 +17,8 @@ No Inventor, no drawing setup, no extra modelling steps: open the STEP file, pic
 4. Choose a plane in the ribbon:
    - **XY**, **XZ**, or **YZ** with an offset in millimetres (Z, Y, or X coordinate). The default is the middle of the model.
    - **Custom** for a tilted plane, for example laminations that do not lie in XY. Select one sheet in Model Builder or 3D Preview, open the **Section** node, and click **Align to selected body**. The plane snaps to the sheet plane at mid-thickness. You can also type the normal and the offset along it.
-5. Open the **Section** node in Model Builder and click **Compute Section**. Filled regions are closed contours; holes stay empty.
-6. Click **Export draft DXF** and save a new ZIP. It contains `section.dxf` (1:1, mm) and `section.json`.
+5. Click **Compute** in the ribbon (or **Compute Section** in the Section settings). Filled regions are closed contours; holes stay empty.
+6. Click **DXF** in the ribbons Export group (or **Export draft DXF** in the Section settings) and save a new ZIP. It contains `section.dxf` (1:1, mm) and `section.json`.
 7. Import `section.dxf` into Maxwell 2D.
 
 Close the app window to stop it. The minimized launcher console stops the geometry service automatically. Startup logs are written to `artifacts/logs`.

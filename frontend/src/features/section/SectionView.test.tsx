@@ -302,4 +302,12 @@ describe("SectionView", () => {
     expect(screen.queryByRole("button", { name: /export draft dxf/i })).not.toBeInTheDocument();
     expect(screen.getByText("No section computed")).toBeInTheDocument();
   });
+
+  it("rounds the default midpoint offset to a micrometre but keeps typed offsets exact", () => {
+    const odd: ImportSummary = { ...imported, bounds_mm: { min_xyz: [0, 0, 0.3], max_xyz: [10, 20, 220.147016] } };
+    render(<SectionPanes imported={odd} plane="XY" />);
+    expect(screen.getByRole("spinbutton", { name: /offset/i })).toHaveValue(110.224);
+    fireEvent.change(screen.getByRole("spinbutton", { name: /offset/i }), { target: { value: "110.2235081" } });
+    expect(useWorkspaceStore.getState().sectionOffsetMm).toBe(110.2235081);
+  });
 });

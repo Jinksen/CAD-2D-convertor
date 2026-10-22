@@ -1,5 +1,6 @@
-import { useRef, useState, type RefObject, type SyntheticEvent } from "react";
+import { useRef, useState, type SyntheticEvent } from "react";
 
+import { Ribbon } from "../../app/Ribbon";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { SectionView } from "../section/SectionView";
 import { SectionMessages, SectionSettings } from "../section/SectionSettings";
@@ -92,16 +93,15 @@ function ModelSettings({ imported, loading, error, onImportPath, onBrowse }: Mod
   </>;
 }
 
-export function StepImportWorkspace({ fileInputRef }: { fileInputRef?: RefObject<HTMLInputElement | null> }) {
+export function StepImportWorkspace() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [viewportMode, setViewportMode] = useState<"2d" | "3d">("2d");
   const [previewOpened, setPreviewOpened] = useState(false);
   const [sectionSelected, setSectionSelected] = useState(false);
-  const { activePlane, imported, selectedComponentId, setImported, selectComponent } = useWorkspaceStore();
+  const { activePlane, setActivePlane, imported, selectedComponentId, setImported, selectComponent } = useWorkspaceStore();
   const selected = imported?.components.find((item) => item.id === selectedComponentId);
-  const ownChooser = useRef<HTMLInputElement>(null);
-  const chooser = fileInputRef ?? ownChooser;
+  const chooser = useRef<HTMLInputElement>(null);
   const run = useSectionRun(imported, activePlane);
 
   async function load(request: () => Promise<ImportSummary>) {
@@ -116,17 +116,27 @@ export function StepImportWorkspace({ fileInputRef }: { fileInputRef?: RefObject
     }
   }
 
+  const displayNames = imported?.components.map((item) => item.display_name) ?? [];
+  const duplicateNames = new Set(displayNames.filter((name, index) => displayNames.indexOf(name) !== index));
+
   function bodyButton(item: ImportComponent) {
+    const duplicate = duplicateNames.has(item.display_name);
     return <li key={item.id}><button type="button" className="tree-node" aria-pressed={!sectionSelected && selectedComponentId === item.id}
+      aria-label={duplicate ? `${item.display_name} ${item.export_name}` : undefined}
       onClick={() => { setSectionSelected(false); selectComponent(item.id); }}>
       <span className="color-swatch" style={{ backgroundColor: rgb(item.source_color) }} />
       {item.display_name}
+      {duplicate && <span className="tree-secondary">{item.export_name}</span>}
     </button></li>;
   }
 
   const groups = imported ? groupByParent(imported.components) : [];
   return (
     <>
+      <Ribbon hasModel={Boolean(imported)} activePlane={activePlane} run={run}
+        onOpen={() => { chooser.current?.click(); }} onPlane={setActivePlane}
+        onCompute={() => { setSectionSelected(true); setViewportMode("2d"); run?.compute(); }}
+        onExport={() => { setSectionSelected(true); run?.exportSection(); }} />
       <input ref={chooser} className="visually-hidden" type="file" accept=".step,.stp" aria-label="Choose STEP file"
         tabIndex={-1} disabled={loading}
         onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void load(() => importStepFile(file)); }} />
