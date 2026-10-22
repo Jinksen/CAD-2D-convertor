@@ -69,7 +69,8 @@ export function useSectionRun(imported: ImportSummary | null, plane: SectionPlan
 
   if (!imported) return null;
   const model = imported;
-  const offset = offsetOverride ?? defaultOffset(model.bounds_mm, plane, customNormal);
+  // The midpoint is an arbitrary start, so it is shown at 1 µm; typed and aligned offsets stay exact.
+  const offset = offsetOverride ?? Math.round(defaultOffset(model.bounds_mm, plane, customNormal) * 1000) / 1000;
 
   function clear() {
     update({ section: null, error: null, exportLocation: null });

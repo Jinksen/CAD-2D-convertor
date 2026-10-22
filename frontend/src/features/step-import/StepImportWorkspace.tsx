@@ -116,11 +116,17 @@ export function StepImportWorkspace() {
     }
   }
 
+  const displayNames = imported?.components.map((item) => item.display_name) ?? [];
+  const duplicateNames = new Set(displayNames.filter((name, index) => displayNames.indexOf(name) !== index));
+
   function bodyButton(item: ImportComponent) {
+    const duplicate = duplicateNames.has(item.display_name);
     return <li key={item.id}><button type="button" className="tree-node" aria-pressed={!sectionSelected && selectedComponentId === item.id}
+      aria-label={duplicate ? `${item.display_name} ${item.export_name}` : undefined}
       onClick={() => { setSectionSelected(false); selectComponent(item.id); }}>
       <span className="color-swatch" style={{ backgroundColor: rgb(item.source_color) }} />
       {item.display_name}
+      {duplicate && <span className="tree-secondary">{item.export_name}</span>}
     </button></li>;
   }
 

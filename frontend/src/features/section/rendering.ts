@@ -39,3 +39,13 @@ export function closedWirePath(wire: SectionResponse["components"][number]["wire
     return index === 0 ? path : path.replace(/^M \S+ \S+\s*/, "");
   }).join(" ")} Z`;
 }
+
+/**
+ * Outline color for a source color on the white section canvas. Colors lighter than mid-gray are
+ * darkened in proportion so they stay legible; fills keep the original source color.
+ */
+export function outlineColor(color: [number, number, number]): string {
+  const luminance = (0.2126 * color[0] + 0.7152 * color[1] + 0.0722 * color[2]) / 255;
+  const scale = luminance > 0.55 ? 0.38 / luminance : 1;
+  return `rgb(${color.map((channel) => String(Math.round(channel * scale))).join(",")})`;
+}

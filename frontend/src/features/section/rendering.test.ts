@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { curvePath } from "./rendering";
+import { curvePath, outlineColor } from "./rendering";
 
 describe("analytic section rendering", () => {
   it("draws a full ellipse as two SVG arcs", () => {
@@ -10,5 +10,11 @@ describe("analytic section rendering", () => {
     expect(path.match(/ A /g)).toHaveLength(2);
     expect(path).toContain("A 10 5");
     expect(path).not.toContain("NaN");
+  });
+
+  it("darkens source colors too light to read on the white canvas", () => {
+    expect(outlineColor([255, 255, 255])).toBe("rgb(97,97,97)");
+    expect(outlineColor([240, 240, 200])).not.toBe("rgb(240,240,200)");
+    expect(outlineColor([201, 82, 75])).toBe("rgb(201,82,75)");
   });
 });

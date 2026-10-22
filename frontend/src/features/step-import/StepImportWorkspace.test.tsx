@@ -179,4 +179,18 @@ describe("STEP workspace", () => {
     expect(await screen.findByText("Open wire")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "DXF" })).toBeDisabled();
   });
+
+  it("shows export names next to duplicate body names", () => {
+    const sheet = { ...summary.components[0], display_name: "Plech:1", source_name: "Plech:1" };
+    useWorkspaceStore.setState({ imported: { ...summary, component_count: 3, components: [
+      { ...sheet, id: "body-1", export_name: "Plech_1" },
+      { ...sheet, id: "body-2", export_name: "Plech_1_02" },
+      { ...summary.components[0], id: "body-3" },
+    ] } });
+    render(<StepImportWorkspace />);
+    const tree = screen.getByRole("navigation", { name: /model builder/i });
+    expect(tree).toHaveTextContent("Plech_1_02");
+    expect(screen.getByRole("button", { name: "Plech:1 Plech_1_02" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rotor" })).toBeInTheDocument();
+  });
 });
