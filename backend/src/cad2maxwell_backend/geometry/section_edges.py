@@ -9,6 +9,7 @@ from OCP.TopAbs import TopAbs_ShapeEnum
 from OCP.TopExp import TopExp_Explorer
 from OCP.TopoDS import TopoDS, TopoDS_Edge, TopoDS_Shape
 
+from cad2maxwell_backend.formatting import format_quantity
 from cad2maxwell_backend.geometry.section import ExactSectionWire
 from cad2maxwell_backend.geometry.tolerance import DEFAULT_TOLERANCE, TolerancePolicy
 from cad2maxwell_backend.models.sections import SectionDiagnostic
@@ -41,7 +42,8 @@ def check_section_edges(
         diagnostics.append(SectionDiagnostic(
             code="tiny_section_edge", severity="warning", component_id=component_id,
             message=(f"{len(tiny)} section edge(s) are shorter than "
-                     f"{tolerance.tiny_edge_mm:g} mm; shortest is {min(tiny):g} mm. "
+                     f"{format_quantity(tolerance.tiny_edge_mm, 'mm')}; "
+                     f"shortest is {format_quantity(min(tiny), 'mm')}. "
                      "Inspect these features before Maxwell import; no edges were removed."),
         ))
     duplicates = 0

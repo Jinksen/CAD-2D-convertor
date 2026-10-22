@@ -1,18 +1,19 @@
 import { useRef, useState, type SyntheticEvent } from "react";
 
+import { useNumberFormat } from "../../app/formatStore";
 import { Ribbon } from "../../app/Ribbon";
 import { useWorkspaceStore } from "../../app/workspaceStore";
+import { FormatSettings } from "../format/FormatSettings";
+import { formatLengthProduct, listSeparator, type NumberFormat } from "../../lib/formatting";
 import { SectionView } from "../section/SectionView";
 import { SectionMessages, SectionSettings } from "../section/SectionSettings";
 import { useSectionRun } from "../section/useSectionRun";
 import { PreviewView } from "../preview/PreviewView";
 import { importStep, importStepFile } from "./client";
-import type { ImportComponent, ImportSummary } from "./contracts";
+import type { BoundsMm, ImportComponent, ImportSummary } from "./contracts";
 
-function dimensions(bounds: { min_xyz: [number, number, number]; max_xyz: [number, number, number] }): string {
-  return bounds.max_xyz.map((high, index) => (high - bounds.min_xyz[index]).toLocaleString(undefined, {
-    maximumFractionDigits: 3,
-  })).join(" × ") + " mm";
+function dimensions(bounds: BoundsMm, format: NumberFormat): string {
+  return formatLengthProduct(bounds.max_xyz.map((high, index) => high - bounds.min_xyz[index]), format);
 }
 
 function rgb(color: [number, number, number] | null): string | undefined {
@@ -30,6 +31,7 @@ function groupByParent(components: ImportComponent[]): [string, ImportComponent[
 }
 
 function BodySettings({ body }: { body: ImportComponent }) {
+  const format = useNumberFormat();
   return <>
     <div className="settings-heading">
       <strong>Body: {body.display_name}</strong>
@@ -42,12 +44,12 @@ function BodySettings({ body }: { body: ImportComponent }) {
       <dt>Name origin</dt><dd>{body.name_provenance ?? "Generated"}</dd>
       <dt>Color</dt><dd>{body.source_color ? <>
         <span className="color-swatch" style={{ backgroundColor: rgb(body.source_color) }} />
-        {body.source_color.join(" ")} ({body.color_provenance ?? "unknown"})
+        RGB ({body.source_color.join(listSeparator(format))}) · {body.color_provenance ?? "unknown"}
       </> : "None in source"}</dd>
     </dl>
     <h3 className="settings-section">3D body</h3>
     <dl className="field-list">
-      <dt>Size</dt><dd>{dimensions(body.bounds_mm)}</dd>
+      <dt title="Bounding box extents Δx × Δy × Δz">Size</dt><dd>{dimensions(body.bounds_mm, format)}</dd>
       <dt>Body ordinal</dt><dd>{body.body_ordinal}</dd>
     </dl>
   </>;
@@ -63,6 +65,7 @@ interface ModelSettingsProps {
 
 function ModelSettings({ imported, loading, error, onImportPath, onBrowse }: ModelSettingsProps) {
   const [path, setPath] = useState("");
+  const format = useNumberFormat();
   function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     onImportPath(path.trim());
@@ -87,7 +90,7 @@ function ModelSettings({ imported, loading, error, onImportPath, onBrowse }: Mod
         <dt>SHA-256</dt><dd title={imported.sha256}>{imported.sha256.slice(0, 12)}…</dd>
         <dt>Source units</dt><dd>{imported.source_unit ?? "Unknown"}</dd>
         <dt>Bodies</dt><dd>{imported.component_count}</dd>
-        <dt>Size</dt><dd>{dimensions(imported.bounds_mm)}</dd>
+        <dt title="Bounding box extents Δx × Δy × Δz">Size</dt><dd>{dimensions(imported.bounds_mm, format)}</dd>
       </dl>
     </>}
   </>;
@@ -98,7 +101,9 @@ export function StepImportWorkspace() {
   const [loading, setLoading] = useState(false);
   const [viewportMode, setViewportMode] = useState<"2d" | "3d">("2d");
   const [previewOpened, setPreviewOpened] = useState(false);
-  const [sectionSelected, setSectionSelected] = useState(false);
+  // The Settings pane shows this node; with null it shows the selected body, else the model.
+  const [node, setNode] = useState<"section" | "format" | null>(null);
+  const sectionSelected = node === "section";
   const { activePlane, setActivePlane, imported, selectedComponentId, setImported, selectComponent } = useWorkspaceStore();
   const selected = imported?.components.find((item) => item.id === selectedComponentId);
   const chooser = useRef<HTMLInputElement>(null);
@@ -121,9 +126,9 @@ export function StepImportWorkspace() {
 
   function bodyButton(item: ImportComponent) {
     const duplicate = duplicateNames.has(item.display_name);
-    return <li key={item.id}><button type="button" className="tree-node" aria-pressed={!sectionSelected && selectedComponentId === item.id}
+    return <li key={item.id}><button type="button" className="tree-node" aria-pressed={!node && selectedComponentId === item.id}
       aria-label={duplicate ? `${item.display_name} ${item.export_name}` : undefined}
-      onClick={() => { setSectionSelected(false); selectComponent(item.id); }}>
+      onClick={() => { setNode(null); selectComponent(item.id); }}>
       <span className="color-swatch" style={{ backgroundColor: rgb(item.source_color) }} />
       {item.display_name}
       {duplicate && <span className="tree-secondary">{item.export_name}</span>}
@@ -135,17 +140,24 @@ export function StepImportWorkspace() {
     <>
       <Ribbon hasModel={Boolean(imported)} activePlane={activePlane} run={run}
         onOpen={() => { chooser.current?.click(); }} onPlane={setActivePlane}
-        onCompute={() => { setSectionSelected(true); setViewportMode("2d"); run?.compute(); }}
-        onExport={() => { setSectionSelected(true); run?.exportSection(); }} />
+        onCompute={() => { setNode("section"); setViewportMode("2d"); run?.compute(); }}
+        onExport={() => { setNode("section"); run?.exportSection(); }} />
       <input ref={chooser} className="visually-hidden" type="file" accept=".step,.stp" aria-label="Choose STEP file"
         tabIndex={-1} disabled={loading}
         onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void load(() => importStepFile(file)); }} />
       <div className="workspace">
         <nav className="pane model-builder" aria-label="Model builder">
           <div className="pane-title">Model Builder</div>
+          <div className="tree-global">
+            <button type="button" className="tree-node" aria-pressed={node === "format"} onClick={() => { setNode("format"); }}>
+              <svg className="tree-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M3 17h18M6 17v-4M10 17v-2M14 17v-4M18 17v-2" /></svg>
+              Units and Number Format
+            </button>
+          </div>
           {imported ? <div className="tree">
-            <button type="button" className="tree-node" aria-pressed={!sectionSelected && !selectedComponentId}
-              onClick={() => { setSectionSelected(false); selectComponent(null); }}>
+            <button type="button" className="tree-node" aria-pressed={!node && !selectedComponentId}
+              onClick={() => { setNode(null); selectComponent(null); }}>
               <svg className="tree-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 strokeWidth="1.6" aria-hidden="true"><path d="M6 3h9l4 4v14H6z" /></svg>
               {imported.path.split(/[\\/]/).pop()}
@@ -159,7 +171,7 @@ export function StepImportWorkspace() {
                 </details>)}
             </details>
             <button type="button" className="tree-node" aria-pressed={sectionSelected}
-              onClick={() => { setSectionSelected(true); setViewportMode("2d"); }}>
+              onClick={() => { setNode("section"); setViewportMode("2d"); }}>
               <svg className="tree-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true"><path d="M3 15 12 10l9 5-9 5z" /></svg>
               Section {activePlane === "custom" ? "(custom plane)" : activePlane}
@@ -169,7 +181,7 @@ export function StepImportWorkspace() {
         <section className="pane settings" aria-label="Settings">
           <div className="pane-title">Settings</div>
           <div className="pane-body">
-            {sectionSelected && run ? <SectionSettings run={run} /> : selected ? <BodySettings body={selected} /> :
+            {node === "format" ? <FormatSettings /> : sectionSelected && run ? <SectionSettings run={run} /> : selected ? <BodySettings body={selected} /> :
               <ModelSettings imported={imported} loading={loading} error={error}
                 onImportPath={(path) => { void load(() => importStep(path)); }}
                 onBrowse={() => { chooser.current?.click(); }} />}

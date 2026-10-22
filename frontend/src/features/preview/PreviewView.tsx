@@ -1,10 +1,12 @@
 import { Component, useEffect, useState, type ReactNode } from "react";
 
+import { useNumberFormat } from "../../app/formatStore";
 import { useWorkspaceStore } from "../../app/workspaceStore";
+import { formatDirection, formatLength } from "../../lib/formatting";
 import type { ImportSummary } from "../step-import/contracts";
 import { fetchPreview } from "./client";
 import type { PreviewMeshResponse } from "./contracts";
-import { defaultOffset, formatNormal, normalize } from "../section/plane";
+import { defaultOffset, normalize, planeAxis } from "../section/plane";
 import { MeshCanvas } from "./MeshCanvas";
 
 class GraphicsErrorBoundary extends Component<{ children: ReactNode }, { message: string | null }> {
@@ -25,8 +27,11 @@ export function PreviewView({ imported }: { imported: ImportSummary }) {
   const [error, setError] = useState<string | null>(null);
   const { selectedComponentId, selectComponent, activePlane, sectionOffsetMm, customNormal } = useWorkspaceStore();
   const offsetMm = sectionOffsetMm ?? defaultOffset(imported.bounds_mm, activePlane, customNormal);
-  const planeName = activePlane === "custom"
-    ? `Custom plane (n = ${formatNormal(normalize(customNormal) ?? customNormal)})` : `${activePlane} plane`;
+  const format = useNumberFormat();
+  const planeLabel = activePlane === "custom"
+    ? <>Custom plane, <var className="vector">n</var> = {formatDirection(normalize(customNormal) ?? customNormal, format)},
+      {" "}<var>d</var> = {formatLength(offsetMm, format)}</>
+    : <>{activePlane} plane, <var>{planeAxis(activePlane)}</var> = {formatLength(offsetMm, format)}</>;
 
   useEffect(() => {
     let cancelled = false;
@@ -41,7 +46,7 @@ export function PreviewView({ imported }: { imported: ImportSummary }) {
   if (error) return <div className="preview-message" role="alert">{error}</div>;
   if (!preview) return <div className="preview-message">Generating 3D preview…</div>;
   return <div className="preview-view">
-    <p className="preview-plane-label">{planeName} at {offsetMm.toFixed(3)} mm</p>
+    <p className="preview-plane-label">{planeLabel}</p>
     <p className="preview-help">Drag to orbit · wheel to zoom · click a body to select</p>
     <GraphicsErrorBoundary>
       <MeshCanvas preview={preview} bounds={imported.bounds_mm}

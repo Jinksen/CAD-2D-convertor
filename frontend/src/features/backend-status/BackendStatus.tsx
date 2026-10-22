@@ -1,3 +1,4 @@
+import { useNumberFormat } from "../../app/formatStore";
 import type { BackendHealth } from "./contracts";
 import type { SectionStats } from "../../app/workspaceStore";
 
@@ -10,6 +11,7 @@ interface BackendStatusProps {
 
 export function BackendStatus({ health, bodyCount = 0, sourceUnit = null, sectionStats = null }: BackendStatusProps) {
   const isOnline = health.state === "online";
+  const { lengthUnit } = useNumberFormat();
 
   return (
     <footer className="status-bar" role="status" aria-live="polite">
@@ -20,7 +22,7 @@ export function BackendStatus({ health, bodyCount = 0, sourceUnit = null, sectio
       <span>Bodies: {bodyCount}</span>
       <span>Regions: {sectionStats?.regions ?? "—"}</span>
       {sectionStats && <span>Errors: {sectionStats.errors} · Warnings: {sectionStats.warnings}</span>}
-      <span>Units: mm</span>
+      <span title="Display length unit; geometry and DXF export use mm">Units: {lengthUnit}</span>
       {bodyCount > 0 && <span>Source: {sourceUnit ?? "unknown"}</span>}
     </footer>
   );

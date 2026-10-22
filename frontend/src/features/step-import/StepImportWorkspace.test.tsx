@@ -43,7 +43,7 @@ describe("STEP workspace", () => {
     expect(screen.getByText("Partial transfer")).toBeInTheDocument();
     expect(screen.getByText("Body: Rotor")).toBeInTheDocument();
     expect(screen.getAllByText("Rotor", { selector: "dd" })).toHaveLength(2);
-    expect(screen.getByText("10 × 20 × 30 mm")).toBeInTheDocument();
+    expect(screen.getByText(/^\(10\.000 × 20\.000 × 30\.000\)\smm$/)).toBeInTheDocument();
   });
 
   it("keeps the current model when a later import fails", async () => {
