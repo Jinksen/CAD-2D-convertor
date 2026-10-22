@@ -37,11 +37,11 @@ button:disabled { color: #9a9a9a; cursor: not-allowed; }
 }
 
 /* Title bar and ribbon */
-.title-bar { display: flex; align-items: center; gap: 14px; padding: 0 10px; background: var(--bar); border-bottom: 1px solid #d6d6d6; }
+.title-bar { grid-row: 1; display: flex; align-items: center; gap: 14px; padding: 0 10px; background: var(--bar); border-bottom: 1px solid #d6d6d6; }
 .title-bar strong { font-weight: 600; }
 .title-bar-file { color: var(--muted); }
 
-.ribbon { display: flex; flex-wrap: wrap; align-items: stretch; padding: 4px 4px 3px; background: var(--bar); border-bottom: 1px solid var(--line); }
+.ribbon { grid-row: 2; display: flex; flex-wrap: wrap; align-items: stretch; padding: 4px 4px 3px; background: var(--bar); border-bottom: 1px solid var(--line); }
 .ribbon-group { display: flex; flex-direction: column; align-items: center; padding: 0 8px; border-right: 1px solid #dadada; }
 .ribbon-group-items { display: flex; align-items: center; gap: 2px; min-height: 52px; }
 .ribbon-group-label { margin-top: 2px; color: var(--muted); font-size: 10.5px; }
@@ -50,6 +50,7 @@ button:disabled { color: #9a9a9a; cursor: not-allowed; }
 .ribbon-button svg { color: var(--icon); }
 .ribbon-toggle { height: 26px; min-width: 40px; padding: 0 8px; }
 .ribbon-button:hover:not(:disabled), .ribbon-toggle:hover:not(:disabled) { background: #e4e4e4; border-color: var(--line); }
+.ribbon-button:disabled svg { color: inherit; opacity: .6; }
 .ribbon-toggle[aria-pressed="true"] { background: var(--selection); border-color: var(--selection-line); }
 
 /* Panes */

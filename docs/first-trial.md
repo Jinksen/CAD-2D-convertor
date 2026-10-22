@@ -14,12 +14,12 @@ If the build is missing, run `scripts/build-trial.ps1` after setup. If Python de
 2. Check the body count and import diagnostics. STEP metadata may be missing even when all solids import; inspect the reported diagnostics.
 3. Click **3D Preview** to orbit, zoom, and select a body. Model Builder and Settings track that selection.
 4. Click the **Section** node in Model Builder. Choose **XY**, **XZ**, **YZ**, or **Custom** in the ribbon. For XY/XZ/YZ the offset is a Z, Y, or X coordinate respectively, in millimetres. Initially it is the midpoint of the corresponding model bounds. **Custom** cuts the plane n · p = offset. Select a sheet and click **Align to selected body** to use its sheet plane at mid-thickness, or type the normal and offset yourself.
-5. Click **Compute Section**. Only bodies intersected by that plane produce section geometry. The view fits the resulting curves; use **Fit section**, **+**, **−**, or the mouse wheel to adjust the view. The result reports intersected bodies and closed regions. A section with fewer components than the imported assembly is normal. Holes should stay empty within filled regions.
+5. Click **Compute** in the ribbon or **Compute Section** in the Section settings. Only bodies intersected by that plane produce section geometry. The view fits the resulting curves; use **Fit section**, **+**, **−**, or the mouse wheel to adjust the view. The result reports intersected bodies and closed regions. A section with fewer components than the imported assembly is normal. Holes should stay empty within filled regions.
 6. Change the offset as needed. Moving the plane clears the previous result; compute again before export. The 3D view shows the corresponding translucent plane guide.
 
 ## Export
 
-When the section passes the implemented checks, **Export draft DXF** becomes available. Errors such as open contours, invalid planar faces, duplicate edges, or positive-area overlaps block export. Tiny edges produce warnings and remain intact.
+When the section passes the implemented checks, **DXF** in the ribbon and **Export draft DXF** in the Section settings become available. Errors such as open contours, invalid planar faces, duplicate edges, or positive-area overlaps block export. Tiny edges produce warnings and remain intact.
 
 Click the export button and choose a new `.zip` filename in the Windows Save dialog. The app reports the saved path. Cancelling leaves the section available. Existing files are never overwritten; choose another name if one already exists. Native saving accepts archives up to 64 MiB.
 
