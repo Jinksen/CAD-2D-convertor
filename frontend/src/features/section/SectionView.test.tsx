@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useFormatStore } from "../../app/formatStore";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import type { ImportSummary } from "../step-import/contracts";
 import { computeSection, fetchComponentPlane } from "./client";
@@ -26,6 +27,7 @@ const imported: ImportSummary = {
 
 beforeEach(() => {
   useWorkspaceStore.setState({ imported, activePlane: "XY", sectionOffsetMm: null, selectedComponentId: null, customNormal: [0, 0, 1] });
+  useFormatStore.getState().resetFormat();
   vi.resetAllMocks();
 });
 
@@ -145,7 +147,7 @@ describe("SectionView", () => {
       ] }] }],
     });
     render(<SectionPanes imported={imported} plane="XY" />);
-    expect(screen.getByRole("spinbutton", { name: /offset/i })).toHaveValue(15);
+    expect(screen.getByRole("spinbutton", { name: /offset/i })).toHaveValue("15.000");
     fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
     await waitFor(() => expect(screen.getByLabelText("2D section geometry")).toBeInTheDocument());
     expect(screen.getByLabelText("2D section geometry").querySelector("path:not([aria-label])"))
@@ -263,7 +265,7 @@ describe("SectionView", () => {
     render(<SectionPanes imported={imported} plane="custom" />);
     fireEvent.click(screen.getByRole("button", { name: /align to selected body/i }));
     await waitFor(() => { expect(useWorkspaceStore.getState().sectionOffsetMm).toBe(7.5); });
-    expect(screen.getByRole("spinbutton", { name: /offset along normal/i })).toHaveValue(7.5);
+    expect(screen.getByRole("spinbutton", { name: /offset along normal/i })).toHaveValue("7.500");
     fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
     expect(await screen.findByText(/1 of 1 bodies intersected/)).toBeInTheDocument();
     expect(computeSection).toHaveBeenCalledWith("session-1", {
@@ -306,8 +308,32 @@ describe("SectionView", () => {
   it("rounds the default midpoint offset to a micrometre but keeps typed offsets exact", () => {
     const odd: ImportSummary = { ...imported, bounds_mm: { min_xyz: [0, 0, 0.3], max_xyz: [10, 20, 220.147016] } };
     render(<SectionPanes imported={odd} plane="XY" />);
-    expect(screen.getByRole("spinbutton", { name: /offset/i })).toHaveValue(110.224);
+    expect(screen.getByRole("spinbutton", { name: /offset/i })).toHaveValue("110.224");
     fireEvent.change(screen.getByRole("spinbutton", { name: /offset/i }), { target: { value: "110.2235081" } });
     expect(useWorkspaceStore.getState().sectionOffsetMm).toBe(110.2235081);
+  });
+
+  it("accepts the user's decimal comma and keeps invalid text out of the plane", () => {
+    useFormatStore.getState().setFormat({ decimalMarker: "," });
+    render(<SectionPanes imported={imported} plane="XY" />);
+    const offset = screen.getByRole("spinbutton", { name: /offset z/i });
+    expect(offset).toHaveValue("15,000");
+    fireEvent.change(offset, { target: { value: "12,5" } });
+    expect(useWorkspaceStore.getState().sectionOffsetMm).toBe(12.5);
+    fireEvent.change(offset, { target: { value: "12,5 mm" } });
+    expect(offset).toHaveAttribute("aria-invalid", "true");
+    expect(useWorkspaceStore.getState().sectionOffsetMm).toBe(12.5);
+    fireEvent.blur(offset);
+    expect(offset).toHaveValue("12,500");
+  });
+
+  it("shows the offset in the display unit but stores millimetres", () => {
+    useFormatStore.getState().setFormat({ lengthUnit: "cm" });
+    render(<SectionPanes imported={imported} plane="XY" />);
+    const offset = screen.getByRole("spinbutton", { name: /offset/i });
+    expect(offset).toHaveValue("1.500");
+    expect(screen.getByText("cm")).toBeInTheDocument();
+    fireEvent.change(offset, { target: { value: "2" } });
+    expect(useWorkspaceStore.getState().sectionOffsetMm).toBe(20);
   });
 });

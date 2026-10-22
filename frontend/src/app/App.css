@@ -71,6 +71,7 @@ button:disabled { color: #9a9a9a; cursor: not-allowed; }
 .tree-node[aria-pressed="true"] { background: var(--selection); }
 .tree-icon { flex: none; color: var(--icon); }
 .tree-secondary { color: var(--muted); }
+.tree-global { flex: none; padding: 4px 0; border-bottom: 1px solid var(--line-soft); }
 .color-swatch { display: inline-block; width: 10px; height: 10px; flex: none; margin-right: 4px; border: 1px solid #8a8a8a; vertical-align: -1px; }
 
 /* Settings */
@@ -87,6 +88,18 @@ button:disabled { color: #9a9a9a; cursor: not-allowed; }
 .field-pair { display: contents; }
 .field-grid input { height: 22px; min-width: 0; padding: 0 6px; border: 1px solid #b9b9b9; border-radius: 2px; background: #fff; color: var(--text); }
 .field-grid input:disabled { background: #f3f3f3; color: var(--muted); }
+.field-grid input[aria-invalid="true"] { border-color: var(--error); }
+.field-grid select { height: 22px; min-width: 0; border: 1px solid #b9b9b9; border-radius: 2px; background: #fff; color: var(--text); }
+.field-grid .field-check { justify-self: end; height: auto; margin: 0; }
+.field-grid .field-check-label { color: var(--text); }
+.quantity-input { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.quantity-input input { flex: 1; width: 0; }
+.quantity-unit { flex: none; min-width: 1.5em; color: var(--muted); }
+.field-grid input[inputmode="decimal"] { font-variant-numeric: tabular-nums; text-align: right; }
+.settings-buttons { margin: 0 10px 8px; }
+/* ISO 80000-2 quantity symbols: italic; vectors bold italic. */
+var { font-family: "Times New Roman", Times, serif; font-size: 1.08em; font-style: italic; }
+var.vector { font-weight: 700; }
 .settings-section { margin: 0; padding: 4px 8px; background: var(--pane-header); border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); font-size: 11.5px; font-weight: 600; }
 .field-list { display: grid; grid-template-columns: 100px minmax(0, 1fr); align-items: center; gap: 5px 8px; margin: 0; padding: 8px 10px 10px; }
 .field-list dt { color: var(--muted); }

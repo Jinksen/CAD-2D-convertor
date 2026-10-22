@@ -1,14 +1,18 @@
 import type { SyntheticEvent } from "react";
 
+import { useNumberFormat } from "../../app/formatStore";
 import { useWorkspaceStore } from "../../app/workspaceStore";
-import { formatNormal } from "./plane";
+import { displayToMm, formatDirection, mmToDisplay } from "../../lib/formatting";
+import { QuantityInput } from "../../lib/QuantityInput";
+import { planeAxis } from "./plane";
 import type { SectionRun } from "./useSectionRun";
 
-const axisLabels = ["X", "Y", "Z"] as const;
+const axisLabels = ["x", "y", "z"] as const;
 
 /** Settings-pane form for the section node: plane, offset, compute and export. */
 export function SectionSettings({ run }: { run: SectionRun }) {
   const selectedComponentId = useWorkspaceStore((state) => state.selectedComponentId);
+  const format = useNumberFormat();
   const { imported, plane, section, busy } = run;
   const selectedName = imported.components.find((component) => component.id === selectedComponentId)?.display_name;
 
@@ -28,14 +32,17 @@ export function SectionSettings({ run }: { run: SectionRun }) {
         <span className="field-label">Plane</span>
         <span className="field-value">{plane === "custom" ? "Custom" : plane}</span>
         {plane === "custom" && axisLabels.map((axis, index) => <span className="field-pair" key={axis}>
-          <label htmlFor={`section-normal-${axis}`}>Normal {axis}</label>
-          <input id={`section-normal-${axis}`} type="number" step="any" required
-            value={run.customNormal[index]} disabled={busy}
-            onChange={(event) => { run.setNormalComponent(index, Number(event.target.value)); }} />
+          <label htmlFor={`section-normal-${axis}`}>Normal <var>n</var><sub><var>{axis}</var></sub></label>
+          <QuantityInput id={`section-normal-${axis}`} value={run.customNormal[index]} disabled={busy}
+            decimals={format.directionDecimals} format={format}
+            onChange={(value) => { run.setNormalComponent(index, value); }} />
         </span>)}
-        <label htmlFor="section-offset">{plane === "custom" ? "Offset along normal" : `${plane} offset`} (mm)</label>
-        <input id="section-offset" type="number" step="any" required value={run.offset} disabled={busy}
-          onChange={(event) => { run.setOffset(Number(event.target.value)); }} />
+        <label htmlFor="section-offset">
+          {plane === "custom" ? <>Offset along normal <var>d</var></> : <>Offset <var>{planeAxis(plane)}</var></>}
+        </label>
+        <QuantityInput id="section-offset" value={mmToDisplay(run.offset, format.lengthUnit)} disabled={busy}
+          decimals={format.lengthDecimals} format={format} unit={format.lengthUnit}
+          onChange={(value) => { run.setOffset(displayToMm(value, format.lengthUnit)); }} />
       </div>
       {plane === "custom" && <div className="form-buttons">
         <button type="button" disabled={busy || !selectedComponentId}
@@ -43,8 +50,9 @@ export function SectionSettings({ run }: { run: SectionRun }) {
           onClick={run.alignToSelectedBody}>{run.aligning ? "Aligning…" : "Align to selected body"}</button>
       </div>}
       <p className="settings-note">{plane === "custom"
-        ? "A custom plane is n · p = offset. Select a sheet and click Align to selected body to cut it in its own plane."
-        : `${plane} moves along ${plane === "XY" ? "Z" : plane === "XZ" ? "Y" : "X"}; the initial offset is the model midpoint.`}</p>
+        ? <>A custom plane is <var className="vector">n</var> · <var className="vector">p</var> = <var>d</var>.
+          Select a sheet and click Align to selected body to cut it in its own plane.</>
+        : <>The {plane} plane is <var>{planeAxis(plane)}</var> = const; the initial offset is the model midpoint.</>}</p>
       <div className="form-buttons">
         <button type="submit" className="primary" disabled={busy}>{run.loading ? "Computing…" : "Compute Section"}</button>
       </div>
@@ -52,7 +60,7 @@ export function SectionSettings({ run }: { run: SectionRun }) {
     </form>
     {section && <>
       <h3 className="settings-section">Result</h3>
-      <p className="settings-note">{plane === "custom" && `Normal (${formatNormal(run.basis?.normal ?? run.customNormal)}) · `}
+      <p className="settings-note">{plane === "custom" && <>Unit normal <var className="vector">n</var> = {formatDirection(run.basis?.normal ?? run.customNormal, format)} · </>}
         {section.components.length} of {imported.component_count} bodies intersected · {run.closedRegions} closed regions</p>
     </>}
     {(run.exportable || run.exportLocation) && <>

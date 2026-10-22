@@ -22,7 +22,7 @@ def test_tiny_edge_reports_length_and_component_without_changing_geometry() -> N
     assert diagnostics[0].code == "tiny_section_edge"
     assert diagnostics[0].severity == "warning"
     assert diagnostics[0].component_id == "coil"
-    assert "5e-05 mm" in diagnostics[0].message
+    assert "5 × 10⁻⁵ mm" in diagnostics[0].message
     assert not wire.shape.IsNull()
 
 
@@ -67,4 +67,4 @@ def test_short_circular_arc_uses_exact_length() -> None:
     )
     diagnostics = check_section_edges((wire,), "arc")
     assert [d.code for d in diagnostics] == ["tiny_section_edge"]
-    assert "5e-05 mm" in diagnostics[0].message
+    assert "5 × 10⁻⁵ mm" in diagnostics[0].message

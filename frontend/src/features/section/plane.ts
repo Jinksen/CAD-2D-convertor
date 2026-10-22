@@ -87,6 +87,7 @@ export function sectionViewBounds(bounds: BoundsMm, basis: PlaneBasis) {
   return { x: xMin, y: -yMax, width: xMax - xMin, height: yMax - yMin };
 }
 
-export function formatNormal(normal: Vec3): string {
-  return normal.map((value) => value.toFixed(3)).join(", ");
+/** The coordinate a principal plane is offset along, as an ISO quantity symbol. */
+export function planeAxis(kind: PrincipalPlane): "x" | "y" | "z" {
+  return kind === "XY" ? "z" : kind === "XZ" ? "y" : "x";
 }

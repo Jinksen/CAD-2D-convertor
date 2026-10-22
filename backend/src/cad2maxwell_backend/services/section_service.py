@@ -1,5 +1,6 @@
 from dataclasses import replace
 
+from cad2maxwell_backend.formatting import format_quantity
 from cad2maxwell_backend.geometry.dominant_plane import NoPlanarFaceError, dominant_plane
 from cad2maxwell_backend.geometry.section import SectionError, section_shape
 from cad2maxwell_backend.geometry.section_classification import classify_wires
@@ -101,7 +102,7 @@ class SectionService:
             diagnostics.append(SectionDiagnostic(
                 code="overlapping_regions", severity="error",
                 message=(f"{names.get(first_id, first_id)} and {names.get(second_id, second_id)} "
-                         f"overlap by {area:.6g} mm²."),
+                         f"overlap by {format_quantity(area, 'mm²')}."),
                 component_id=first_id, related_component_id=second_id,
             ))
         section_id = self.sections.put(exact)
