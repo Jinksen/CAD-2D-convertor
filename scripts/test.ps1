@@ -18,6 +18,8 @@ try {
     Invoke-NativeCommand -Command 'cargo' -Arguments @('fmt', '--manifest-path', 'frontend/src-tauri/Cargo.toml', '--', '--check')
     Invoke-NativeCommand -Command 'cargo' -Arguments @('clippy', '--manifest-path', 'frontend/src-tauri/Cargo.toml', '--', '-D', 'warnings')
     Invoke-NativeCommand -Command 'cargo' -Arguments @('test', '--manifest-path', 'frontend/src-tauri/Cargo.toml')
+    # The launcher tests use Pester 3/4 syntax; Windows ships Pester 3.4 even where Pester 5 is also installed.
+    Import-Module Pester -MaximumVersion 4.99 -Force
     $scriptTests = Invoke-Pester -Script (Join-Path $PSScriptRoot 'tests/Scripts.Tests.ps1') -PassThru
     if ($scriptTests.FailedCount -gt 0) { throw 'PowerShell launcher tests failed.' }
 }

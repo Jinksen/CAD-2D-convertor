@@ -131,3 +131,33 @@ function Assert-DeveloperPrerequisites {
 
     Enable-MSVCLinker
 }
+
+function Get-LauncherShortcutPaths {
+    return @(
+        (Join-Path ([Environment]::GetFolderPath('Desktop')) 'CAD2Maxwell.lnk'),
+        (Join-Path ([Environment]::GetFolderPath('Programs')) 'CAD2Maxwell.lnk')
+    )
+}
+
+function New-LauncherShortcut {
+    param(
+        [Parameter(Mandatory)][string]$ShortcutPath,
+        [Parameter(Mandatory)][string]$LauncherPath,
+        [string]$IconPath
+    )
+
+    if (-not (Test-Path -LiteralPath $LauncherPath -PathType Leaf)) {
+        throw "Launcher '$LauncherPath' was not found."
+    }
+    $shell = New-Object -ComObject WScript.Shell
+    $shortcut = $shell.CreateShortcut($ShortcutPath)
+    $shortcut.TargetPath = $LauncherPath
+    $shortcut.WorkingDirectory = Split-Path -Parent $LauncherPath
+    $shortcut.Description = 'CAD2Maxwell: STEP to 2D DXF section'
+    # 7 = minimized: the launcher console stays out of the way while the app runs.
+    $shortcut.WindowStyle = 7
+    if ($IconPath -and (Test-Path -LiteralPath $IconPath -PathType Leaf)) {
+        $shortcut.IconLocation = "$IconPath,0"
+    }
+    $shortcut.Save()
+}
