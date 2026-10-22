@@ -78,4 +78,29 @@ Describe 'Developer script helpers' {
         { Wait-BackendReady -BackendProcess ([pscustomobject]@{ HasExited = $true; ExitCode = 7 }) -Token 'test-session' } |
             Should Throw 'code 7'
     }
+
+    It 'creates a minimized shortcut to the repository launcher' {
+        $launcher = Join-Path $TestDrive 'START-APP.cmd'
+        Set-Content -LiteralPath $launcher -Value '@echo off'
+        $path = Join-Path $TestDrive 'CAD2Maxwell.lnk'
+
+        New-LauncherShortcut -ShortcutPath $path -LauncherPath $launcher
+
+        $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($path)
+        $shortcut.TargetPath | Should Be $launcher
+        $shortcut.WorkingDirectory | Should Be (Split-Path -Parent $launcher)
+        $shortcut.WindowStyle | Should Be 7
+    }
+
+    It 'refuses to create a shortcut to a missing launcher' {
+        { New-LauncherShortcut -ShortcutPath (Join-Path $TestDrive 'x.lnk') -LauncherPath (Join-Path $TestDrive 'missing.cmd') } |
+            Should Throw 'was not found'
+    }
+
+    It 'places shortcuts on the Desktop and in the Start menu' {
+        $paths = Get-LauncherShortcutPaths
+        $paths.Count | Should Be 2
+        $paths[0] | Should Match 'CAD2Maxwell\.lnk$'
+        $paths[1] | Should Match 'Programs\\CAD2Maxwell\.lnk$'
+    }
 }

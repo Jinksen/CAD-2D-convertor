@@ -10,7 +10,7 @@ Thanks for helping improve CAD2Maxwell. The project is in an early, draft DXF st
 
 ## Development
 
-Follow the [README setup instructions](README.md#setup) on Windows. Run `./scripts/test.ps1` before opening a pull request. Include focused regression tests for geometry defects and update the relevant docs when behavior changes.
+Follow the [README setup instructions](README.md#setup) on Windows. Run `./scripts/test.ps1` before opening a pull request. GitHub Actions are disabled, so this local run is the quality gate. Include focused regression tests for geometry defects and update the relevant docs when behavior changes.
 
 Use small pull requests with a clear description of the problem, the change, and the checks run. State any CAD model or Maxwell versions used for manual verification.
 

@@ -4,7 +4,7 @@ This trial supports local STEP/STP import, exact B-Rep sectioning, component ins
 
 ## Start
 
-Double-click `START-APP.cmd` in the repository folder. The launcher checks port 8000, starts its own backend, authenticates readiness, and opens the compiled desktop app. The status bar should show an online geometry service. Close the app window when finished; the launcher stops its backend. Keep its console open while working.
+Use the **CAD2Maxwell** shortcut on the Desktop or in the Start menu, or double-click `START-APP.cmd` in the repository folder. Create the shortcuts once with `scripts/install-shortcuts.ps1`. The launcher checks port 8000, starts its own backend, authenticates readiness, and opens the compiled desktop app. The status bar should show an online geometry service. Close the app window when finished; the launcher stops its backend. Keep its console open while working.
 
 If the build is missing, run `scripts/build-trial.ps1` after setup. If Python dependencies are missing, run `scripts/setup.ps1`. The local trial is stored at `artifacts/CAD2Maxwell/CAD2Maxwell.exe`; always use the launcher because the executable alone does not start the service. Do not move the executable to another computer: the backend runtime is not bundled yet.
 

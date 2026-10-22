@@ -1,9 +1,9 @@
 name: CI
 
+# GitHub Actions are disabled for this repository; run .\scripts\test.ps1 locally.
+# The workflow is kept for manual runs only.
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   quality:
