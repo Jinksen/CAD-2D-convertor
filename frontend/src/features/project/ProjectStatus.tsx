@@ -1,6 +1,11 @@
+import { useEffect } from "react";
+
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { useGlobalShortcuts } from "../step-import/useGlobalShortcuts";
 import { saveProject, useProjectStore } from "./projectActions";
+
+/** How long a plain notice ("Project saved…") stays; warnings and errors stay until replaced. */
+export const NOTICE_MS = 6000;
 
 /** Registers project and undo/redo shortcuts and shows the last project message. Mount once. */
 export function ProjectStatus() {
@@ -14,11 +19,17 @@ export function ProjectStatus() {
     else return false;
     return true;
   });
+  useEffect(() => {
+    if (!notice || error || warning) return;
+    const timer = setTimeout(() => { useProjectStore.setState({ notice: null }); }, NOTICE_MS);
+    return () => { clearTimeout(timer); };
+  }, [notice, error, warning]);
   const text = error ?? warning ?? notice;
   if (!text) return null;
-  return <div role={error ?? warning ? "alert" : "status"}
-    style={{ position: "fixed", right: 8, bottom: 28, maxWidth: 480, padding: "6px 10px", zIndex: 20,
-      border: "1px solid currentColor", background: "Canvas", color: "CanvasText", fontSize: 12 }}>
-    {error ? "✕ " : warning ? "⚠ " : ""}{text}
+  const level = error ? "error" : warning ? "warning" : "info";
+  return <div role={level === "info" ? "status" : "alert"} className={`project-status ${level}`}>
+    {level === "error" ? "✕ " : level === "warning" ? "⚠ " : ""}{text}
+    {level !== "info" && <button type="button" aria-label="Dismiss"
+      onClick={() => { useProjectStore.setState({ error: null, warning: null }); }}>×</button>}
   </div>;
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
+import { useThemeStore } from "../../app/themeStore";
 import type { BoundsMm } from "../step-import/contracts";
 import type { PreviewMeshResponse } from "./contracts";
 import type { SectionPlaneKind, Vec3 } from "../section/plane";
@@ -68,9 +69,15 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
     const light = new THREE.DirectionalLight(0xffffff, 2);
     light.position.copy(center).add(new THREE.Vector3(radius, -radius, radius * 2));
     scene.add(light);
-    const grid = new THREE.GridHelper(radius * 2, 10, 0xb9bec4, 0xdfe2e5);
-    grid.rotation.x = Math.PI / 2;
-    grid.position.z = bounds.min_xyz[2];
+    const cssColor = (name: string, fallback: string) =>
+      new THREE.Color(getComputedStyle(container).getPropertyValue(name).trim() || fallback);
+    const makeGrid = () => {
+      const helper = new THREE.GridHelper(radius * 2, 10, cssColor("--grid-major", "#b9bec4"), cssColor("--grid-minor", "#dfe2e5"));
+      helper.rotation.x = Math.PI / 2;
+      helper.position.z = bounds.min_xyz[2];
+      return helper;
+    };
+    let grid = makeGrid();
     scene.add(grid);
     const axes = new THREE.AxesHelper(radius * 0.2);
     axes.position.copy(center);
@@ -131,6 +138,18 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
     schedulerRef.current = scheduler;
     // OrbitControls emits "change" on input and on every damping step until it settles.
     controls.addEventListener("change", scheduler.request);
+    // The background follows the theme; the theme store updates data-theme before this listener runs.
+    const applyBackground = () => {
+      scene.background = cssColor("--canvas-bg", "#ffffff");
+      scene.remove(grid);
+      grid.dispose();
+      grid = makeGrid();
+      scene.add(grid);
+      scheduler.request();
+    };
+    const stopTheme = useThemeStore.subscribe(applyBackground);
+    const systemScheme = window.matchMedia("(prefers-color-scheme: dark)");
+    systemScheme.addEventListener("change", applyBackground);
     applyViewRef.current = (view, componentId = null) => {
       const direction: Vec3 = view === "fit"
         ? camera.position.clone().sub(controls.target).toArray()
@@ -175,6 +194,8 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
     scheduler.request();
 
     return () => {
+      stopTheme();
+      systemScheme.removeEventListener("change", applyBackground);
       scheduler.dispose();
       schedulerRef.current = null;
       applyViewRef.current = null;

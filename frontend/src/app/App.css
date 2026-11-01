@@ -278,3 +278,9 @@ var.vector { font-weight: 700; }
 .tree-body .tree-node { flex: 1; min-width: 0; }
 .tree-eye { width: 22px; height: 20px; flex: none; border: 0; background: transparent; color: var(--icon); cursor: pointer; }
 .tree-eye[aria-pressed="false"] { color: var(--muted); }
+
+/* Project status (T19) */
+.project-status { position: fixed; right: 8px; bottom: 28px; z-index: 20; display: flex; gap: 8px; align-items: center; max-width: 480px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 2px; background: var(--pane); color: var(--text); font-size: 12px; box-shadow: 0 1px 4px #0003; }
+.project-status.warning { border-color: var(--warning); }
+.project-status.error { border-color: var(--error); }
+.project-status button { border: 0; background: transparent; color: var(--icon); cursor: pointer; font-size: 14px; line-height: 1; }
