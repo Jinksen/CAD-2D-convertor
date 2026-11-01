@@ -12,6 +12,7 @@ import type { ImportSummary } from "./contracts";
 import { MessagesPane } from "./MessagesPane";
 import { BodySettings, ModelSettings } from "./ModelSettings";
 import { ModelTree, type SettingsNode } from "./ModelTree";
+import { openProjectText } from "../project/projectActions";
 import { ProjectStatus } from "../project/ProjectStatus";
 import { useGlobalShortcuts } from "./useGlobalShortcuts";
 
@@ -108,12 +109,13 @@ export function StepImportWorkspace() {
       <Ribbon hasModel={Boolean(imported)} activePlane={activePlane} run={run}
         onOpen={() => { chooser.current?.click(); }} onPlane={setActivePlane}
         onCompute={compute} onExport={exportSection} />
-      <input ref={chooser} className="visually-hidden" type="file" accept=".step,.stp" aria-label="Choose STEP file"
+      <input ref={chooser} className="visually-hidden" type="file" accept=".step,.stp,.c2mproj" aria-label="Choose STEP file"
         tabIndex={-1} disabled={loading}
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";
-          if (file) void load((signal) => importStepFile(file, signal));
+          if (file?.name.toLowerCase().endsWith(".c2mproj")) void file.text().then((text) => openProjectText(text, null));
+          else if (file) void load((signal) => importStepFile(file, signal));
         }} />
       <div className="workspace">
         <ModelTree imported={imported} node={node} selectedComponentId={selectedComponentId} activePlane={activePlane}

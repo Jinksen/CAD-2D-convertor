@@ -9,12 +9,15 @@ import { fetchPreview } from "../preview/client";
 import { computeSection } from "../section/client";
 import { downloadSectionArchive } from "../section/exportClient";
 import { saveSectionArchive } from "../desktop/runtime";
+import { openProjectText } from "../project/projectActions";
 
 vi.mock("./client", () => ({ importStep: vi.fn(), importStepFile: vi.fn() }));
 vi.mock("../preview/client", () => ({ fetchPreview: vi.fn() }));
 vi.mock("../section/client", () => ({ computeSection: vi.fn() }));
 vi.mock("../section/exportClient", () => ({ downloadSectionArchive: vi.fn() }));
 vi.mock("../desktop/runtime", () => ({ saveSectionArchive: vi.fn() }));
+vi.mock("../project/projectActions", async (actual) => ({
+  ...await actual<typeof import("../project/projectActions")>(), openProjectText: vi.fn() }));
 
 const summary = {
   import_id: "session-1", path: "C:/motor.step", sha256: "abc", source_unit: "mm",
@@ -33,6 +36,14 @@ beforeEach(() => {
 });
 
 describe("STEP workspace", () => {
+  it("opens a .c2mproj chosen in the file chooser as a project", async () => {
+    render(<StepImportWorkspace />);
+    const file = new File(['{"app":"CAD2Maxwell"}'], "motor.c2mproj");
+    fireEvent.change(screen.getByLabelText("Choose STEP file"), { target: { files: [file] } });
+    await waitFor(() => { expect(openProjectText).toHaveBeenCalledWith('{"app":"CAD2Maxwell"}', null); });
+    expect(importStepFile).not.toHaveBeenCalled();
+  });
+
   it("shows imported components and selected source details", async () => {
     vi.mocked(importStep).mockResolvedValue(summary);
     render(<StepImportWorkspace />);

@@ -76,17 +76,26 @@ function pickBrowserFile(): Promise<string | null> {
   });
 }
 
-export async function openProject(): Promise<void> {
+/** Opens project text already read from disk (e.g. a `.c2mproj` chosen in the STEP file chooser). */
+export async function openProjectText(text: string, path: string | null): Promise<void> {
   try {
-    let path: string | null = null;
-    let text: string | null;
-    if (isDesktop()) {
-      const picked = await desktopInvoke<[string, string] | null>("open_project");
-      [path, text] = picked ?? [null, null];
-    } else text = await pickBrowserFile();
-    if (text === null) return;
     await applyProject(parseProject(text), path);
   } catch (cause) {
     report({ error: cause instanceof Error ? cause.message : "The project could not be opened." });
   }
+}
+
+export async function openProject(): Promise<void> {
+  let path: string | null = null;
+  let text: string | null;
+  try {
+    if (isDesktop()) {
+      const picked = await desktopInvoke<[string, string] | null>("open_project");
+      [path, text] = picked ?? [null, null];
+    } else text = await pickBrowserFile();
+  } catch (cause) {
+    report({ error: cause instanceof Error ? cause.message : "The project could not be opened." });
+    return;
+  }
+  if (text !== null) await openProjectText(text, path);
 }
