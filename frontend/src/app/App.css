@@ -270,3 +270,11 @@ var.vector { font-weight: 700; }
 .preview-toolbar button { height: 20px; padding: 0 7px; border: 1px solid transparent; border-radius: 2px; background: transparent; color: var(--icon); font-size: 11px; cursor: pointer; }
 .preview-toolbar button:hover { background: var(--hover-strong); border-color: var(--line); }
 .preview-note { position: absolute; z-index: 1; top: 60px; left: 10px; max-width: 360px; margin: 0; padding: 3px 6px; border: 1px solid var(--line-soft); border-radius: 2px; background: var(--note-bg); color: var(--text); font-size: 11px; pointer-events: none; }
+
+/* T21-T23 */
+.message-severity { width: 84px; }
+.messages:focus-visible { outline: 2px solid var(--accent, #1a5fb4); outline-offset: -2px; }
+.tree-body { display: flex; align-items: center; }
+.tree-body .tree-node { flex: 1; min-width: 0; }
+.tree-eye { width: 22px; height: 20px; flex: none; border: 0; background: transparent; color: var(--icon); cursor: pointer; }
+.tree-eye[aria-pressed="false"] { color: var(--muted); }

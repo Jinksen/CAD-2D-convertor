@@ -26,7 +26,8 @@ export function StepImportWorkspace() {
   const [importStartedAt, setImportStartedAt] = useState<number | null>(null);
   const loading = importStartedAt !== null;
   const importing = useRef<AbortController | null>(null);
-  const [viewportMode, setViewportMode] = useState<"2d" | "3d">("2d");
+  const viewportMode = useWorkspaceStore((state) => state.viewportMode);
+  const setViewportMode = useWorkspaceStore((state) => state.setViewportMode);
   const [previewOpened, setPreviewOpened] = useState(false);
   const [node, setNode] = useState<SettingsNode>(null);
   const { activePlane, setActivePlane, imported, selectedComponentId, setImported, selectComponent } = useWorkspaceStore(

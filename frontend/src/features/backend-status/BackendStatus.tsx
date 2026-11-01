@@ -21,7 +21,9 @@ export function BackendStatus({ health, bodyCount = 0, sourceUnit = null, sectio
       <span className="status-spacer" />
       <span>Bodies: {bodyCount}</span>
       <span>Regions: {sectionStats?.regions ?? "—"}</span>
-      {sectionStats && <span>Errors: {sectionStats.errors} · Warnings: {sectionStats.warnings}</span>}
+      {sectionStats && (sectionStats.errors > 0 || sectionStats.warnings > 0
+        ? <span>✕ ERROR {sectionStats.errors} · ⚠ WARNING {sectionStats.warnings}</span>
+        : <span>✓ PASS</span>)}
       <span title="Display length unit; geometry and DXF export use mm">Units: {lengthUnit}</span>
       {bodyCount > 0 && <span>Source: {sourceUnit ?? "unknown"}</span>}
     </footer>

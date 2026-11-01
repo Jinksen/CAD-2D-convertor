@@ -8,7 +8,8 @@ import { parseProject, serializeProject } from "./projectFile";
 const importStep = vi.hoisted(() => vi.fn());
 vi.mock("../step-import/client", () => ({ importStep }));
 
-const summary = (sha256: string) => ({ import_id: "i1", path: "C:\\m.step", sha256 }) as unknown as ImportSummary;
+const summary = (sha256: string) => ({ import_id: "i1", path: "C:\\m.step", sha256,
+  components: [{ id: "b1" }, { id: "b2" }] }) as unknown as ImportSummary;
 const saved = () => { const p = currentProject(); if (!p) throw new Error("no project"); return p; };
 const state = () => useWorkspaceStore.getState();
 
@@ -30,6 +31,15 @@ it("round-trips a project and restores the plane", async () => {
   await applyProject(project, "C:\\p.c2mproj");
   expect(state()).toMatchObject({ activePlane: "XZ", sectionOffsetMm: 4.5 });
   expect(useProjectStore.getState()).toMatchObject({ warning: null, path: "C:\\p.c2mproj" });
+});
+
+it("round-trips hidden bodies and drops IDs the STEP no longer has", async () => {
+  useWorkspaceStore.setState({ hiddenIds: ["b2"] });
+  const project = parseProject(serializeProject(saved()));
+  expect(project.hidden_component_ids).toEqual(["b2"]);
+  importStep.mockResolvedValue(summary("aa"));
+  await applyProject({ ...project, hidden_component_ids: ["b2", "gone"] }, null);
+  expect(state().hiddenIds).toEqual(["b2"]);
 });
 
 it("warns visibly when the STEP hash changed", async () => {

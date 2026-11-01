@@ -26,10 +26,11 @@ class GraphicsErrorBoundary extends Component<{ children: ReactNode }, { message
 export function PreviewView({ imported }: { imported: ImportSummary }) {
   const [preview, setPreview] = useState<PreviewMeshResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { selectedComponentId, selectComponent, activePlane, sectionOffsetMm, customNormal } = useWorkspaceStore(
+  const { selectedComponentId, selectComponent, activePlane, sectionOffsetMm, customNormal, hiddenIds } = useWorkspaceStore(
     useShallow((state) => ({
       selectedComponentId: state.selectedComponentId, selectComponent: state.selectComponent,
       activePlane: state.activePlane, sectionOffsetMm: state.sectionOffsetMm, customNormal: state.customNormal,
+      hiddenIds: state.hiddenIds,
     })),
   );
   const offsetMm = sectionOffsetMm ?? defaultOffset(imported.bounds_mm, activePlane, customNormal);
@@ -61,7 +62,7 @@ export function PreviewView({ imported }: { imported: ImportSummary }) {
     <GraphicsErrorBoundary>
       <MeshCanvas preview={preview} bounds={imported.bounds_mm}
         selectedComponentId={selectedComponentId} onSelect={selectComponent}
-        plane={activePlane} offsetMm={offsetMm} normal={customNormal} />
+        plane={activePlane} offsetMm={offsetMm} normal={customNormal} hiddenIds={hiddenIds} />
     </GraphicsErrorBoundary>
   </div>;
 }

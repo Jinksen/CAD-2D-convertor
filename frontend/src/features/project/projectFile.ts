@@ -11,6 +11,8 @@ export interface ProjectFile {
   step: { path: string; sha256: string };
   plane: { kind: SectionPlaneKind; normal_xyz: Vec3; offset_mm: number | null };
   number_format: NumberFormat;
+  /** Bodies hidden in the viewports (display only); optional for files saved before visibility existed. */
+  hidden_component_ids?: string[];
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -22,7 +24,9 @@ export function isProjectFile(value: unknown): value is ProjectFile {
   return isRecord(step) && typeof step.path === "string" && typeof step.sha256 === "string" &&
     isRecord(plane) && ["XY", "XZ", "YZ", "custom"].includes(plane.kind as string) && isVec3(plane.normal_xyz) &&
     (plane.offset_mm === null || (typeof plane.offset_mm === "number" && Number.isFinite(plane.offset_mm))) &&
-    isRecord(format);
+    isRecord(format) &&
+    (value.hidden_component_ids === undefined ||
+      (Array.isArray(value.hidden_component_ids) && value.hidden_component_ids.every((id) => typeof id === "string")));
 }
 
 /** Parses project text; throws an Error with a user-readable message. */

@@ -15,13 +15,14 @@ function report(patch: { notice?: string; error?: string; warning?: string }) {
 }
 
 export function currentProject(): ProjectFile | null {
-  const { imported, activePlane, customNormal, sectionOffsetMm } = useWorkspaceStore.getState();
+  const { imported, activePlane, customNormal, sectionOffsetMm, hiddenIds } = useWorkspaceStore.getState();
   if (!imported) return null;
   return {
     app: "CAD2Maxwell", version: PROJECT_VERSION,
     step: { path: imported.path, sha256: imported.sha256 },
     plane: { kind: activePlane, normal_xyz: customNormal, offset_mm: sectionOffsetMm },
     number_format: useFormatStore.getState().format,
+    hidden_component_ids: hiddenIds,
   };
 }
 
@@ -59,6 +60,9 @@ export async function applyProject(project: ProjectFile, path: string | null): P
   useWorkspaceStore.getState().restorePlane({
     activePlane: project.plane.kind, customNormal: project.plane.normal_xyz, sectionOffsetMm: project.plane.offset_mm });
   useFormatStore.getState().setFormat(project.number_format);
+  // Component IDs derive from the file hash, so unknown IDs (changed STEP) are dropped.
+  const known = new Set(imported.components.map((item) => item.id));
+  useWorkspaceStore.setState({ hiddenIds: (project.hidden_component_ids ?? []).filter((id) => known.has(id)) });
   useProjectStore.setState({ path });
   if (imported.sha256 !== project.step.sha256) {
     report({ warning: `The STEP file changed since the project was saved (SHA-256 mismatch for ${project.step.path}). Results may differ from the saved session.` });

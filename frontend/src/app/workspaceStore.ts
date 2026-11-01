@@ -30,6 +30,16 @@ interface WorkspaceState {
   selectedComponentId: string | null;
   setImported: (imported: ImportSummary) => void;
   selectComponent: (id: string | null) => void;
+  // T21 diagnostics focus. StepImportWorkspace should read viewportMode from here.
+  viewportMode: "2d" | "3d";
+  setViewportMode: (mode: "2d" | "3d") => void;
+  relatedComponentId: string | null;
+  focusRequest: { componentId: string | null; seq: number };
+  focusComponent: (id: string, relatedId?: string | null) => void;
+  // T22 visibility: display only, never reaches sectioning or export.
+  hiddenIds: string[];
+  toggleHidden: (id: string) => void;
+  toggleIsolate: (id: string) => void;
 }
 
 const snapshot = (state: PlaneSnapshot): PlaneSnapshot => ({
@@ -81,7 +91,31 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => {
   },
   setSectionOffsetMm: (sectionOffsetMm) => { record(); set({ sectionOffsetMm, sectionStats: null }); },
   setCustomPlane: (customNormal, sectionOffsetMm) => { record(); set({ customNormal, sectionOffsetMm, sectionStats: null }); },
-  setImported: (imported) => { lastEditAt = 0; set({ planeHistory: { past: [], future: [] }, imported, selectedComponentId: null, sectionOffsetMm: null, sectionStats: null }); },
-  selectComponent: (selectedComponentId) => { set({ selectedComponentId }); },
+  setImported: (imported) => {
+    lastEditAt = 0;
+    set({ planeHistory: { past: [], future: [] }, imported, selectedComponentId: null, relatedComponentId: null,
+      hiddenIds: [], sectionOffsetMm: null, sectionStats: null });
+  },
+  selectComponent: (selectedComponentId) => { set({ selectedComponentId, relatedComponentId: null }); },
+  viewportMode: "2d",
+  setViewportMode: (viewportMode) => { set({ viewportMode }); },
+  relatedComponentId: null,
+  focusRequest: { componentId: null, seq: 0 },
+  focusComponent: (id, relatedId = null) => {
+    set((state) => ({ selectedComponentId: id, relatedComponentId: relatedId, viewportMode: "2d",
+      focusRequest: { componentId: id, seq: state.focusRequest.seq + 1 } }));
+  },
+  hiddenIds: [],
+  toggleHidden: (id) => {
+    set((state) => ({ hiddenIds: state.hiddenIds.includes(id)
+      ? state.hiddenIds.filter((item) => item !== id) : [...state.hiddenIds, id] }));
+  },
+  // Isolate shows only `id`; isolating again restores all bodies.
+  toggleIsolate: (id) => {
+    const { imported, hiddenIds } = get();
+    const others = (imported?.components ?? []).map((item) => item.id).filter((item) => item !== id);
+    const isolated = others.length > 0 && others.length === hiddenIds.length && others.every((item) => hiddenIds.includes(item));
+    set({ hiddenIds: isolated ? [] : others });
+  },
 };
 });

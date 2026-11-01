@@ -5,17 +5,21 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { BoundsMm } from "../step-import/contracts";
 import type { PreviewMeshResponse } from "./contracts";
 import type { SectionPlaneKind, Vec3 } from "../section/plane";
-import { cameraPosition, VIEW_DIRECTIONS, type StandardView } from "./cameraViews";
+import { useGlobalShortcuts } from "../step-import/useGlobalShortcuts";
+import { boundsSphere, cameraPosition, VIEW_DIRECTIONS, type StandardView } from "./cameraViews";
 import { createRenderScheduler, type RenderScheduler } from "./renderScheduler";
 import { planeGuideFrame } from "./sectionPlane";
 
 const VIEW_BUTTONS: { view: StandardView | "fit"; label: string; title: string }[] = [
-  { view: "fit", label: "Fit", title: "Fit all bodies in view" },
+  { view: "fit", label: "Fit", title: "Fit selection (F), fit all (Shift+F)" },
   { view: "iso", label: "Iso", title: "Isometric view" },
   { view: "top", label: "Top", title: "Top view (look along -Z)" },
   { view: "front", label: "Front", title: "Front view (look along +Y)" },
   { view: "right", label: "Right", title: "Right view (look along -X)" },
 ];
+
+/** Module-level so the React compiler lint does not treat three.js objects as props. */
+function setVisible(object: THREE.Object3D, visible: boolean) { object.visible = visible; }
 
 interface Props {
   preview: PreviewMeshResponse;
@@ -25,14 +29,16 @@ interface Props {
   plane: SectionPlaneKind;
   offsetMm: number;
   normal: Vec3;
+  hiddenIds: string[];
 }
 
-export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, plane, offsetMm, normal }: Props) {
+export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, plane, offsetMm, normal, hiddenIds }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const meshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const guideRef = useRef<THREE.Group | null>(null);
   const schedulerRef = useRef<RenderScheduler | null>(null);
-  const applyViewRef = useRef<((view: StandardView | "fit") => void) | null>(null);
+  const edgesRef = useRef<Map<string, THREE.LineSegments>>(new Map());
+  const applyViewRef = useRef<((view: StandardView | "fit", componentId?: string | null) => void) | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -74,18 +80,20 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
     const guideGeometry = new THREE.PlaneGeometry(1, 1);
     const guideSurface = new THREE.Mesh(guideGeometry, new THREE.MeshBasicMaterial({
       color: 0x4bb3fd, side: THREE.DoubleSide, transparent: true, opacity: 0.2,
-      depthTest: false, depthWrite: false,
+      depthTest: true, depthWrite: false,
     }));
+    guideSurface.renderOrder = 1;
     const guideEdges = new THREE.LineSegments(
       new THREE.EdgesGeometry(guideGeometry),
       new THREE.LineBasicMaterial({ color: 0x1a5fb4, depthTest: false }),
     );
+    guideEdges.renderOrder = 2; // edges stay visible on top of the model
     guide.add(guideSurface, guideEdges);
     scene.add(guide);
     guideRef.current = guide;
 
     const meshes = new Map<string, THREE.Mesh>();
-    const edgeLines: THREE.LineSegments[] = [];
+    const edgeLines = new Map<string, THREE.LineSegments>();
     const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x1f2328 });
     for (const component of preview.components) {
       const geometry = new THREE.BufferGeometry();
@@ -110,10 +118,11 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
         const lines = new THREE.LineSegments(edgeGeometry, edgeMaterial);
         lines.raycast = () => undefined; // picking targets bodies only
         scene.add(lines);
-        edgeLines.push(lines);
+        edgeLines.set(component.component_id, lines);
       }
     }
     meshesRef.current = meshes;
+    edgesRef.current = edgeLines;
 
     const scheduler = createRenderScheduler(
       () => { controls.update(); renderer.render(scene, camera); },
@@ -122,12 +131,16 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
     schedulerRef.current = scheduler;
     // OrbitControls emits "change" on input and on every damping step until it settles.
     controls.addEventListener("change", scheduler.request);
-    applyViewRef.current = (view) => {
+    applyViewRef.current = (view, componentId = null) => {
       const direction: Vec3 = view === "fit"
         ? camera.position.clone().sub(controls.target).toArray()
         : VIEW_DIRECTIONS[view];
-      controls.target.copy(center);
-      camera.position.set(...cameraPosition(center.toArray(), direction, radius / 2, camera.fov, camera.aspect));
+      const mesh = componentId ? meshes.get(componentId) : undefined;
+      const box = mesh ? new THREE.Box3().setFromBufferAttribute(mesh.geometry.getAttribute("position") as THREE.BufferAttribute) : null;
+      const target = box && !box.isEmpty() ? boundsSphere(box.min.toArray(), box.max.toArray())
+        : { center: center.toArray(), radius: radius / 2 };
+      controls.target.set(...target.center);
+      camera.position.set(...cameraPosition(target.center, direction, target.radius, camera.fov, camera.aspect));
       controls.update();
       scheduler.request();
     };
@@ -173,9 +186,10 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
         mesh.geometry.dispose();
         (mesh.material as THREE.Material).dispose();
       }
-      for (const lines of edgeLines) lines.geometry.dispose();
+      for (const lines of edgeLines.values()) lines.geometry.dispose();
       edgeMaterial.dispose();
       meshesRef.current = new Map();
+      edgesRef.current = new Map();
       guideGeometry.dispose();
       guideSurface.material.dispose();
       guideEdges.geometry.dispose();
@@ -194,6 +208,25 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
     schedulerRef.current?.request();
   }, [selectedComponentId, preview]);
 
+  // Hidden bodies are display-only: sectioning and export still include them.
+  useEffect(() => {
+    for (const [componentId, mesh] of meshesRef.current) {
+      const visible = !hiddenIds.includes(componentId);
+      setVisible(mesh, visible);
+      const edges = edgesRef.current.get(componentId);
+      if (edges) setVisible(edges, visible);
+    }
+    schedulerRef.current?.request();
+  }, [hiddenIds, preview]);
+
+  // F fits the selected body (all when none), Shift+F fits all; only while this view is shown.
+  useGlobalShortcuts((key, ctrl, event) => {
+    const container = containerRef.current;
+    if (ctrl || key !== "f" || !container?.isConnected || container.closest("[hidden]")) return false;
+    applyViewRef.current?.("fit", event.shiftKey ? null : selectedComponentId);
+    return true;
+  });
+
   useEffect(() => {
     const guide = guideRef.current;
     if (!guide) return;
@@ -207,7 +240,7 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
   return <>
     <div className="preview-toolbar" role="toolbar" aria-label="3D view">
       {VIEW_BUTTONS.map(({ view, label, title }) =>
-        <button key={view} type="button" title={title} onClick={() => applyViewRef.current?.(view)}>{label}</button>)}
+        <button key={view} type="button" title={title} onClick={() => applyViewRef.current?.(view, view === "fit" ? selectedComponentId : null)}>{label}</button>)}
     </div>
     <div ref={containerRef} className="preview-canvas" aria-label="3D model preview" />
   </>;
