@@ -44,3 +44,13 @@ export async function saveSectionArchive(archive: Blob): Promise<string | null> 
   finally { link.remove(); URL.revokeObjectURL(url); }
   return "section.zip (browser download requested)";
 }
+
+/** Invokes a Tauri command, or returns undefined outside the desktop shell. */
+export async function desktopInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T | undefined> {
+  const desktop = desktopApi();
+  if (!desktop) return undefined;
+  try { return await desktop.core.invoke<T>(command, args); }
+  catch (cause) { throw new Error(typeof cause === "string" ? cause : `${command} failed.`, { cause }); }
+}
+
+export const isDesktop = (): boolean => desktopApi() !== undefined;

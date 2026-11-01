@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { SectionPlaneKind } from "../features/section/plane";
+import { openProject, saveProject } from "../features/project/projectActions";
 import type { SectionRun } from "../features/section/useSectionRun";
 
 const planes = [
@@ -33,6 +34,12 @@ export function Ribbon({ hasModel, activePlane, run, onOpen, onPlane, onCompute,
           strokeLinejoin="round" aria-hidden="true"><path d="M4 7h6l2 2h8v10H4z" /></svg>
         Open STEP
       </button>
+    </RibbonGroup>
+    <RibbonGroup label="Project">
+      <button type="button" className="ribbon-button" disabled={!hasModel} onClick={() => { void saveProject(); }}
+        title="Save the project (Ctrl+S; Ctrl+Shift+S saves as)">Save</button>
+      <button type="button" className="ribbon-button" onClick={() => { void openProject(); }}
+        title="Open a .c2mproj project">Open project</button>
     </RibbonGroup>
     <RibbonGroup label="Section plane">
       {planes.map((plane) => (
