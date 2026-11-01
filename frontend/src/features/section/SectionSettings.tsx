@@ -1,4 +1,4 @@
-import type { SyntheticEvent } from "react";
+import type { KeyboardEvent, SyntheticEvent } from "react";
 
 import { useNumberFormat } from "../../app/formatStore";
 import { useWorkspaceStore } from "../../app/workspaceStore";
@@ -14,9 +14,18 @@ export function SectionSettings({ run }: { run: SectionRun }) {
   const selectedComponentId = useWorkspaceStore((state) => state.selectedComponentId);
   const format = useNumberFormat();
   const { imported, plane, section, busy } = run;
+  // Plane fields stay editable during a computation: an edit supersedes it and recomputes.
+  const editLocked = run.exporting || run.aligning;
   const selectedName = imported.components.find((component) => component.id === selectedComponentId)?.display_name;
 
   function submit(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    run.compute();
+  }
+
+  // Enter in a plane field computes at once, skipping the debounce, even while a recompute runs.
+  function computeOnEnter(event: KeyboardEvent<HTMLFormElement>) {
+    if (event.key !== "Enter" || !(event.target instanceof HTMLInputElement)) return;
     event.preventDefault();
     run.compute();
   }
@@ -26,21 +35,21 @@ export function SectionSettings({ run }: { run: SectionRun }) {
       <strong>Section</strong>
       <span className="settings-subtitle">Exact planar cut of all bodies</span>
     </div>
-    <form className="section-form" onSubmit={submit}>
+    <form className="section-form" onSubmit={submit} onKeyDown={computeOnEnter}>
       <h3 className="settings-section">Plane</h3>
       <div className="field-grid">
         <span className="field-label">Plane</span>
         <span className="field-value">{plane === "custom" ? "Custom" : plane}</span>
         {plane === "custom" && axisLabels.map((axis, index) => <span className="field-pair" key={axis}>
           <label htmlFor={`section-normal-${axis}`}>Normal <var>n</var><sub><var>{axis}</var></sub></label>
-          <QuantityInput id={`section-normal-${axis}`} value={run.customNormal[index]} disabled={busy}
+          <QuantityInput id={`section-normal-${axis}`} value={run.customNormal[index]} disabled={editLocked}
             decimals={format.directionDecimals} format={format}
             onChange={(value) => { run.setNormalComponent(index, value); }} />
         </span>)}
         <label htmlFor="section-offset">
           {plane === "custom" ? <>Offset along normal <var>d</var></> : <>Offset <var>{planeAxis(plane)}</var></>}
         </label>
-        <QuantityInput id="section-offset" value={mmToDisplay(run.offset, format.lengthUnit)} disabled={busy}
+        <QuantityInput id="section-offset" value={mmToDisplay(run.offset, format.lengthUnit)} disabled={editLocked}
           decimals={format.lengthDecimals} format={format} unit={format.lengthUnit}
           onChange={(value) => { run.setOffset(displayToMm(value, format.lengthUnit)); }} />
       </div>

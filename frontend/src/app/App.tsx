@@ -9,7 +9,8 @@ import { useWorkspaceStore } from "./workspaceStore";
 
 export function App() {
   const [health, setHealth] = useState<BackendHealth>({ state: "offline" });
-  const { imported, sectionStats } = useWorkspaceStore();
+  const imported = useWorkspaceStore((state) => state.imported);
+  const sectionStats = useWorkspaceStore((state) => state.sectionStats);
 
   useEffect(() => {
     let active = true;

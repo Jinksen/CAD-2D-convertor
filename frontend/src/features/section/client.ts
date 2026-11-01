@@ -11,18 +11,20 @@ function backendUrl(): string {
 
 export async function computeSection(
   importId: string, plane: SectionPlaneRequest,
-  fetcher: typeof fetch = fetch,
+  signal?: AbortSignal, fetcher: typeof fetch = fetch,
 ): Promise<SectionResponse> {
   let response: Response;
   try {
     response = await fetcher(`${backendUrl()}/api/v1/section`, {
       method: "POST", headers: await backendHeaders({ Accept: "application/json", "Content-Type": "application/json" }),
-      body: JSON.stringify({ import_id: importId, plane }),
+      body: JSON.stringify({ import_id: importId, plane }), signal,
     });
   } catch {
+    // A cancelled request rejects with the AbortError, not as an unavailable service.
+    signal?.throwIfAborted();
     throw new Error("The local geometry service is unavailable.");
   }
-  const payload = await readPayload(response, "The exact section could not be completed.");
+  const payload = await readPayload(response, "The exact section could not be completed.", signal);
   if (!isSectionResponse(payload) || payload.import_id !== importId || !samePlane(payload.plane, plane)) {
     throw new Error("The geometry service returned an invalid section response.");
   }
@@ -48,11 +50,12 @@ export async function fetchComponentPlane(
   return payload;
 }
 
-async function readPayload(response: Response, failure: string): Promise<unknown> {
+async function readPayload(response: Response, failure: string, signal?: AbortSignal): Promise<unknown> {
   let payload: unknown;
   try {
     payload = await response.json();
   } catch {
+    signal?.throwIfAborted();
     throw new Error("The geometry service returned an invalid response.");
   }
   if (!response.ok) {

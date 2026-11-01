@@ -13,7 +13,7 @@ describe("computeSection", () => {
       section_id: "section-1", import_id: "import-1",
       plane: { kind: "XZ", offset_mm: 10 }, components: [], diagnostics: [],
     })));
-    await expect(computeSection("import-1", { kind: "XY", offset_mm: 10 }, fetcher))
+    await expect(computeSection("import-1", { kind: "XY", offset_mm: 10 }, undefined, fetcher))
       .rejects.toThrow("invalid section response");
   });
 
@@ -21,7 +21,7 @@ describe("computeSection", () => {
     const fetcher: typeof fetch = () => Promise.resolve(new Response(JSON.stringify({
       error: { code: "unknown_import", message: "Import the file again." },
     }), { status: 404 }));
-    await expect(computeSection("expired", { kind: "XY", offset_mm: 10 }, fetcher))
+    await expect(computeSection("expired", { kind: "XY", offset_mm: 10 }, undefined, fetcher))
       .rejects.toThrow("Import the file again.");
   });
 
@@ -34,7 +34,7 @@ describe("computeSection", () => {
         plane: { ...tilted, offset_mm: null },
       })));
     };
-    const section = await computeSection("import-1", tilted, fetcher);
+    const section = await computeSection("import-1", tilted, undefined, fetcher);
     expect(body).toEqual({ import_id: "import-1", plane: tilted });
     expect(section.plane.kind).toBe("custom");
   });
@@ -44,7 +44,7 @@ describe("computeSection", () => {
       section_id: "section-1", import_id: "import-1", components: [], diagnostics: [],
       plane: { ...tilted, origin_xyz: [0, 0, 11] },
     })));
-    await expect(computeSection("import-1", tilted, fetcher)).rejects.toThrow("invalid section response");
+    await expect(computeSection("import-1", tilted, undefined, fetcher)).rejects.toThrow("invalid section response");
   });
 });
 
@@ -67,5 +67,17 @@ describe("fetchComponentPlane", () => {
       error: { code: "no_planar_face", message: "The selected body has no planar face." },
     }), { status: 422 }));
     await expect(fetchComponentPlane("import-1", "body-1", fetcher)).rejects.toThrow("no planar face");
+  });
+});
+
+describe("computeSection cancellation", () => {
+  it("rejects with an AbortError instead of a service error when cancelled", async () => {
+    const controller = new AbortController();
+    const fetcher: typeof fetch = (_url, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => { reject(new TypeError("Failed to fetch")); });
+      controller.abort();
+    });
+    const pending = computeSection("import-1", { kind: "XY", offset_mm: 10 }, controller.signal, fetcher);
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
 });
