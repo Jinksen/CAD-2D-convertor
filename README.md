@@ -48,6 +48,19 @@ The shortcuts point at this checkout, so keep the repository folder where it is.
 
 After `git pull`, run `setup.ps1` and `build-trial.ps1` again to refresh the app.
 
+## Keyboard shortcuts
+
+| Key | Action |
+|-----|--------|
+| 1 / 2 / 3 | Section plane XY / XZ / YZ |
+| Ctrl+1 / Ctrl+2 | 2D section / 3D preview |
+| Ctrl+O | Open a STEP file |
+| Ctrl+Enter | Compute section |
+| Ctrl+E | Export draft DXF |
+| Esc | Clear selection |
+
+The theme (System, Light, Dark) is set under Preferences in the model tree.
+
 ## Export checks
 
 Export is blocked with an error diagnostic when the section has:
