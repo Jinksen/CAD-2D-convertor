@@ -43,3 +43,4 @@ dist/
 # Rust and Tauri generated files
 target/
 /frontend/src-tauri/gen/
+.pytest-tmp/
