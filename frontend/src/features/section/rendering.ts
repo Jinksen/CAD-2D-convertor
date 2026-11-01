@@ -1,4 +1,24 @@
 import type { Point2, SectionCurve, SectionResponse } from "./contracts";
+import type { ViewBox } from "./viewCamera";
+
+/** Bounds (section coordinates, y up) of a body's curves; arcs are sampled, so slightly inexact. */
+export function componentBounds(component: SectionResponse["components"][number]): ViewBox | null {
+  const points: Point2[] = [];
+  for (const wire of component.wires) for (const curve of wire.curves) {
+    if (curve.type === "line") { points.push(curve.start, curve.end); continue; }
+    const major = curve.type === "circle" ? curve.radius : curve.major_radius;
+    const minor = curve.type === "circle" ? curve.radius : curve.minor_radius;
+    for (let step = 0; step <= 32; step += 1) {
+      points.push(ellipsePoint(curve.center, curve.x_axis, curve.y_axis, major, minor,
+        curve.start_parameter + (curve.end_parameter - curve.start_parameter) * step / 32));
+    }
+  }
+  if (points.length === 0) return null;
+  const x = Math.min(...points.map((point) => point[0]));
+  const y = Math.min(...points.map((point) => point[1]));
+  return { x, y, width: Math.max(...points.map((point) => point[0])) - x,
+    height: Math.max(...points.map((point) => point[1])) - y };
+}
 
 function ellipsePoint(
   center: Point2, xAxis: Point2, yAxis: Point2,

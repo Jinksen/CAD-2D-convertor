@@ -151,6 +151,29 @@ describe("SectionView", () => {
     expect(await screen.findByRole("button", { name: /export draft dxf/i })).toBeInTheDocument();
   });
 
+  it("recomputes after an undo restores an earlier offset", async () => {
+    vi.mocked(computeSection).mockResolvedValue({
+      section_id: "section-1", import_id: "session-1",
+      plane: { kind: "XY", offset_mm: 15 }, diagnostics: [], components: [],
+    });
+    render(<SectionPanes imported={imported} plane="XY" />);
+    fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
+    await waitFor(() => { expect(computeSection).toHaveBeenCalledTimes(1); });
+    vi.useFakeTimers();
+    try {
+      act(() => { useWorkspaceStore.getState().setSectionOffsetMm(12); });
+      act(() => { vi.advanceTimersByTime(300); });
+      expect(computeSection).toHaveBeenCalledTimes(2);
+      vi.setSystemTime(Date.now() + 10_000);
+      act(() => { useWorkspaceStore.getState().undoPlane(); });
+      act(() => { vi.advanceTimersByTime(300); });
+      expect(computeSection).toHaveBeenCalledTimes(3);
+      expect(computeSection).toHaveBeenLastCalledWith("session-1", { kind: "XY", offset_mm: 15 }, expect.any(AbortSignal));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not recompute automatically before the first section", () => {
     vi.useFakeTimers();
     try {

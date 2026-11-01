@@ -78,10 +78,10 @@ def test_reader_failure_survives_successful_partial_import(tmp_path: Path) -> No
     model = read_step(path)
 
     assert len(model.bodies) == 1
-    assert any(
-        diagnostic.code == "step_reader_failure" and diagnostic.severity == "error"
-        for diagnostic in model.diagnostics
-    )
+    failure = next(d for d in model.diagnostics if d.code == "step_reader_failure")
+    assert failure.severity == "warning"  # a body was imported
+    assert "Messages:" in failure.message and "(x" in failure.message
+    assert failure.message.isascii()
 
 
 def test_void_shape_has_no_serializable_bounds() -> None:

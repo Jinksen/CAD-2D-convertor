@@ -92,17 +92,25 @@ export function SectionSettings({ run }: { run: SectionRun }) {
 
 /** Section diagnostics for the Messages pane, with links back to the named bodies. */
 export function SectionMessages({ run }: { run: SectionRun }) {
-  const selectComponent = useWorkspaceStore((state) => state.selectComponent);
+  const focusComponent = useWorkspaceStore((state) => state.focusComponent);
   const { section, imported } = run;
   if (!section) return null;
   return <>
     {section.diagnostics.map((item, index) => <p key={`${item.code}-${String(index)}`}
       className={`message ${item.severity}`}>
-      <span className="message-severity">{item.severity}</span>{item.message}
+      <SeverityLabel severity={item.severity} />{item.message}
       {[item.component_id, item.related_component_id].filter((id): id is string => Boolean(id))
-        .map((id) => <button key={id} type="button" className="message-link" onClick={() => { selectComponent(id); }}>
+        .map((id) => <button key={id} type="button" className="message-link"
+          onClick={() => { focusComponent(id, id === item.component_id ? item.related_component_id : item.component_id); }}>
           Select {imported.components.find((component) => component.id === id)?.display_name ?? id}
         </button>)}
     </p>)}
   </>;
+}
+
+const SEVERITY_LABELS = { info: "ℹ INFO", warning: "⚠ WARNING", error: "✕ ERROR" } as const;
+
+/** Icon plus text, so severity never relies on colour alone (spec 44). */
+export function SeverityLabel({ severity }: { severity: keyof typeof SEVERITY_LABELS }) {
+  return <span className="message-severity">{SEVERITY_LABELS[severity]}</span>;
 }

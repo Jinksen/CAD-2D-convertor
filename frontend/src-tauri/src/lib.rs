@@ -1,5 +1,6 @@
 pub const APPLICATION_IDENTIFIER: &str = "com.cad2maxwell.desktop";
 mod archive;
+mod project;
 
 #[tauri::command]
 fn backend_session_token() -> Option<String> {
@@ -11,7 +12,9 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             backend_session_token,
-            archive::save_section_archive
+            archive::save_section_archive,
+            project::save_project,
+            project::open_project
         ])
         .run(tauri::generate_context!())
         .expect("failed to run CAD2Maxwell desktop host");

@@ -9,12 +9,15 @@ import { fetchPreview } from "../preview/client";
 import { computeSection } from "../section/client";
 import { downloadSectionArchive } from "../section/exportClient";
 import { saveSectionArchive } from "../desktop/runtime";
+import { openProjectText } from "../project/projectActions";
 
 vi.mock("./client", () => ({ importStep: vi.fn(), importStepFile: vi.fn() }));
 vi.mock("../preview/client", () => ({ fetchPreview: vi.fn() }));
 vi.mock("../section/client", () => ({ computeSection: vi.fn() }));
 vi.mock("../section/exportClient", () => ({ downloadSectionArchive: vi.fn() }));
 vi.mock("../desktop/runtime", () => ({ saveSectionArchive: vi.fn() }));
+vi.mock("../project/projectActions", async (actual) => ({
+  ...await actual<typeof import("../project/projectActions")>(), openProjectText: vi.fn() }));
 
 const summary = {
   import_id: "session-1", path: "C:/motor.step", sha256: "abc", source_unit: "mm",
@@ -33,6 +36,14 @@ beforeEach(() => {
 });
 
 describe("STEP workspace", () => {
+  it("opens a .c2mproj chosen in the file chooser as a project", async () => {
+    render(<StepImportWorkspace />);
+    const file = new File(['{"app":"CAD2Maxwell"}'], "motor.c2mproj");
+    fireEvent.change(screen.getByLabelText("Choose STEP file"), { target: { files: [file] } });
+    await waitFor(() => { expect(openProjectText).toHaveBeenCalledWith('{"app":"CAD2Maxwell"}', null); });
+    expect(importStepFile).not.toHaveBeenCalled();
+  });
+
   it("shows imported components and selected source details", async () => {
     vi.mocked(importStep).mockResolvedValue(summary);
     render(<StepImportWorkspace />);
@@ -211,9 +222,9 @@ describe("STEP workspace", () => {
 
     fireEvent.keyDown(window, { key: "o", ctrlKey: true });
     expect(opened).toBe(true);
-    fireEvent.keyDown(window, { key: "2" });
+    fireEvent.keyDown(window, { key: "2", ctrlKey: true });
     expect(screen.getByRole("tab", { name: "3D Preview" })).toHaveAttribute("aria-selected", "true");
-    fireEvent.keyDown(window, { key: "1" });
+    fireEvent.keyDown(window, { key: "1", ctrlKey: true });
     expect(screen.getByRole("tab", { name: "2D Section" })).toHaveAttribute("aria-selected", "true");
     fireEvent.keyDown(window, { key: "Escape" });
     expect(useWorkspaceStore.getState().selectedComponentId).toBeNull();
@@ -228,6 +239,17 @@ describe("STEP workspace", () => {
     expect(screen.getByRole("tab", { name: "2D Section" })).toHaveAttribute("aria-selected", "true");
     fireEvent.keyDown(window, { key: "e", ctrlKey: true });
     expect(downloadSectionArchive).toHaveBeenCalledWith("session-1", "section-1");
+  });
+
+  it("selects the section plane from the 1/2/3 keys", () => {
+    useWorkspaceStore.setState({ imported: summary });
+    render(<StepImportWorkspace />);
+    fireEvent.keyDown(window, { key: "2" });
+    expect(useWorkspaceStore.getState().activePlane).toBe("XZ");
+    fireEvent.keyDown(window, { key: "3" });
+    expect(useWorkspaceStore.getState().activePlane).toBe("YZ");
+    fireEvent.keyDown(window, { key: "1" });
+    expect(useWorkspaceStore.getState().activePlane).toBe("XY");
   });
 
   it("shows elapsed import time and cancels back to idle without an error", async () => {

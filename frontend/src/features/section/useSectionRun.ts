@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { saveSectionArchive } from "../desktop/runtime";
@@ -89,10 +89,9 @@ export function useSectionRun(imported: ImportSummary | null, plane: SectionPlan
     setStored((current) => current.key === key ? { ...current, ...patch } : current);
   }
 
-  if (!imported) return null;
   const model = imported;
   // The midpoint is an arbitrary start, so it is shown at 1 µm; typed and aligned offsets stay exact.
-  const midpoint = (normal: Vec3) => Math.round(defaultOffset(model.bounds_mm, plane, normal) * 1000) / 1000;
+  const midpoint = (normal: Vec3) => model ? Math.round(defaultOffset(model.bounds_mm, plane, normal) * 1000) / 1000 : 0;
   const offset = offsetOverride ?? midpoint(customNormal);
 
   /** Stops the pending and the running computation; a late response is ignored. */
@@ -109,6 +108,7 @@ export function useSectionRun(imported: ImportSummary | null, plane: SectionPlan
 
   // A debounced edit passes the new values because this render's closure still holds the old ones.
   async function compute(at = offset, normal = customNormal) {
+    if (!model) return;
     invalidate();
     const request = sectionPlaneRequest(plane, at, normal);
     if (!request) {
@@ -145,7 +145,7 @@ export function useSectionRun(imported: ImportSummary | null, plane: SectionPlan
   }
 
   async function alignToSelectedBody() {
-    if (!selectedComponentId) return;
+    if (!selectedComponentId || !model) return;
     invalidate();
     clear();
     update({ aligning: true, loading: false, startedAt: null });
@@ -162,7 +162,7 @@ export function useSectionRun(imported: ImportSummary | null, plane: SectionPlan
 
   async function exportSection() {
     const section = state.section;
-    if (!section) return;
+    if (!section || !model) return;
     update({ error: null, exporting: true, exportLocation: null });
     try {
       const bundle = await downloadSectionArchive(model.import_id, section.section_id);
@@ -175,6 +175,19 @@ export function useSectionRun(imported: ImportSummary | null, plane: SectionPlan
     }
   }
 
+  // Any offset/normal change in the store (typing, undo/redo, project restore) is one edit.
+  const onPlaneEdited = useEffectEvent(() => { edited(offset, customNormal); });
+  const planeSignature = `${String(offsetOverride)}|${customNormal.join(",")}`;
+  const handledSignature = useRef(planeSignature);
+  useEffect(() => {
+    if (handledSignature.current === planeSignature) return;
+    handledSignature.current = planeSignature;
+    // Reacting to an external store change (undo, project restore) is what this effect is for.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (imported) onPlaneEdited();
+  }, [planeSignature, imported]);
+
+  if (!model) return null;
   const { section } = state;
   const exportable = section !== null && !state.stale && section.components.length > 0 &&
     !section.diagnostics.some((item) => item.severity === "error") &&
@@ -197,15 +210,11 @@ export function useSectionRun(imported: ImportSummary | null, plane: SectionPlan
       update({ loading: false, startedAt: null, section: null, stale: false, auto: false, notice: "Cancelled." });
       setSectionStats(null);
     },
-    setOffset: (value) => {
-      setSectionOffsetMm(value);
-      edited(value, customNormal);
-    },
+    setOffset: (value) => { setSectionOffsetMm(value); },
     setNormalComponent: (index, value) => {
       const normal = [...customNormal] as Vec3;
       normal[index] = value;
       setCustomPlane(normal, offsetOverride);
-      edited(offsetOverride ?? midpoint(normal), normal);
     },
     alignToSelectedBody: () => { void alignToSelectedBody(); },
     exportSection: () => { void exportSection(); },

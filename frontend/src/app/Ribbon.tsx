@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { SectionPlaneKind } from "../features/section/plane";
+import { openProject, saveProject } from "../features/project/projectActions";
 import type { SectionRun } from "../features/section/useSectionRun";
 
 const planes = [
@@ -34,6 +35,12 @@ export function Ribbon({ hasModel, activePlane, run, onOpen, onPlane, onCompute,
         Open STEP
       </button>
     </RibbonGroup>
+    <RibbonGroup label="Project">
+      <button type="button" className="ribbon-button" disabled={!hasModel} onClick={() => { void saveProject(); }}
+        title="Save the project (Ctrl+S; Ctrl+Shift+S saves as)">Save</button>
+      <button type="button" className="ribbon-button" onClick={() => { void openProject(); }}
+        title="Open a .c2mproj project">Open project</button>
+    </RibbonGroup>
     <RibbonGroup label="Section plane">
       {planes.map((plane) => (
         <button
@@ -41,7 +48,8 @@ export function Ribbon({ hasModel, activePlane, run, onOpen, onPlane, onCompute,
           disabled={!hasModel}
           className="ribbon-toggle"
           aria-pressed={activePlane === plane.kind}
-          title={plane.kind === "custom" ? "Tilted section plane, for example aligned to a sheet" : undefined}
+          title={plane.kind === "custom" ? "Tilted section plane, for example aligned to a sheet"
+            : `${plane.label} section plane (${String(["XY", "XZ", "YZ"].indexOf(plane.kind) + 1)})`}
           onClick={() => { onPlane(plane.kind); }}
           key={plane.kind}
         >
