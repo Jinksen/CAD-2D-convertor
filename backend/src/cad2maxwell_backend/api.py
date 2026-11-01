@@ -1,10 +1,13 @@
 import logging
+from collections import OrderedDict
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Lock
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from starlette.concurrency import run_in_threadpool
 
 from cad2maxwell_backend.api_security import install_request_security
 from cad2maxwell_backend.export.archive import export_archive
@@ -38,6 +41,7 @@ from cad2maxwell_backend.services.section_sessions import SectionSessions
 
 LOGGER = logging.getLogger(__name__)
 MAX_UPLOAD_BYTES = 512 * 1024 * 1024
+PREVIEW_CACHE_SIZE = 4
 
 ALLOWED_ORIGINS = (
     "http://127.0.0.1:1420",
@@ -61,6 +65,8 @@ def create_app(import_service: ImportService | None = None) -> FastAPI:
         allow_headers=["Content-Type", "X-Session-Token"],
     )
     install_request_security(app, ALLOWED_ORIGINS)
+    preview_cache: OrderedDict[str, PreviewMeshResponse] = OrderedDict()
+    preview_lock = Lock()
 
     @app.get("/api/v1/health", response_model=HealthResponse)
     def health() -> HealthResponse:
@@ -100,7 +106,7 @@ def create_app(import_service: ImportService | None = None) -> FastAPI:
                         stream.write(chunk)
                 if total == 0:
                     return _error(400, "rejected_step_file", "The STEP file is empty.")
-                imported = service.import_path(str(path))
+                imported = await run_in_threadpool(service.import_path, str(path))
                 response = imported.model_copy(update={"path": filename})
                 service.sessions.keep_response(response)
                 return response
@@ -120,7 +126,16 @@ def create_app(import_service: ImportService | None = None) -> FastAPI:
         if imported is None or bodies is None:
             return _error(404, "unknown_import", "The import session was not found. Import again.")
         try:
-            return generate_preview(imported, bodies)
+            # One mesher at a time: meshing writes triangulations onto the shared session shapes.
+            with preview_lock:
+                cached = preview_cache.get(import_id)
+                if cached is None:
+                    cached = generate_preview(imported, bodies)
+                    preview_cache[import_id] = cached
+                    if len(preview_cache) > PREVIEW_CACHE_SIZE:
+                        preview_cache.popitem(last=False)
+                preview_cache.move_to_end(import_id)
+                return cached
         except PreviewMeshError as exc:
             return _error(422, "preview_unavailable", str(exc))
         except Exception as exc:
