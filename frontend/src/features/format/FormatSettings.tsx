@@ -1,4 +1,5 @@
 import { useFormatStore } from "../../app/formatStore";
+import { useThemeStore, type Theme } from "../../app/themeStore";
 import {
   formatDirection, formatLength, formatLengthProduct, formatNumber, lengthUnits, MAX_DECIMALS,
   type DecimalMarker, type LengthUnit,
@@ -9,12 +10,22 @@ const decimalChoices = Array.from({ length: MAX_DECIMALS + 1 }, (_, index) => in
 /** Settings-pane form for display units and number notation. */
 export function FormatSettings() {
   const { format, setFormat, resetFormat } = useFormatStore();
+  const { theme, setTheme } = useThemeStore();
   const resolution = formatLength(10 ** -format.lengthDecimals * lengthUnits[format.lengthUnit].mmPerUnit,
     { ...format, trailingZeros: true });
   return <>
     <div className="settings-heading">
-      <strong>Units and Number Format</strong>
+      <strong>Preferences</strong>
       <span className="settings-subtitle">Display notation per ISO 80000-1; geometry and DXF stay in mm</span>
+    </div>
+    <h3 className="settings-section">Appearance</h3>
+    <div className="field-grid">
+      <label htmlFor="appearance-theme">Theme</label>
+      <select id="appearance-theme" value={theme} onChange={(event) => { setTheme(event.target.value as Theme); }}>
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
     </div>
     <h3 className="settings-section">Length</h3>
     <div className="field-grid">
