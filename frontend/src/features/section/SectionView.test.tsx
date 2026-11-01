@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useFormatStore } from "../../app/formatStore";
@@ -121,7 +121,7 @@ describe("SectionView", () => {
     expect(filled.getAttribute("d")).toContain("M 2 2 L 2 4 L 4 4 L 4 2 L 2 2 Z");
   });
 
-  it("removes the previous section and export when the plane moves", async () => {
+  it("hides export of the previous section and recomputes 300 ms after the plane moves", async () => {
     vi.mocked(computeSection).mockResolvedValue({
       section_id: "section-1", import_id: "session-1",
       plane: { kind: "XY", offset_mm: 15 }, diagnostics: [],
@@ -133,9 +133,63 @@ describe("SectionView", () => {
     render(<SectionPanes imported={imported} plane="XY" />);
     fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
     expect(await screen.findByRole("button", { name: /export draft dxf/i })).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("spinbutton", { name: /offset/i }), { target: { value: "12" } });
-    expect(screen.queryByRole("button", { name: /export draft dxf/i })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("2D section geometry")).not.toBeInTheDocument();
+    vi.useFakeTimers();
+    try {
+      fireEvent.change(screen.getByRole("spinbutton", { name: /offset/i }), { target: { value: "12" } });
+      expect(screen.queryByRole("button", { name: /export draft dxf/i })).not.toBeInTheDocument();
+      // The stale drawing stays until the new section arrives.
+      expect(screen.getByLabelText("2D section geometry")).toBeInTheDocument();
+      fireEvent.change(screen.getByRole("spinbutton", { name: /offset/i }), { target: { value: "12.5" } });
+      act(() => { vi.advanceTimersByTime(299); });
+      expect(computeSection).toHaveBeenCalledTimes(1);
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(computeSection).toHaveBeenCalledTimes(2);
+      expect(computeSection).toHaveBeenLastCalledWith("session-1", { kind: "XY", offset_mm: 12.5 }, expect.any(AbortSignal));
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(await screen.findByRole("button", { name: /export draft dxf/i })).toBeInTheDocument();
+  });
+
+  it("does not recompute automatically before the first section", () => {
+    vi.useFakeTimers();
+    try {
+      render(<SectionPanes imported={imported} plane="XY" />);
+      fireEvent.change(screen.getByRole("spinbutton", { name: /offset/i }), { target: { value: "12" } });
+      act(() => { vi.advanceTimersByTime(1000); });
+      expect(computeSection).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("discards a slower response of an older recompute", async () => {
+    const section = (id: string, offset: number) => ({
+      section_id: id, import_id: "session-1", plane: { kind: "XY" as const, offset_mm: offset }, diagnostics: [],
+      components: [{ component_id: "body-1", wires: [{ closed: true, role: "outer" as const, curves: [
+        { type: "line" as const, start: [0, 0] as [number, number], end: [10, 0] as [number, number] },
+      ] }] }],
+    });
+    const pending: ((value: ReturnType<typeof section>) => void)[] = [];
+    vi.mocked(computeSection).mockResolvedValueOnce(section("section-1", 15))
+      .mockImplementation(() => new Promise((resolve) => { pending.push(resolve); }));
+    vi.mocked(downloadSectionArchive).mockReturnValue(new Promise(() => {}));
+    render(<SectionPanes imported={imported} plane="XY" />);
+    fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
+    await screen.findByRole("button", { name: /export draft dxf/i });
+    const offset = screen.getByRole("spinbutton", { name: /offset/i });
+    fireEvent.change(offset, { target: { value: "12" } });
+    fireEvent.keyDown(offset, { key: "Enter" });
+    fireEvent.change(offset, { target: { value: "13" } });
+    fireEvent.keyDown(offset, { key: "Enter" });
+    expect(computeSection).toHaveBeenCalledTimes(3);
+    const firstSignal = vi.mocked(computeSection).mock.calls[1][2];
+    expect(firstSignal?.aborted).toBe(true);
+
+    await act(async () => { pending[1](section("section-3", 13)); await Promise.resolve(); });
+    await act(async () => { pending[0](section("section-2", 12)); await Promise.resolve(); });
+    fireEvent.click(await screen.findByRole("button", { name: /export draft dxf/i }));
+    expect(downloadSectionArchive).toHaveBeenCalledWith("session-1", "section-3");
   });
 
   it("requests an exact middle-plane section and draws its analytic line", async () => {
@@ -152,7 +206,7 @@ describe("SectionView", () => {
     await waitFor(() => expect(screen.getByLabelText("2D section geometry")).toBeInTheDocument());
     expect(screen.getByLabelText("2D section geometry").querySelector("path:not([aria-label])"))
       .toHaveAttribute("d", "M 0 0 L 10 0");
-    expect(vi.mocked(computeSection)).toHaveBeenCalledWith("session-1", { kind: "XY", offset_mm: 15 });
+    expect(vi.mocked(computeSection)).toHaveBeenCalledWith("session-1", { kind: "XY", offset_mm: 15 }, expect.any(AbortSignal));
   });
 
   it("shows a section error without losing the imported model", async () => {
@@ -270,7 +324,7 @@ describe("SectionView", () => {
     expect(await screen.findByText(/1 of 1 bodies intersected/)).toBeInTheDocument();
     expect(computeSection).toHaveBeenCalledWith("session-1", {
       kind: "custom", origin_xyz: [0, 0, 7.5], normal_xyz: [0, 0, 1], x_dir_xyz: [1, 0, 0],
-    });
+    }, expect.any(AbortSignal));
   });
 
   it("requires a selected body before aligning", () => {

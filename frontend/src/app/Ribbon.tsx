@@ -28,7 +28,7 @@ interface RibbonProps {
 export function Ribbon({ hasModel, activePlane, run, onOpen, onPlane, onCompute, onExport }: RibbonProps) {
   return <header className="ribbon" aria-label="Application toolbar">
     <RibbonGroup label="Model">
-      <button type="button" className="ribbon-button" onClick={onOpen}>
+      <button type="button" className="ribbon-button" onClick={onOpen} title="Open a STEP file (Ctrl+O)">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
           strokeLinejoin="round" aria-hidden="true"><path d="M4 7h6l2 2h8v10H4z" /></svg>
         Open STEP
@@ -51,7 +51,7 @@ export function Ribbon({ hasModel, activePlane, run, onOpen, onPlane, onCompute,
     </RibbonGroup>
     <RibbonGroup label="Run">
       <button type="button" className="ribbon-button" disabled={!run || run.busy} onClick={onCompute}
-        title="Compute the exact section with the plane and offset from Settings">
+        title="Compute the exact section with the plane and offset from Settings (Ctrl+Enter)">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
           strokeLinejoin="round" aria-hidden="true"><path d="M3 15 12 10l9 5-9 5z" /><path d="M12 3v14" strokeDasharray="2 2" /></svg>
         {run?.loading ? "Computing…" : "Compute"}
@@ -59,7 +59,7 @@ export function Ribbon({ hasModel, activePlane, run, onOpen, onPlane, onCompute,
     </RibbonGroup>
     <RibbonGroup label="Export">
       <button type="button" className="ribbon-button" disabled={!run?.exportable || run.exporting} onClick={onExport}
-        title={run?.exportable ? "Save the draft DXF bundle (section.dxf + section.json)"
+        title={run?.exportable ? "Save the draft DXF bundle (section.dxf + section.json) (Ctrl+E)"
           : "Compute a section whose regions are all closed first"}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
           strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 4v10" /><path d="m8 10 4 4 4-4" /><path d="M5 19h14" /></svg>

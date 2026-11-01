@@ -12,3 +12,22 @@ export function zoomView(view: ViewBox, factor: number,
     y: anchor.y + (view.y - anchor.y) * factor,
     width: view.width * factor, height: view.height * factor };
 }
+
+export interface ScreenSize { width: number; height: number }
+
+/** Maps a point in the SVG element's pixel box to viewBox units (preserveAspectRatio xMidYMid meet). */
+export function screenToView(view: ViewBox, size: ScreenSize, point: { x: number; y: number }) {
+  const scale = Math.min(size.width / view.width, size.height / view.height);
+  return { x: view.x + (point.x - (size.width - view.width * scale) / 2) / scale,
+    y: view.y + (point.y - (size.height - view.height * scale) / 2) / scale };
+}
+
+/** ViewBox units per screen pixel under xMidYMid meet. */
+export function unitsPerPixel(view: ViewBox, size: ScreenSize): number {
+  return Math.max(view.width / size.width, view.height / size.height);
+}
+
+/** Moves the camera by (dx, dy) viewBox units; the geometry stays in place. */
+export function panView(view: ViewBox, dx: number, dy: number): ViewBox {
+  return { ...view, x: view.x + dx, y: view.y + dy };
+}

@@ -1,4 +1,5 @@
-import { useRef, useState, type SyntheticEvent } from "react";
+import { lazy, Suspense, useEffect, useEffectEvent, useRef, useState, type SyntheticEvent } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { useNumberFormat } from "../../app/formatStore";
 import { Ribbon } from "../../app/Ribbon";
@@ -8,9 +9,17 @@ import { formatLengthProduct, listSeparator, type NumberFormat } from "../../lib
 import { SectionView } from "../section/SectionView";
 import { SectionMessages, SectionSettings } from "../section/SectionSettings";
 import { useSectionRun } from "../section/useSectionRun";
-import { PreviewView } from "../preview/PreviewView";
 import { importStep, importStepFile } from "./client";
 import type { BoundsMm, ImportComponent, ImportSummary } from "./contracts";
+import { Progress } from "./Progress";
+
+// three.js is only needed once the 3D tab is opened, so it lives in its own chunk.
+const PreviewView = lazy(() => import("../preview/PreviewView").then((module) => ({ default: module.PreviewView })));
+
+/** Shortcuts are ignored while the user types into a field. */
+function isTyping(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest("input, textarea, select, [contenteditable]") !== null;
+}
 
 function dimensions(bounds: BoundsMm, format: NumberFormat): string {
   return formatLengthProduct(bounds.max_xyz.map((high, index) => high - bounds.min_xyz[index]), format);
@@ -98,28 +107,94 @@ function ModelSettings({ imported, loading, error, onImportPath, onBrowse }: Mod
 
 export function StepImportWorkspace() {
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Start of the running import (epoch ms); null while idle.
+  const [importStartedAt, setImportStartedAt] = useState<number | null>(null);
+  const loading = importStartedAt !== null;
+  const importing = useRef<AbortController | null>(null);
   const [viewportMode, setViewportMode] = useState<"2d" | "3d">("2d");
   const [previewOpened, setPreviewOpened] = useState(false);
   // The Settings pane shows this node; with null it shows the selected body, else the model.
   const [node, setNode] = useState<"section" | "format" | null>(null);
   const sectionSelected = node === "section";
-  const { activePlane, setActivePlane, imported, selectedComponentId, setImported, selectComponent } = useWorkspaceStore();
+  const { activePlane, setActivePlane, imported, selectedComponentId, setImported, selectComponent } = useWorkspaceStore(
+    useShallow((state) => ({ activePlane: state.activePlane, setActivePlane: state.setActivePlane,
+      imported: state.imported, selectedComponentId: state.selectedComponentId,
+      setImported: state.setImported, selectComponent: state.selectComponent })));
   const selected = imported?.components.find((item) => item.id === selectedComponentId);
   const chooser = useRef<HTMLInputElement>(null);
   const run = useSectionRun(imported, activePlane);
 
-  async function load(request: () => Promise<ImportSummary>) {
+  async function load(request: (signal: AbortSignal) => Promise<ImportSummary>) {
+    importing.current?.abort();
+    const controller = new AbortController();
+    importing.current = controller;
     setError(null);
-    setLoading(true);
+    setNotice(null);
+    setImportStartedAt(Date.now());
     try {
-      setImported(await request());
+      const result = await request(controller.signal);
+      if (importing.current === controller) setImported(result);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The STEP file could not be imported.");
+      if (importing.current === controller) {
+        setError(cause instanceof Error ? cause.message : "The STEP file could not be imported.");
+      }
     } finally {
-      setLoading(false);
+      if (importing.current === controller) {
+        importing.current = null;
+        setImportStartedAt(null);
+      }
     }
   }
+
+  function cancelImport() {
+    importing.current?.abort();
+    importing.current = null;
+    setImportStartedAt(null);
+    setNotice("Cancelled.");
+  }
+
+  function compute() {
+    setNode("section");
+    setViewportMode("2d");
+    run?.compute();
+  }
+
+  function exportSection() {
+    setNode("section");
+    run?.exportSection();
+  }
+
+  function show3d() {
+    setPreviewOpened(true);
+    setViewportMode("3d");
+  }
+
+  const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    if (event.defaultPrevented || event.altKey || isTyping(event.target)) return;
+    const ctrl = event.ctrlKey || event.metaKey;
+    const key = event.key.toLowerCase();
+    if (ctrl && key === "o") {
+      if (!loading) chooser.current?.click();
+    } else if (ctrl && key === "enter") {
+      if (run && !run.busy) compute();
+    } else if (ctrl && key === "e") {
+      if (run?.exportable && !run.exporting) exportSection();
+    } else if (!ctrl && key === "1" && imported) {
+      setViewportMode("2d");
+    } else if (!ctrl && key === "2" && imported) {
+      show3d();
+    } else if (!ctrl && key === "escape") {
+      selectComponent(null);
+    } else {
+      return;
+    }
+    event.preventDefault();
+  });
+  useEffect(() => {
+    window.addEventListener("keydown", onKeyDown);
+    return () => { window.removeEventListener("keydown", onKeyDown); };
+  }, []);
 
   const displayNames = imported?.components.map((item) => item.display_name) ?? [];
   const duplicateNames = new Set(displayNames.filter((name, index) => displayNames.indexOf(name) !== index));
@@ -140,11 +215,14 @@ export function StepImportWorkspace() {
     <>
       <Ribbon hasModel={Boolean(imported)} activePlane={activePlane} run={run}
         onOpen={() => { chooser.current?.click(); }} onPlane={setActivePlane}
-        onCompute={() => { setNode("section"); setViewportMode("2d"); run?.compute(); }}
-        onExport={() => { setNode("section"); run?.exportSection(); }} />
+        onCompute={compute} onExport={exportSection} />
       <input ref={chooser} className="visually-hidden" type="file" accept=".step,.stp" aria-label="Choose STEP file"
         tabIndex={-1} disabled={loading}
-        onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void load(() => importStepFile(file)); }} />
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) void load((signal) => importStepFile(file, signal));
+        }} />
       <div className="workspace">
         <nav className="pane model-builder" aria-label="Model builder">
           <div className="pane-title">Model Builder</div>
@@ -183,7 +261,7 @@ export function StepImportWorkspace() {
           <div className="pane-body">
             {node === "format" ? <FormatSettings /> : sectionSelected && run ? <SectionSettings run={run} /> : selected ? <BodySettings body={selected} /> :
               <ModelSettings imported={imported} loading={loading} error={error}
-                onImportPath={(path) => { void load(() => importStep(path)); }}
+                onImportPath={(path) => { void load((signal) => importStep(path, signal)); }}
                 onBrowse={() => { chooser.current?.click(); }} />}
           </div>
         </section>
@@ -192,9 +270,9 @@ export function StepImportWorkspace() {
             <span>Graphics</span>
             <div className="view-tabs" role="tablist" aria-label="Graphics mode">
               <button type="button" role="tab" aria-selected={Boolean(imported) && viewportMode === "2d"}
-                disabled={!imported} onClick={() => { setViewportMode("2d"); }}>2D Section</button>
+                disabled={!imported} title="2D section (1)" onClick={() => { setViewportMode("2d"); }}>2D Section</button>
               <button type="button" role="tab" aria-selected={Boolean(imported) && viewportMode === "3d"}
-                disabled={!imported} onClick={() => { setPreviewOpened(true); setViewportMode("3d"); }}>3D Preview</button>
+                disabled={!imported} title="3D preview (2)" onClick={show3d}>3D Preview</button>
             </div>
           </div>
           {imported && run ? <>
@@ -202,7 +280,9 @@ export function StepImportWorkspace() {
               <SectionView run={run} />
             </div>
             {previewOpened && <div className="graphics-panel" hidden={viewportMode !== "3d"}>
-              <PreviewView key={imported.import_id} imported={imported} />
+              <Suspense fallback={<div className="preview-message">Generating 3D preview…</div>}>
+                <PreviewView key={imported.import_id} imported={imported} />
+              </Suspense>
             </div>}
           </> :
             <div className="graphics-empty">
@@ -213,6 +293,11 @@ export function StepImportWorkspace() {
       <section className="pane messages" aria-label="Messages">
         <div className="pane-title">Messages</div>
         <div className="messages-list">
+          {importStartedAt !== null && <Progress label="Importing" since={importStartedAt} onCancel={cancelImport} />}
+          {run?.startedAt != null && <Progress key={run.startedAt} label="Computing section" since={run.startedAt}
+            onCancel={run.cancel} />}
+          {[notice, run?.notice].filter(Boolean).map((text, index) =>
+            <p key={index} role="status" className="message">{text}</p>)}
           {imported && imported.diagnostics.length > 0 ? imported.diagnostics.map((item, index) =>
             <p key={`${item.code}-${String(index)}`} className={`message ${item.severity}`}>
               <span className="message-severity">{item.severity}</span>{item.message}
