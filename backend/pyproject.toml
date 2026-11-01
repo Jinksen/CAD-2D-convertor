@@ -29,6 +29,8 @@ packages = ["src/cad2maxwell_backend"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# relative to the invocation dir (backend/ or repo root); single level because pytest does not create parents
+addopts = "--basetemp=.pytest-tmp"
 filterwarnings = [
     "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
 ]
