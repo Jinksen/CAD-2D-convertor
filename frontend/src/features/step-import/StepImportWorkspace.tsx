@@ -12,6 +12,7 @@ import type { ImportSummary } from "./contracts";
 import { MessagesPane } from "./MessagesPane";
 import { BodySettings, ModelSettings } from "./ModelSettings";
 import { ModelTree, type SettingsNode } from "./ModelTree";
+import { ProjectStatus } from "../project/ProjectStatus";
 import { useGlobalShortcuts } from "./useGlobalShortcuts";
 
 // three.js is only needed once the 3D tab is opened, so it lives in its own chunk.
@@ -101,6 +102,7 @@ export function StepImportWorkspace() {
 
   return (
     <>
+      <ProjectStatus />
       <Ribbon hasModel={Boolean(imported)} activePlane={activePlane} run={run}
         onOpen={() => { chooser.current?.click(); }} onPlane={setActivePlane}
         onCompute={compute} onExport={exportSection} />
