@@ -144,6 +144,10 @@ var.vector { font-weight: 700; }
 .section-canvas path { cursor: pointer; }
 .section-canvas path:hover { stroke-width: 1.5; }
 .section-empty { margin: 8px; color: var(--muted); }
+/* T6 */
+.section-canvas { touch-action: none; }
+.section-canvas:focus { outline: none; }
+.section-canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 /* Messages */
 .messages { grid-row: 4; margin: 0 3px 3px; }
