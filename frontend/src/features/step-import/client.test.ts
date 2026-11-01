@@ -20,19 +20,19 @@ describe("importStep", () => {
       expect(JSON.parse(init?.body as string)).toEqual({ path: "C:/motor.step" });
       return Promise.resolve(new Response(JSON.stringify(imported), { status: 200 }));
     };
-    await expect(importStep("C:/motor.step", fetcher)).resolves.toEqual(imported);
+    await expect(importStep("C:/motor.step", undefined, fetcher)).resolves.toEqual(imported);
   });
 
   it("uses the backend's actionable error message", async () => {
     const fetcher: typeof fetch = () => Promise.resolve(new Response(JSON.stringify({
       error: { code: "missing_import_file", message: "The STEP file was not found." },
     }), { status: 404 }));
-    await expect(importStep("C:/missing.step", fetcher)).rejects.toThrow("The STEP file was not found.");
+    await expect(importStep("C:/missing.step", undefined, fetcher)).rejects.toThrow("The STEP file was not found.");
   });
 
   it("rejects malformed success data", async () => {
     const fetcher: typeof fetch = () => Promise.resolve(new Response(JSON.stringify({ ...imported, components: [] })));
-    await expect(importStep("C:/motor.step", fetcher)).rejects.toThrow("invalid import response");
+    await expect(importStep("C:/motor.step", undefined, fetcher)).rejects.toThrow("invalid import response");
   });
 });
 
@@ -46,6 +46,18 @@ describe("importStepFile", () => {
       return Promise.resolve(new Response(JSON.stringify({ ...imported, path: "motor.step" })));
     };
 
-    await expect(importStepFile(file, fetcher)).resolves.toMatchObject({ path: "motor.step" });
+    await expect(importStepFile(file, undefined, fetcher)).resolves.toMatchObject({ path: "motor.step" });
+  });
+});
+
+describe("import cancellation", () => {
+  it("rejects with an AbortError instead of a service error when cancelled", async () => {
+    const controller = new AbortController();
+    const fetcher: typeof fetch = (_url, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => { reject(new TypeError("Failed to fetch")); });
+      controller.abort();
+    });
+    const pending = importStep("C:/motor.step", controller.signal, fetcher);
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
 });

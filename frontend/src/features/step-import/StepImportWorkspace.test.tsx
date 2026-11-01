@@ -157,7 +157,7 @@ describe("STEP workspace", () => {
 
     expect(await screen.findByText(/1 of 1 bodies intersected/)).toBeInTheDocument();
     expect(screen.getByRole("region", { name: /settings/i })).toHaveTextContent("Exact planar cut of all bodies");
-    expect(computeSection).toHaveBeenCalledWith("session-1", { kind: "XY", offset_mm: 15 });
+    expect(computeSection).toHaveBeenCalledWith("session-1", { kind: "XY", offset_mm: 15 }, expect.any(AbortSignal));
     expect(exportButton).toBeEnabled();
     fireEvent.click(exportButton);
     expect(await screen.findByRole("status")).toHaveTextContent("C:\\Exports\\section.zip");
@@ -192,5 +192,73 @@ describe("STEP workspace", () => {
     expect(tree).toHaveTextContent("Plech_1_02");
     expect(screen.getByRole("button", { name: "Plech:1 Plech_1_02" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Rotor" })).toBeInTheDocument();
+  });
+
+  it("runs workflow commands from global keyboard shortcuts but not while typing", async () => {
+    useWorkspaceStore.setState({ imported: summary, selectedComponentId: "body-1" });
+    vi.mocked(fetchPreview).mockReturnValue(new Promise(() => {}));
+    vi.mocked(computeSection).mockResolvedValue({
+      section_id: "section-1", import_id: "session-1",
+      plane: { kind: "XY", offset_mm: 15 }, diagnostics: [],
+      components: [{ component_id: "body-1", wires: [{ closed: true, role: "outer", curves: [
+        { type: "line", start: [0, 0], end: [10, 0] },
+      ] }] }],
+    });
+    vi.mocked(downloadSectionArchive).mockReturnValue(new Promise(() => {}));
+    render(<StepImportWorkspace />);
+    let opened = false;
+    screen.getByLabelText(/choose step file/i).addEventListener("click", () => { opened = true; });
+
+    fireEvent.keyDown(window, { key: "o", ctrlKey: true });
+    expect(opened).toBe(true);
+    fireEvent.keyDown(window, { key: "2" });
+    expect(screen.getByRole("tab", { name: "3D Preview" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(window, { key: "1" });
+    expect(screen.getByRole("tab", { name: "2D Section" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(useWorkspaceStore.getState().selectedComponentId).toBeNull();
+
+    fireEvent.keyDown(screen.getByRole("textbox", { name: /step path/i }), { key: "Enter", ctrlKey: true });
+    expect(computeSection).not.toHaveBeenCalled();
+    fireEvent.keyDown(window, { key: "e", ctrlKey: true });
+    expect(downloadSectionArchive).not.toHaveBeenCalled();
+    fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    await screen.findByRole("button", { name: /export draft dxf/i });
+    fireEvent.keyDown(screen.getByRole("spinbutton", { name: /offset/i }), { key: "2" });
+    expect(screen.getByRole("tab", { name: "2D Section" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(window, { key: "e", ctrlKey: true });
+    expect(downloadSectionArchive).toHaveBeenCalledWith("session-1", "section-1");
+  });
+
+  it("shows elapsed import time and cancels back to idle without an error", async () => {
+    let signal: AbortSignal | undefined;
+    vi.mocked(importStep).mockImplementation((_path, abort) => { signal = abort; return new Promise(() => {}); });
+    render(<StepImportWorkspace />);
+    fireEvent.change(screen.getByRole("textbox", { name: /step path/i }), { target: { value: "C:/motor.step" } });
+    fireEvent.click(screen.getByRole("button", { name: /import step/i }));
+
+    expect(screen.getByRole("region", { name: /messages/i })).toHaveTextContent("Importing… 0 s");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(signal?.aborted).toBe(true);
+    expect(screen.getByRole("status")).toHaveTextContent("Cancelled.");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /import step/i })).toBeEnabled();
+    await waitFor(() => { expect(screen.queryByText(/Importing…/)).not.toBeInTheDocument(); });
+  });
+
+  it("cancels a running section computation", () => {
+    useWorkspaceStore.setState({ imported: summary });
+    vi.mocked(computeSection).mockReturnValue(new Promise(() => {}));
+    render(<StepImportWorkspace />);
+    fireEvent.click(screen.getByRole("button", { name: "Compute" }));
+    expect(screen.getByRole("region", { name: /messages/i })).toHaveTextContent("Computing section… 0 s");
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(vi.mocked(computeSection).mock.calls[0][2]?.aborted).toBe(true);
+    expect(screen.getByRole("status")).toHaveTextContent("Cancelled.");
+    expect(screen.getByRole("button", { name: "Compute" })).toBeEnabled();
+    expect(screen.getByText("No section computed")).toBeInTheDocument();
   });
 });
