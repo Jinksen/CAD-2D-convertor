@@ -5,7 +5,17 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { BoundsMm } from "../step-import/contracts";
 import type { PreviewMeshResponse } from "./contracts";
 import type { SectionPlaneKind, Vec3 } from "../section/plane";
+import { cameraPosition, VIEW_DIRECTIONS, type StandardView } from "./cameraViews";
+import { createRenderScheduler, type RenderScheduler } from "./renderScheduler";
 import { planeGuideFrame } from "./sectionPlane";
+
+const VIEW_BUTTONS: { view: StandardView | "fit"; label: string; title: string }[] = [
+  { view: "fit", label: "Fit", title: "Fit all bodies in view" },
+  { view: "iso", label: "Iso", title: "Isometric view" },
+  { view: "top", label: "Top", title: "Top view (look along -Z)" },
+  { view: "front", label: "Front", title: "Front view (look along +Y)" },
+  { view: "right", label: "Right", title: "Right view (look along -X)" },
+];
 
 interface Props {
   preview: PreviewMeshResponse;
@@ -21,6 +31,8 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
   const containerRef = useRef<HTMLDivElement>(null);
   const meshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const guideRef = useRef<THREE.Group | null>(null);
+  const schedulerRef = useRef<RenderScheduler | null>(null);
+  const applyViewRef = useRef<((view: StandardView | "fit") => void) | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -32,7 +44,7 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
     const radius = Math.max(diagonal, 1);
     const camera = new THREE.PerspectiveCamera(45, 1, Math.max(radius / 10000, 0.001), radius * 100);
     camera.up.set(0, 0, 1);
-    camera.position.copy(center).add(new THREE.Vector3(radius, -radius, radius * 0.75));
+    camera.position.set(...cameraPosition(center.toArray(), VIEW_DIRECTIONS.iso, radius / 2, camera.fov, 1));
     camera.lookAt(center);
     let renderer: THREE.WebGLRenderer;
     try {
@@ -73,19 +85,52 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
     guideRef.current = guide;
 
     const meshes = new Map<string, THREE.Mesh>();
+    const edgeLines: THREE.LineSegments[] = [];
+    const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x1f2328 });
     for (const component of preview.components) {
       const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute("position", new THREE.Float32BufferAttribute(component.positions.flat(), 3));
-      geometry.setAttribute("normal", new THREE.Float32BufferAttribute(component.normals.flat(), 3));
-      geometry.setIndex(component.indices);
+      const position = new THREE.BufferAttribute(component.positions, 3);
+      geometry.setAttribute("position", position);
+      geometry.setAttribute("normal", new THREE.BufferAttribute(component.normals, 3));
+      geometry.setIndex(new THREE.BufferAttribute(component.indices, 1));
       const color = component.color ? new THREE.Color(`rgb(${component.color.join(",")})`) : new THREE.Color("#78a9ca");
-      const material = new THREE.MeshStandardMaterial({ color, side: THREE.DoubleSide, roughness: 0.8 });
+      // Polygon offset pushes faces back so the coincident feature edges stay visible.
+      const material = new THREE.MeshStandardMaterial({
+        color, side: THREE.DoubleSide, roughness: 0.8,
+        polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+      });
       const mesh = new THREE.Mesh(geometry, material);
       mesh.userData.componentId = component.component_id;
       scene.add(mesh);
       meshes.set(component.component_id, mesh);
+      if (component.edgeIndices.length > 0) {
+        const edgeGeometry = new THREE.BufferGeometry();
+        edgeGeometry.setAttribute("position", position);
+        edgeGeometry.setIndex(new THREE.BufferAttribute(component.edgeIndices, 1));
+        const lines = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+        lines.raycast = () => undefined; // picking targets bodies only
+        scene.add(lines);
+        edgeLines.push(lines);
+      }
     }
     meshesRef.current = meshes;
+
+    const scheduler = createRenderScheduler(
+      () => { controls.update(); renderer.render(scene, camera); },
+      () => container.clientWidth > 0 && container.clientHeight > 0,
+    );
+    schedulerRef.current = scheduler;
+    // OrbitControls emits "change" on input and on every damping step until it settles.
+    controls.addEventListener("change", scheduler.request);
+    applyViewRef.current = (view) => {
+      const direction: Vec3 = view === "fit"
+        ? camera.position.clone().sub(controls.target).toArray()
+        : VIEW_DIRECTIONS[view];
+      controls.target.copy(center);
+      camera.position.set(...cameraPosition(center.toArray(), direction, radius / 2, camera.fov, camera.aspect));
+      controls.update();
+      scheduler.request();
+    };
 
     const resize = () => {
       const width = container.clientWidth;
@@ -94,6 +139,7 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       renderer.setSize(width, height);
+      scheduler.request();
     };
     const observer = new ResizeObserver(resize);
     observer.observe(container);
@@ -113,16 +159,13 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
       if (typeof componentId === "string") onSelect(componentId);
     };
     renderer.domElement.addEventListener("click", pick);
-    let frame = 0;
-    const draw = () => {
-      frame = requestAnimationFrame(draw);
-      controls.update();
-      renderer.render(scene, camera);
-    };
-    draw();
+    scheduler.request();
 
     return () => {
-      cancelAnimationFrame(frame);
+      scheduler.dispose();
+      schedulerRef.current = null;
+      applyViewRef.current = null;
+      controls.removeEventListener("change", scheduler.request);
       renderer.domElement.removeEventListener("click", pick);
       observer.disconnect();
       controls.dispose();
@@ -130,6 +173,8 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
         mesh.geometry.dispose();
         (mesh.material as THREE.Material).dispose();
       }
+      for (const lines of edgeLines) lines.geometry.dispose();
+      edgeMaterial.dispose();
       meshesRef.current = new Map();
       guideGeometry.dispose();
       guideSurface.material.dispose();
@@ -146,6 +191,7 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
       const material = mesh.material as THREE.MeshStandardMaterial;
       material.emissive.setHex(componentId === selectedComponentId ? 0x1a3f6b : 0x000000);
     }
+    schedulerRef.current?.request();
   }, [selectedComponentId, preview]);
 
   useEffect(() => {
@@ -155,7 +201,14 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
     guide.position.set(...frame.center);
     guide.rotation.set(...frame.rotation);
     guide.scale.set(frame.width, frame.height, 1);
+    schedulerRef.current?.request();
   }, [bounds, plane, offsetMm, normal, preview]);
 
-  return <div ref={containerRef} className="preview-canvas" aria-label="3D model preview" />;
+  return <>
+    <div className="preview-toolbar" role="toolbar" aria-label="3D view">
+      {VIEW_BUTTONS.map(({ view, label, title }) =>
+        <button key={view} type="button" title={title} onClick={() => applyViewRef.current?.(view)}>{label}</button>)}
+    </div>
+    <div ref={containerRef} className="preview-canvas" aria-label="3D model preview" />
+  </>;
 }

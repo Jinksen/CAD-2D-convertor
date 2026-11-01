@@ -1,4 +1,5 @@
 import { Component, useEffect, useState, type ReactNode } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { useNumberFormat } from "../../app/formatStore";
 import { useWorkspaceStore } from "../../app/workspaceStore";
@@ -25,7 +26,12 @@ class GraphicsErrorBoundary extends Component<{ children: ReactNode }, { message
 export function PreviewView({ imported }: { imported: ImportSummary }) {
   const [preview, setPreview] = useState<PreviewMeshResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { selectedComponentId, selectComponent, activePlane, sectionOffsetMm, customNormal } = useWorkspaceStore();
+  const { selectedComponentId, selectComponent, activePlane, sectionOffsetMm, customNormal } = useWorkspaceStore(
+    useShallow((state) => ({
+      selectedComponentId: state.selectedComponentId, selectComponent: state.selectComponent,
+      activePlane: state.activePlane, sectionOffsetMm: state.sectionOffsetMm, customNormal: state.customNormal,
+    })),
+  );
   const offsetMm = sectionOffsetMm ?? defaultOffset(imported.bounds_mm, activePlane, customNormal);
   const format = useNumberFormat();
   const planeLabel = activePlane === "custom"
@@ -48,6 +54,10 @@ export function PreviewView({ imported }: { imported: ImportSummary }) {
   return <div className="preview-view">
     <p className="preview-plane-label">{planeLabel}</p>
     <p className="preview-help">Drag to orbit · wheel to zoom · click a body to select</p>
+    {preview.coarsened && <p className="preview-note" role="note">
+      Coarse display mesh (deflection {formatLength(preview.deflection_mm, format)}) to stay within the
+      triangle budget. Sectioning and export use exact geometry.
+    </p>}
     <GraphicsErrorBoundary>
       <MeshCanvas preview={preview} bounds={imported.bounds_mm}
         selectedComponentId={selectedComponentId} onSelect={selectComponent}
