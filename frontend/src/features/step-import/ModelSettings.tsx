@@ -55,7 +55,7 @@ export function ModelSettings({ imported, loading, error, onImportPath, onBrowse
     <form className="import-form" onSubmit={submit}>
       <label htmlFor="step-path">STEP path</label>
       <input id="step-path" value={path} onChange={(event) => { setPath(event.target.value); }}
-        placeholder="C:\\Projects\\motor.step" required disabled={loading} />
+        placeholder={"C:\\Projects\\motor.step"} required disabled={loading} />
       <div className="form-buttons">
         <button type="submit" className="primary" disabled={loading}>{loading ? "Importing…" : "Import STEP"}</button>
         <button type="button" disabled={loading} onClick={onBrowse}>Browse…</button>

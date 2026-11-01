@@ -7,6 +7,8 @@ import { StepImportWorkspace } from "../features/step-import/StepImportWorkspace
 import "./App.css";
 import { useWorkspaceStore } from "./workspaceStore";
 
+export const HEALTH_RETRY_MS = 1000;
+
 export function App() {
   const [health, setHealth] = useState<BackendHealth>({ state: "offline" });
   const imported = useWorkspaceStore((state) => state.imported);
@@ -14,11 +16,19 @@ export function App() {
 
   useEffect(() => {
     let active = true;
-    void fetchBackendHealth().then((result) => {
-      if (active) setHealth(result);
-    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // The desktop app starts the geometry service with the window, so keep asking until it answers.
+    const check = () => {
+      void fetchBackendHealth().then((result) => {
+        if (!active) return;
+        setHealth(result);
+        if (result.state !== "online") timer = setTimeout(check, HEALTH_RETRY_MS);
+      });
+    };
+    check();
     return () => {
       active = false;
+      clearTimeout(timer);
     };
   }, []);
 
