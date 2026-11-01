@@ -50,8 +50,8 @@ broken — so what lands in Maxwell is what you modelled.
 
 ## Quick start
 
-1. Do the [one-time setup](#one-time-setup).
-2. Start **CAD2Maxwell** from the Desktop or Start menu (or double-click `START-APP.cmd`).
+1. [Download](#download) and install CAD2Maxwell (or build it from source with the [one-time setup](#one-time-setup)).
+2. Start **CAD2Maxwell** from the Start menu.
 3. **Open STEP** (Ctrl+O) and choose a `.step` / `.stp` file. Try [`docs/demo/demo-motor.step`](docs/demo/demo-motor.step).
 4. Pick a plane in the ribbon (keys **1 / 2 / 3** for XY / XZ / YZ) and set the offset in **Section** settings.
    For laminations that are not axis-aligned, select one sheet and click **Align to selected body**.
@@ -60,6 +60,20 @@ broken — so what lands in Maxwell is what you modelled.
 7. Import `section.dxf` into Maxwell 2D — see the [Maxwell import checklist](docs/maxwell-import-checklist.md).
 
 The [walkthrough](docs/first-trial.md) covers the details and troubleshooting.
+
+## Download
+
+Get the latest build from [Releases](https://github.com/Jinksen/CAD-2D-convertor/releases) (Windows 10/11, x64):
+
+| File | Use it when |
+|------|-------------|
+| `CAD2Maxwell_<version>_x64-setup.exe` | You want a normal install. Per-user, no administrator rights, uninstall from *Settings → Apps*. |
+| `CAD2Maxwell_<version>_x64_portable.zip` | You cannot install software. Extract to a short path such as `C:\Tools\` and run `CAD2Maxwell\CAD2Maxwell.exe`. |
+
+Python, Node and Rust are **not** needed — the geometry service is bundled. Verify a download with
+`Get-FileHash <file> -Algorithm SHA256` against `SHA256SUMS.txt`. The builds are not code-signed yet,
+so Windows SmartScreen may ask once: *More info → Run anyway*.
+The app writes its service log to `%LOCALAPPDATA%\com.cad2maxwell.desktop\logs\backend.log`.
 
 ## Keyboard shortcuts
 
@@ -82,7 +96,7 @@ silently repaired or merged, and existing files are never overwritten.
 
 ## One-time setup
 
-Windows 11 with Git, Python 3.12+ and [uv](https://docs.astral.sh/uv/), Node.js LTS with Corepack,
+Only needed to build from source. Windows 11 with Git, Python 3.12+ and [uv](https://docs.astral.sh/uv/), Node.js LTS with Corepack,
 Rust stable, Visual Studio 2022 Build Tools (**Desktop development with C++**) and the WebView2 Runtime.
 
 ```powershell
@@ -126,12 +140,13 @@ More in [architecture](docs/architecture.md), [geometry](docs/geometry.md),
 - **Align to selected body** needs a body with planar faces, such as a sheet.
 - The 3D preview is coarsened above 50,000 triangles; sectioning always uses the exact geometry.
 - Port 8000 must be free, so one instance runs at a time.
-- The app runs from this checkout's Python environment; there is no standalone installer yet.
+- Windows x64 only; builds are not code-signed yet.
 
 ## Development
 
 ```powershell
 .\scripts\dev.ps1    # hot-reload desktop app with a local backend
+.\scripts\build-release.ps1   # installer, portable ZIP and SHA256SUMS in artifacts/release
 .\scripts\test.ps1   # quality gate: ESLint, tsc, Vitest, Ruff, mypy, pytest, cargo fmt/clippy/test, Pester
 uv run --project backend python scripts/demo/make_demo_motor.py   # regenerate the demo model
 ```
