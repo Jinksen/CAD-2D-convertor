@@ -1,3 +1,4 @@
+from collections import Counter
 from pathlib import Path
 
 from OCP.IFSelect import IFSelect_ReturnStatus
@@ -38,17 +39,36 @@ _UNIT_TO_MM = {
 }
 
 
+_MAX_DETAIL_KINDS = 5
+_MAX_DETAIL_CHARS = 120
+
+
+def _ascii_detail(text: str) -> str:
+    cleaned = " ".join(text.encode("ascii", "replace").decode("ascii").split())
+    return cleaned[:_MAX_DETAIL_CHARS]
+
+
+def _detail_summary(counts: Counter[str]) -> str:
+    shown = [f"{text} (x{count})" for text, count in counts.most_common(_MAX_DETAIL_KINDS)]
+    hidden = len(counts) - len(shown)
+    return "; ".join(shown) + (f"; and {hidden} more kind(s)" if hidden else "")
+
+
 def _check_diagnostics(
     checks: Interface_CheckIterator, phase: str,
 ) -> list[ImportDiagnostic]:
-    """Summarize OCCT checks without exposing source file content in messages."""
+    """Summarize OCCT checks; failures list up to 5 distinct reader messages with counts."""
     warnings = 0
     failures = 0
+    details: Counter[str] = Counter()
     checks.Start()
     while checks.More():
         check = checks.Value()
         warnings += check.NbWarnings()
         failures += check.NbFails()
+        details.update(
+            _ascii_detail(check.CFail(index)) for index in range(1, check.NbFails() + 1)
+        )
         checks.Next()
     diagnostics = []
     if warnings:
@@ -57,11 +77,22 @@ def _check_diagnostics(
             message=f"OpenCascade reported {warnings} STEP {phase} warning(s).",
         ))
     if failures:
+        message = f"OpenCascade reported {failures} STEP {phase} failure(s)."
+        if details:
+            message += f" Messages: {_detail_summary(details)}."
         diagnostics.append(ImportDiagnostic(
-            code=f"step_{phase}_failure", severity="error",
-            message=f"OpenCascade reported {failures} STEP {phase} failure(s).",
+            code=f"step_{phase}_failure", severity="error", message=message,
         ))
     return diagnostics
+
+
+def _downgrade_failures(diagnostics: list[ImportDiagnostic]) -> list[ImportDiagnostic]:
+    """Reader failures are warnings once bodies were imported; the body list stays authoritative."""
+    return [
+        diagnostic.model_copy(update={"severity": "warning"})
+        if diagnostic.code.endswith("_failure") and diagnostic.severity == "error" else diagnostic
+        for diagnostic in diagnostics
+    ]
 
 
 def _source_unit(
@@ -205,5 +236,5 @@ def read_step(path: Path) -> ImportedModel:
         raise StepImportError("STEP file contains no importable solids")
     return ImportedModel(
         bodies=tuple(bodies), source_unit=source_unit, to_mm_scale=scale,
-        bounds_mm=_aggregate_bounds(bodies), diagnostics=tuple(diagnostics),
+        bounds_mm=_aggregate_bounds(bodies), diagnostics=tuple(_downgrade_failures(diagnostics)),
     )

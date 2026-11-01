@@ -41,7 +41,6 @@ from cad2maxwell_backend.services.section_sessions import SectionSessions
 
 LOGGER = logging.getLogger(__name__)
 MAX_UPLOAD_BYTES = 512 * 1024 * 1024
-PREVIEW_CACHE_SIZE = 4
 
 ALLOWED_ORIGINS = (
     "http://127.0.0.1:1420",
@@ -67,6 +66,12 @@ def create_app(import_service: ImportService | None = None) -> FastAPI:
     install_request_security(app, ALLOWED_ORIGINS)
     preview_cache: OrderedDict[str, PreviewMeshResponse] = OrderedDict()
     preview_lock = Lock()
+
+    def drop_preview(import_id: str) -> None:
+        with preview_lock:
+            preview_cache.pop(import_id, None)
+
+    service.sessions.on_remove(drop_preview)  # previews live only as long as their import
 
     @app.get("/api/v1/health", response_model=HealthResponse)
     def health() -> HealthResponse:
@@ -132,9 +137,6 @@ def create_app(import_service: ImportService | None = None) -> FastAPI:
                 if cached is None:
                     cached = generate_preview(imported, bodies)
                     preview_cache[import_id] = cached
-                    if len(preview_cache) > PREVIEW_CACHE_SIZE:
-                        preview_cache.popitem(last=False)
-                preview_cache.move_to_end(import_id)
                 return cached
         except PreviewMeshError as exc:
             return _error(422, "preview_unavailable", str(exc))

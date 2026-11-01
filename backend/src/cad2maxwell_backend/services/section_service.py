@@ -1,15 +1,19 @@
 from dataclasses import replace
 
 from cad2maxwell_backend.formatting import format_quantity
+from cad2maxwell_backend.geometry.bounds import misses_plane
 from cad2maxwell_backend.geometry.dominant_plane import NoPlanarFaceError, dominant_plane
-from cad2maxwell_backend.geometry.section import SectionError, section_shape
+from cad2maxwell_backend.geometry.section import SectionError, plane_frame, section_shape
 from cad2maxwell_backend.geometry.section_classification import classify_wires
 from cad2maxwell_backend.geometry.section_edges import check_section_edges
+from cad2maxwell_backend.geometry.section_regions import check_section_regions
 from cad2maxwell_backend.geometry.section_validation import find_region_overlaps
+from cad2maxwell_backend.geometry.tolerance import DEFAULT_TOLERANCE
 from cad2maxwell_backend.models.sections import (
     ComponentPlaneResponse,
     SectionComponent,
     SectionDiagnostic,
+    SectionPlane,
     SectionRequest,
     SectionResponse,
 )
@@ -26,10 +30,22 @@ class UnknownComponent(ValueError):
     """The import session has no body with the requested component ID."""
 
 
+def _cache_key(plane: SectionPlane) -> tuple[object, ...]:
+    """Plane identity with values quantized to the linear tolerance."""
+    def q(values: tuple[float, ...] | float | None) -> tuple[int, ...]:
+        if values is None:
+            return ()
+        flat = values if isinstance(values, tuple) else (values,)
+        return tuple(round(value / DEFAULT_TOLERANCE.linear_mm) for value in flat)
+    return (plane.kind, q(plane.offset_mm), q(plane.origin_xyz), q(plane.normal_xyz),
+            q(plane.x_dir_xyz))
+
+
 class SectionService:
     def __init__(self, imports: ImportSessions, sections: SectionSessions) -> None:
         self._imports = imports
         self.sections = sections
+        imports.on_remove(sections.remove_import)
 
     def component_plane(self, import_id: str, component_id: str) -> ComponentPlaneResponse:
         record = self._imports.get_record(import_id)
@@ -51,7 +67,15 @@ class SectionService:
         record = self._imports.get_record(request.import_id)
         if record is None:
             raise UnknownImport
+        cache_key = _cache_key(request.plane)
+        cached = self.sections.find_cached(request.import_id, cache_key)
+        if cached is not None:
+            return cached
         source_sha256, bodies = record
+        imported = self._imports.get_response(request.import_id)
+        names = ({component.id: component.display_name for component in imported.components}
+                 if imported is not None else {})
+        frame = plane_frame(request.plane)
         components: list[SectionComponent] = []
         exact = {}
         diagnostics: list[SectionDiagnostic] = []
@@ -59,6 +83,9 @@ class SectionService:
             component_id = stable_component_id(
                 source_sha256, body.occurrence_key, body.solid_ordinal,
             )
+            if misses_plane(body.bounds_mm, frame.origin, frame.normal,
+                            DEFAULT_TOLERANCE.linear_mm):
+                continue
             wires = section_shape(body.shape, request.plane)
             if not wires:
                 continue
@@ -76,6 +103,9 @@ class SectionService:
                         replace(wire, dto=wire.dto.model_copy(update={"role": role}))
                         for wire, role in zip(wires, roles, strict=True)
                     )
+                    diagnostics.extend(check_section_regions(
+                        wires, request.plane, component_id, names.get(component_id, component_id),
+                    ))
             components.append(SectionComponent(
                 component_id=component_id, wires=[wire.dto for wire in wires],
             ))
@@ -95,9 +125,6 @@ class SectionService:
             component_id: wires for component_id, wires in exact.items()
             if all(wire.dto.closed and wire.dto.role is not None for wire in wires)
         }
-        imported = self._imports.get_response(request.import_id)
-        names = ({component.id: component.display_name for component in imported.components}
-                 if imported is not None else {})
         for first_id, second_id, area in find_region_overlaps(classified, request.plane):
             diagnostics.append(SectionDiagnostic(
                 code="overlapping_regions", severity="error",
@@ -105,7 +132,7 @@ class SectionService:
                          f"overlap by {format_quantity(area, 'mm²')}."),
                 component_id=first_id, related_component_id=second_id,
             ))
-        section_id = self.sections.put(exact)
+        section_id = self.sections.put(exact, request.import_id, cache_key)
         response = SectionResponse(
             section_id=section_id, import_id=request.import_id, plane=request.plane,
             components=components, diagnostics=diagnostics,
