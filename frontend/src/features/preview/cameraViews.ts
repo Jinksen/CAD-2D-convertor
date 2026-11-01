@@ -11,6 +11,14 @@ export const VIEW_DIRECTIONS: Record<StandardView, Vec3> = {
   right: [1, 0, 0],
 };
 
+/** Center and enclosing-sphere radius of an axis-aligned box. */
+export function boundsSphere(min: Vec3, max: Vec3): { center: Vec3; radius: number } {
+  return {
+    center: [0, 1, 2].map((axis) => (min[axis] + max[axis]) / 2) as Vec3,
+    radius: Math.hypot(...[0, 1, 2].map((axis) => max[axis] - min[axis])) / 2,
+  };
+}
+
 /** Camera distance at which a sphere of `radius` fits the narrower field of view. */
 export function fitDistance(radius: number, verticalFovDeg: number, aspect: number): number {
   const vertical = (verticalFovDeg * Math.PI) / 180;

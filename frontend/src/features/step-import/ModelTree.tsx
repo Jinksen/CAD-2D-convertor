@@ -1,6 +1,8 @@
+import { useWorkspaceStore } from "../../app/workspaceStore";
 import type { SectionPlaneKind } from "../section/plane";
 import { rgb } from "./color";
 import type { ImportComponent, ImportSummary } from "./contracts";
+import { useGlobalShortcuts } from "./useGlobalShortcuts";
 
 /** The node shown in the Settings pane; null shows the selected body, else the model. */
 export type SettingsNode = "section" | "format" | null;
@@ -25,18 +27,31 @@ interface Props {
 }
 
 export function ModelTree({ imported, node, selectedComponentId, activePlane, onNode, onSelectBody }: Props) {
+  const hiddenIds = useWorkspaceStore((state) => state.hiddenIds);
+  const toggleHidden = useWorkspaceStore((state) => state.toggleHidden);
+  const toggleIsolate = useWorkspaceStore((state) => state.toggleIsolate);
+  // V hides or shows the selected body, I isolates it (again: show all).
+  useGlobalShortcuts((key, ctrl) => {
+    if (ctrl || !selectedComponentId || (key !== "v" && key !== "i")) return false;
+    (key === "v" ? toggleHidden : toggleIsolate)(selectedComponentId);
+    return true;
+  });
   const displayNames = imported?.components.map((item) => item.display_name) ?? [];
   const duplicateNames = new Set(displayNames.filter((name, index) => displayNames.indexOf(name) !== index));
 
   function bodyButton(item: ImportComponent) {
     const duplicate = duplicateNames.has(item.display_name);
-    return <li key={item.id}><button type="button" className="tree-node" aria-pressed={!node && selectedComponentId === item.id}
+    const hidden = hiddenIds.includes(item.id);
+    return <li key={item.id} className="tree-body"><button type="button" className="tree-node" aria-pressed={!node && selectedComponentId === item.id}
       aria-label={duplicate ? `${item.display_name} ${item.export_name}` : undefined}
       onClick={() => { onSelectBody(item.id); }}>
       <span className="color-swatch" style={{ backgroundColor: rgb(item.source_color) }} />
       {item.display_name}
       {duplicate && <span className="tree-secondary">{item.export_name}</span>}
-    </button></li>;
+    </button>
+    <button type="button" className="tree-eye" aria-pressed={!hidden} title={hidden ? "Show body (V)" : "Hide body (V)"}
+      aria-label={hidden ? "Show body" : "Hide body"}
+      onClick={() => { toggleHidden(item.id); }}>{hidden ? "◌" : "◉"}</button></li>;
   }
 
   const groups = imported ? groupByParent(imported.components) : [];

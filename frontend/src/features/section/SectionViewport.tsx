@@ -3,7 +3,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEve
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import type { ImportSummary } from "../step-import/contracts";
 import type { SectionResponse } from "./contracts";
-import { closedWirePath, curvePath, outlineColor } from "./rendering";
+import { useGlobalShortcuts } from "../step-import/useGlobalShortcuts";
+import { closedWirePath, componentBounds, curvePath, outlineColor } from "./rendering";
 import { fitView, panView, screenToView, unitsPerPixel, zoomView, type ViewBox } from "./viewCamera";
 
 interface Props { section: SectionResponse; imported: ImportSummary; bounds: ViewBox }
@@ -19,8 +20,19 @@ export function SectionViewport({ section, imported, bounds }: Props) {
   const [view, setView] = useState(() => fitView(bounds));
   const selectedComponentId = useWorkspaceStore((state) => state.selectedComponentId);
   const selectComponent = useWorkspaceStore((state) => state.selectComponent);
+  const relatedComponentId = useWorkspaceStore((state) => state.relatedComponentId);
+  const hiddenIds = useWorkspaceStore((state) => state.hiddenIds);
+  const focusRequest = useWorkspaceStore((state) => state.focusRequest);
+  const handledFocus = useRef(focusRequest.seq);
   const sources = useMemo(() => new Map(imported.components.map((item) => [item.id, item])), [imported]);
-  function fit() {
+  /** Fits the body when given and found in this section; otherwise everything. */
+  function fit(componentId: string | null = null) {
+    const own = section.components.find((item) => item.component_id === componentId);
+    const target = own ? componentBounds(own) : null;
+    if (target) {
+      setView(fitView({ x: target.x, y: -target.y - target.height, width: target.width, height: target.height }));
+      return;
+    }
     const box = geometry.current && typeof geometry.current.getBBox === "function"
       ? geometry.current.getBBox() : null;
     setView(fitView(box && (box.width > 0 || box.height > 0)
@@ -28,7 +40,20 @@ export function SectionViewport({ section, imported, bounds }: Props) {
   }
   // Fit the rendered analytic paths; the source assembly can be much larger than its section.
   // This component is remounted for every computed section.
-  useLayoutEffect(() => { fit(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => { fit(); }, []); // eslint-disable-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
+  // A diagnostic asked for this body; requests older than this (re)mount are ignored.
+  useEffect(() => {
+    if (focusRequest.seq === handledFocus.current) return;
+    handledFocus.current = focusRequest.seq;
+    fit(focusRequest.componentId);
+  }, [focusRequest]); // eslint-disable-line react-hooks/exhaustive-deps
+  // F / Shift+F anywhere while this view is the visible one.
+  useGlobalShortcuts((key, ctrl, event) => {
+    const svg = canvas.current;
+    if (ctrl || key !== "f" || !svg?.isConnected || svg.closest("[hidden]")) return false;
+    fit(event.shiftKey ? null : selectedComponentId);
+    return true;
+  });
   // React's onWheel is passive, so it cannot stop the page from scrolling.
   useEffect(() => {
     const svg = canvas.current;
@@ -62,7 +87,7 @@ export function SectionViewport({ section, imported, bounds }: Props) {
   function onKeyDown(event: KeyboardEvent<SVGSVGElement>) {
     const pan = PAN_KEYS[event.key] as [number, number] | undefined;
     if (pan) setView(panView(view, pan[0] * view.width, pan[1] * view.height));
-    else if (event.key === "f" || event.key === "F") fit();
+    else if (event.key === "f" || event.key === "F") fit(event.shiftKey ? null : selectedComponentId);
     else if (event.key === "+" || event.key === "=") setView(zoomView(view, 0.8));
     else if (event.key === "-" || event.key === "_") setView(zoomView(view, 1.25));
     else return;
@@ -71,15 +96,16 @@ export function SectionViewport({ section, imported, bounds }: Props) {
   function color(id: string, part: "fill" | "outline") {
     const source = sources.get(id);
     if (selectedComponentId === id) return "#1a5fb4";
+    if (relatedComponentId === id) return "var(--warning, #b35c00)";
     if (!source?.source_color) return "#4a6f8f";
     return part === "outline" ? outlineColor(source.source_color) : `rgb(${source.source_color.map(String).join(",")})`;
   }
   return <>
     <div className="section-view-tools" aria-label="2D view controls">
-      <button type="button" title="Fit section (F)" onClick={fit}>Fit section</button>
+      <button type="button" title="Fit selection (F), fit all (Shift+F)" onClick={() => { fit(selectedComponentId); }}>Fit section</button>
       <button type="button" aria-label="Zoom in" title="Zoom in (+)" onClick={() => { setView(zoomView(view, 0.8)); }}>+</button>
       <button type="button" aria-label="Zoom out" title="Zoom out (−)" onClick={() => { setView(zoomView(view, 1.25)); }}>−</button>
-      <span>Wheel: zoom · drag: pan · arrows: pan · F: fit · click: select</span>
+      <span>Wheel: zoom · drag: pan · arrows: pan · F: fit selection · Shift+F: fit all · click: select</span>
     </div>
     <svg ref={canvas} className="section-canvas" aria-label="2D section geometry" tabIndex={0}
       viewBox={`${String(view.x)} ${String(view.y)} ${String(view.width)} ${String(view.height)}`}
@@ -89,6 +115,7 @@ export function SectionViewport({ section, imported, bounds }: Props) {
       <g ref={geometry} transform="scale(1,-1)" fill="none" strokeWidth={1}>
         {section.diagnostics.every((item) => item.severity !== "error") &&
           section.components.map((component) => {
+            if (hiddenIds.includes(component.component_id)) return null;
             if (!component.wires.every((wire) => wire.closed && wire.role !== null)) return null;
             const source = sources.get(component.component_id);
             return <path key={`${component.component_id}-fill`}
@@ -101,6 +128,9 @@ export function SectionViewport({ section, imported, bounds }: Props) {
           wire.curves.map((curve, curveIndex) => <path
             key={`${component.component_id}-${String(wireIndex)}-${String(curveIndex)}`}
             d={curvePath(curve)} stroke={color(component.component_id, "outline")} vectorEffect="non-scaling-stroke"
+            data-hidden={hiddenIds.includes(component.component_id) || undefined}
+            strokeOpacity={hiddenIds.includes(component.component_id) ? 0.2 : 1}
+            pointerEvents={hiddenIds.includes(component.component_id) ? "none" : undefined}
             onClick={() => { selectComponent(component.component_id); }} />)))}
       </g>
     </svg>
