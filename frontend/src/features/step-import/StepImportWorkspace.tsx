@@ -87,10 +87,12 @@ export function StepImportWorkspace() {
       if (run && !run.busy) compute();
     } else if (ctrl && key === "e") {
       if (run?.exportable && !run.exporting) exportSection();
-    } else if (!ctrl && key === "1" && imported) {
+    } else if (ctrl && key === "1" && imported) {
       setViewportMode("2d");
-    } else if (!ctrl && key === "2" && imported) {
+    } else if (ctrl && key === "2" && imported) {
       show3d();
+    } else if (!ctrl && (key === "1" || key === "2" || key === "3") && imported) {
+      setActivePlane((["XY", "XZ", "YZ"] as const)[Number(key) - 1]);
     } else if (!ctrl && key === "escape") {
       selectComponent(null);
     } else {
@@ -130,9 +132,9 @@ export function StepImportWorkspace() {
             <span>Graphics</span>
             <div className="view-tabs" role="tablist" aria-label="Graphics mode">
               <button type="button" role="tab" aria-selected={Boolean(imported) && viewportMode === "2d"}
-                disabled={!imported} title="2D section (1)" onClick={() => { setViewportMode("2d"); }}>2D Section</button>
+                disabled={!imported} title="2D section (Ctrl+1)" onClick={() => { setViewportMode("2d"); }}>2D Section</button>
               <button type="button" role="tab" aria-selected={Boolean(imported) && viewportMode === "3d"}
-                disabled={!imported} title="3D preview (2)" onClick={show3d}>3D Preview</button>
+                disabled={!imported} title="3D preview (Ctrl+2)" onClick={show3d}>3D Preview</button>
             </div>
           </div>
           {imported && run ? <>

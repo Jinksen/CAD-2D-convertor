@@ -41,7 +41,8 @@ export function Ribbon({ hasModel, activePlane, run, onOpen, onPlane, onCompute,
           disabled={!hasModel}
           className="ribbon-toggle"
           aria-pressed={activePlane === plane.kind}
-          title={plane.kind === "custom" ? "Tilted section plane, for example aligned to a sheet" : undefined}
+          title={plane.kind === "custom" ? "Tilted section plane, for example aligned to a sheet"
+            : `${plane.label} section plane (${String(["XY", "XZ", "YZ"].indexOf(plane.kind) + 1)})`}
           onClick={() => { onPlane(plane.kind); }}
           key={plane.kind}
         >

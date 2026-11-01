@@ -44,3 +44,6 @@ dist/
 target/
 /frontend/src-tauri/gen/
 .pytest-tmp/
+
+# Committed demo model
+!docs/demo/*.step

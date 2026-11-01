@@ -46,7 +46,7 @@ export function ModelTree({ imported, node, selectedComponentId, activePlane, on
       <button type="button" className="tree-node" aria-pressed={node === "format"} onClick={() => { onNode("format"); }}>
         <svg className="tree-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M3 17h18M6 17v-4M10 17v-2M14 17v-4M18 17v-2" /></svg>
-        Units and Number Format
+        Preferences
       </button>
     </div>
     {imported ? <div className="tree">

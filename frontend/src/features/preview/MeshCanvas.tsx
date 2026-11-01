@@ -38,7 +38,7 @@ export function MeshCanvas({ preview, bounds, selectedComponentId, onSelect, pla
     const container = containerRef.current;
     if (!container) return;
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#ffffff");
+    scene.background = new THREE.Color(getComputedStyle(container).getPropertyValue("--canvas-bg").trim() || "#ffffff");
     const center = new THREE.Vector3(...bounds.min_xyz).add(new THREE.Vector3(...bounds.max_xyz)).multiplyScalar(0.5);
     const diagonal = new THREE.Vector3(...bounds.max_xyz).sub(new THREE.Vector3(...bounds.min_xyz)).length();
     const radius = Math.max(diagonal, 1);
