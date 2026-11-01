@@ -31,6 +31,29 @@ For each task:
 
 Avoid giant rewrites.
 
+## Working inside PyCharm (MCP)
+
+When the `pycharm` MCP server is connected, prefer its IDE-aware tools over plain shell/text tools:
+
+| Need | Use |
+|------|-----|
+| Project layout | `list_directory_tree`, `get_project_modules`, `get_project_dependencies` |
+| Interpreter before running Python | `get_python_environment` (backend venv is `backend/.venv`, uv) |
+| Find code | `search_symbol` for identifiers, `search_regex` / `search_text` for text |
+| Understand a symbol | `get_symbol_info` (quick docs, declaration) |
+| Who calls what | `analyze_calls` (call hierarchy) instead of grepping for usages |
+| Rename | `rename_refactoring` (updates all references), never search-and-replace |
+| After every edit | `lint_files` / `get_file_problems` on touched files, then `reformat_file` |
+| Build / type errors | `build_project` |
+| Run tests and apps | `get_run_configurations` + `execute_run_configuration`; otherwise `execute_terminal_command` |
+| Repo state | `git_status`, `get_repositories` |
+| Show the user a file | `open_file_in_editor` |
+
+Notes:
+- Run pytest with `--basetemp .test-tmp/<name>` (as `scripts/test.ps1` does); the system temp dir fails with `PermissionError` on this machine.
+- PyCharm warns "OCP not listed in project requirements" — OCP comes from the `cadquery-ocp-novtk` wheel; ignore that warning.
+- IDE inspections do not replace `scripts/test.ps1` (ruff, mypy, eslint, tsc, vitest, cargo clippy).
+
 ## Source-file guidelines
 
 - Prefer <300 lines.
