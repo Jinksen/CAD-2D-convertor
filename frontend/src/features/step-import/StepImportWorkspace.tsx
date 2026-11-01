@@ -1,109 +1,21 @@
-import { lazy, Suspense, useEffect, useEffectEvent, useRef, useState, type SyntheticEvent } from "react";
+import { lazy, Suspense, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import { useNumberFormat } from "../../app/formatStore";
 import { Ribbon } from "../../app/Ribbon";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { FormatSettings } from "../format/FormatSettings";
-import { formatLengthProduct, listSeparator, type NumberFormat } from "../../lib/formatting";
 import { SectionView } from "../section/SectionView";
-import { SectionMessages, SectionSettings } from "../section/SectionSettings";
+import { SectionSettings } from "../section/SectionSettings";
 import { useSectionRun } from "../section/useSectionRun";
 import { importStep, importStepFile } from "./client";
-import type { BoundsMm, ImportComponent, ImportSummary } from "./contracts";
-import { Progress } from "./Progress";
+import type { ImportSummary } from "./contracts";
+import { MessagesPane } from "./MessagesPane";
+import { BodySettings, ModelSettings } from "./ModelSettings";
+import { ModelTree, type SettingsNode } from "./ModelTree";
+import { useGlobalShortcuts } from "./useGlobalShortcuts";
 
 // three.js is only needed once the 3D tab is opened, so it lives in its own chunk.
 const PreviewView = lazy(() => import("../preview/PreviewView").then((module) => ({ default: module.PreviewView })));
-
-/** Shortcuts are ignored while the user types into a field. */
-function isTyping(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest("input, textarea, select, [contenteditable]") !== null;
-}
-
-function dimensions(bounds: BoundsMm, format: NumberFormat): string {
-  return formatLengthProduct(bounds.max_xyz.map((high, index) => high - bounds.min_xyz[index]), format);
-}
-
-function rgb(color: [number, number, number] | null): string | undefined {
-  return color ? `rgb(${color.map(String).join(",")})` : undefined;
-}
-
-/** Bodies grouped by their parent assembly path; one group means no extra tree level. */
-function groupByParent(components: ImportComponent[]): [string, ImportComponent[]][] {
-  const groups = new Map<string, ImportComponent[]>();
-  for (const component of components) {
-    const parent = component.hierarchy_path.slice(0, -1).join(" / ");
-    groups.set(parent, [...(groups.get(parent) ?? []), component]);
-  }
-  return [...groups.entries()];
-}
-
-function BodySettings({ body }: { body: ImportComponent }) {
-  const format = useNumberFormat();
-  return <>
-    <div className="settings-heading">
-      <strong>Body: {body.display_name}</strong>
-    </div>
-    <h3 className="settings-section">Identification</h3>
-    <dl className="field-list">
-      <dt>Export name</dt><dd>{body.export_name}</dd>
-      <dt>Source name</dt><dd>{body.source_name ?? "—"}</dd>
-      <dt>Assembly path</dt><dd title={body.hierarchy_path.join(" / ")}>{body.hierarchy_path.join(" / ")}</dd>
-      <dt>Name origin</dt><dd>{body.name_provenance ?? "Generated"}</dd>
-      <dt>Color</dt><dd>{body.source_color ? <>
-        <span className="color-swatch" style={{ backgroundColor: rgb(body.source_color) }} />
-        RGB ({body.source_color.join(listSeparator(format))}) · {body.color_provenance ?? "unknown"}
-      </> : "None in source"}</dd>
-    </dl>
-    <h3 className="settings-section">3D body</h3>
-    <dl className="field-list">
-      <dt title="Bounding box extents Δx × Δy × Δz">Size</dt><dd>{dimensions(body.bounds_mm, format)}</dd>
-      <dt>Body ordinal</dt><dd>{body.body_ordinal}</dd>
-    </dl>
-  </>;
-}
-
-interface ModelSettingsProps {
-  imported: ImportSummary | null;
-  loading: boolean;
-  error: string | null;
-  onImportPath: (path: string) => void;
-  onBrowse: () => void;
-}
-
-function ModelSettings({ imported, loading, error, onImportPath, onBrowse }: ModelSettingsProps) {
-  const [path, setPath] = useState("");
-  const format = useNumberFormat();
-  function submit(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault();
-    onImportPath(path.trim());
-  }
-  return <>
-    <div className="settings-heading"><strong>Model</strong></div>
-    <h3 className="settings-section">Source file</h3>
-    <form className="import-form" onSubmit={submit}>
-      <label htmlFor="step-path">STEP path</label>
-      <input id="step-path" value={path} onChange={(event) => { setPath(event.target.value); }}
-        placeholder="C:\\Projects\\motor.step" required disabled={loading} />
-      <div className="form-buttons">
-        <button type="submit" className="primary" disabled={loading}>{loading ? "Importing…" : "Import STEP"}</button>
-        <button type="button" disabled={loading} onClick={onBrowse}>Browse…</button>
-      </div>
-      {error && <p role="alert" className="form-error">{error}</p>}
-    </form>
-    {imported && <>
-      <h3 className="settings-section">Imported model</h3>
-      <dl className="field-list">
-        <dt>Path</dt><dd title={imported.path}>{imported.path}</dd>
-        <dt>SHA-256</dt><dd title={imported.sha256}>{imported.sha256.slice(0, 12)}…</dd>
-        <dt>Source units</dt><dd>{imported.source_unit ?? "Unknown"}</dd>
-        <dt>Bodies</dt><dd>{imported.component_count}</dd>
-        <dt title="Bounding box extents Δx × Δy × Δz">Size</dt><dd>{dimensions(imported.bounds_mm, format)}</dd>
-      </dl>
-    </>}
-  </>;
-}
 
 export function StepImportWorkspace() {
   const [error, setError] = useState<string | null>(null);
@@ -114,9 +26,7 @@ export function StepImportWorkspace() {
   const importing = useRef<AbortController | null>(null);
   const [viewportMode, setViewportMode] = useState<"2d" | "3d">("2d");
   const [previewOpened, setPreviewOpened] = useState(false);
-  // The Settings pane shows this node; with null it shows the selected body, else the model.
-  const [node, setNode] = useState<"section" | "format" | null>(null);
-  const sectionSelected = node === "section";
+  const [node, setNode] = useState<SettingsNode>(null);
   const { activePlane, setActivePlane, imported, selectedComponentId, setImported, selectComponent } = useWorkspaceStore(
     useShallow((state) => ({ activePlane: state.activePlane, setActivePlane: state.setActivePlane,
       imported: state.imported, selectedComponentId: state.selectedComponentId,
@@ -170,10 +80,7 @@ export function StepImportWorkspace() {
     setViewportMode("3d");
   }
 
-  const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
-    if (event.defaultPrevented || event.altKey || isTyping(event.target)) return;
-    const ctrl = event.ctrlKey || event.metaKey;
-    const key = event.key.toLowerCase();
+  useGlobalShortcuts((key, ctrl) => {
     if (ctrl && key === "o") {
       if (!loading) chooser.current?.click();
     } else if (ctrl && key === "enter") {
@@ -187,30 +94,11 @@ export function StepImportWorkspace() {
     } else if (!ctrl && key === "escape") {
       selectComponent(null);
     } else {
-      return;
+      return false;
     }
-    event.preventDefault();
+    return true;
   });
-  useEffect(() => {
-    window.addEventListener("keydown", onKeyDown);
-    return () => { window.removeEventListener("keydown", onKeyDown); };
-  }, []);
 
-  const displayNames = imported?.components.map((item) => item.display_name) ?? [];
-  const duplicateNames = new Set(displayNames.filter((name, index) => displayNames.indexOf(name) !== index));
-
-  function bodyButton(item: ImportComponent) {
-    const duplicate = duplicateNames.has(item.display_name);
-    return <li key={item.id}><button type="button" className="tree-node" aria-pressed={!node && selectedComponentId === item.id}
-      aria-label={duplicate ? `${item.display_name} ${item.export_name}` : undefined}
-      onClick={() => { setNode(null); selectComponent(item.id); }}>
-      <span className="color-swatch" style={{ backgroundColor: rgb(item.source_color) }} />
-      {item.display_name}
-      {duplicate && <span className="tree-secondary">{item.export_name}</span>}
-    </button></li>;
-  }
-
-  const groups = imported ? groupByParent(imported.components) : [];
   return (
     <>
       <Ribbon hasModel={Boolean(imported)} activePlane={activePlane} run={run}
@@ -224,42 +112,14 @@ export function StepImportWorkspace() {
           if (file) void load((signal) => importStepFile(file, signal));
         }} />
       <div className="workspace">
-        <nav className="pane model-builder" aria-label="Model builder">
-          <div className="pane-title">Model Builder</div>
-          <div className="tree-global">
-            <button type="button" className="tree-node" aria-pressed={node === "format"} onClick={() => { setNode("format"); }}>
-              <svg className="tree-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M3 17h18M6 17v-4M10 17v-2M14 17v-4M18 17v-2" /></svg>
-              Units and Number Format
-            </button>
-          </div>
-          {imported ? <div className="tree">
-            <button type="button" className="tree-node" aria-pressed={!node && !selectedComponentId}
-              onClick={() => { setNode(null); selectComponent(null); }}>
-              <svg className="tree-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="1.6" aria-hidden="true"><path d="M6 3h9l4 4v14H6z" /></svg>
-              {imported.path.split(/[\\/]/).pop()}
-            </button>
-            <details open>
-              <summary className="tree-group">Bodies ({imported.component_count})</summary>
-              {groups.length === 1 ? <ul className="tree-list">{groups[0][1].map(bodyButton)}</ul> :
-                groups.map(([parent, bodies]) => <details open key={parent} className="tree-subgroup">
-                  <summary className="tree-group">{parent.split(" / ").pop() || "Root"} ({bodies.length})</summary>
-                  <ul className="tree-list">{bodies.map(bodyButton)}</ul>
-                </details>)}
-            </details>
-            <button type="button" className="tree-node" aria-pressed={sectionSelected}
-              onClick={() => { setNode("section"); setViewportMode("2d"); }}>
-              <svg className="tree-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true"><path d="M3 15 12 10l9 5-9 5z" /></svg>
-              Section {activePlane === "custom" ? "(custom plane)" : activePlane}
-            </button>
-          </div> : <div className="empty-panel"><strong>No model loaded</strong><span>Open a STEP file to inspect its bodies.</span></div>}
-        </nav>
+        <ModelTree imported={imported} node={node} selectedComponentId={selectedComponentId} activePlane={activePlane}
+          onNode={(next) => { setNode(next); if (next === "section") setViewportMode("2d"); }}
+          onSelectBody={(id) => { setNode(null); selectComponent(id); }} />
         <section className="pane settings" aria-label="Settings">
           <div className="pane-title">Settings</div>
           <div className="pane-body">
-            {node === "format" ? <FormatSettings /> : sectionSelected && run ? <SectionSettings run={run} /> : selected ? <BodySettings body={selected} /> :
+            {node === "format" ? <FormatSettings /> : node === "section" && run ? <SectionSettings run={run} /> :
+              selected ? <BodySettings body={selected} /> :
               <ModelSettings imported={imported} loading={loading} error={error}
                 onImportPath={(path) => { void load((signal) => importStep(path, signal)); }}
                 onBrowse={() => { chooser.current?.click(); }} />}
@@ -290,21 +150,8 @@ export function StepImportWorkspace() {
             </div>}
         </main>
       </div>
-      <section className="pane messages" aria-label="Messages">
-        <div className="pane-title">Messages</div>
-        <div className="messages-list">
-          {importStartedAt !== null && <Progress label="Importing" since={importStartedAt} onCancel={cancelImport} />}
-          {run?.startedAt != null && <Progress key={run.startedAt} label="Computing section" since={run.startedAt}
-            onCancel={run.cancel} />}
-          {[notice, run?.notice].filter(Boolean).map((text, index) =>
-            <p key={index} role="status" className="message">{text}</p>)}
-          {imported && imported.diagnostics.length > 0 ? imported.diagnostics.map((item, index) =>
-            <p key={`${item.code}-${String(index)}`} className={`message ${item.severity}`}>
-              <span className="message-severity">{item.severity}</span>{item.message}
-            </p>) : <p className="message">{imported ? "Import completed without messages." : "No messages."}</p>}
-          {run && <SectionMessages run={run} />}
-        </div>
-      </section>
+      <MessagesPane imported={imported} run={run} importStartedAt={importStartedAt} notice={notice}
+        onCancelImport={cancelImport} />
     </>
   );
 }
