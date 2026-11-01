@@ -1,4 +1,4 @@
-import { isPreviewMeshResponse, type PreviewMeshResponse } from "./contracts";
+import { decodePreviewMesh, isPreviewMeshResponse, type PreviewMeshResponse } from "./contracts";
 import { backendHeaders } from "../desktop/runtime";
 
 export async function fetchPreview(importId: string, fetcher: typeof fetch = fetch): Promise<PreviewMeshResponse> {
@@ -27,5 +27,9 @@ export async function fetchPreview(importId: string, fetcher: typeof fetch = fet
   if (!isPreviewMeshResponse(payload) || payload.import_id !== importId) {
     throw new Error("The geometry service returned an invalid preview response.");
   }
-  return payload;
+  try {
+    return decodePreviewMesh(payload);
+  } catch {
+    throw new Error("The geometry service returned an invalid preview response.");
+  }
 }

@@ -169,3 +169,9 @@ var.vector { font-weight: 700; }
 @media (max-width: 1000px) {
   .workspace { grid-template-columns: 200px 240px minmax(300px, 1fr); }
 }
+
+/* T5 */
+.preview-toolbar { position: absolute; z-index: 1; top: 8px; right: 10px; display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line-soft); border-radius: 2px; background: #ffffffe6; }
+.preview-toolbar button { height: 20px; padding: 0 7px; border: 1px solid transparent; border-radius: 2px; background: transparent; color: var(--icon); font-size: 11px; cursor: pointer; }
+.preview-toolbar button:hover { background: #e4e4e4; border-color: var(--line); }
+.preview-note { position: absolute; z-index: 1; top: 60px; left: 10px; max-width: 360px; margin: 0; padding: 3px 6px; border: 1px solid var(--line-soft); border-radius: 2px; background: #fff8e1e6; color: var(--text); font-size: 11px; pointer-events: none; }
