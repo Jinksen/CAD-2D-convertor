@@ -1,6 +1,6 @@
 [package]
 name = "cad2maxwell-desktop"
-version = "0.1.0"
+version = "0.1.1"
 description = "CAD2Maxwell desktop host"
 authors = ["CAD2Maxwell contributors"]
 edition = "2024"
