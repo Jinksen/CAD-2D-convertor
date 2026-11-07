@@ -137,9 +137,9 @@ export function StepImportWorkspace() {
             <span>Graphics</span>
             <div className="view-tabs" role="tablist" aria-label="Graphics mode">
               <button type="button" role="tab" aria-selected={Boolean(imported) && viewportMode === "2d"}
-                disabled={!imported} title="2D section (Ctrl+1)" onClick={() => { setViewportMode("2d"); }}>2D Section</button>
+                disabled={!imported} title="2D section (Ctrl+1)" onClick={() => { setViewportMode("2d"); }}>2D section</button>
               <button type="button" role="tab" aria-selected={Boolean(imported) && viewportMode === "3d"}
-                disabled={!imported} title="3D preview (Ctrl+2)" onClick={show3d}>3D Preview</button>
+                disabled={!imported} title="3D preview (Ctrl+2)" onClick={show3d}>3D preview</button>
             </div>
           </div>
           {imported && run ? <>

@@ -3,6 +3,7 @@ import type { KeyboardEvent, SyntheticEvent } from "react";
 import { useNumberFormat } from "../../app/formatStore";
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import { displayToMm, formatDirection, mmToDisplay } from "../../lib/formatting";
+import { SeverityIcon } from "../../lib/icons";
 import { QuantityInput } from "../../lib/QuantityInput";
 import { planeAxis } from "./plane";
 import type { SectionRun } from "./useSectionRun";
@@ -63,7 +64,7 @@ export function SectionSettings({ run }: { run: SectionRun }) {
           Select a sheet and click Align to selected body to cut it in its own plane.</>
         : <>The {plane} plane is <var>{planeAxis(plane)}</var> = const; the initial offset is the model midpoint.</>}</p>
       <div className="form-buttons">
-        <button type="submit" className="primary" disabled={busy}>{run.loading ? "Computing…" : "Compute Section"}</button>
+        <button type="submit" className="primary" disabled={busy}>{run.loading ? "Computing…" : "Compute section"}</button>
       </div>
       {run.error && <p role="alert" className="form-error">{run.error}</p>}
     </form>
@@ -79,7 +80,7 @@ export function SectionSettings({ run }: { run: SectionRun }) {
           <p className="settings-note">Draft DXF bundle: complex Maxwell import still needs verification.</p>
           <div className="form-buttons">
             <button type="button" disabled={run.exporting}
-              onClick={run.exportSection}>{run.exporting ? "Exporting..." : "Export draft DXF"}</button>
+              onClick={run.exportSection}>{run.exporting ? "Exporting…" : "Export draft DXF"}</button>
           </div>
         </>}
         {run.exportLocation && <p role="status" className="settings-note">
@@ -108,9 +109,9 @@ export function SectionMessages({ run }: { run: SectionRun }) {
   </>;
 }
 
-const SEVERITY_LABELS = { info: "ℹ INFO", warning: "⚠ WARNING", error: "✕ ERROR" } as const;
+const SEVERITY_LABELS = { info: "Info", warning: "Warning", error: "Error" } as const;
 
 /** Icon plus text, so severity never relies on colour alone (spec 44). */
 export function SeverityLabel({ severity }: { severity: keyof typeof SEVERITY_LABELS }) {
-  return <span className="message-severity">{SEVERITY_LABELS[severity]}</span>;
+  return <span className="message-severity"><SeverityIcon severity={severity} />{SEVERITY_LABELS[severity]}</span>;
 }

@@ -82,12 +82,12 @@ describe("STEP workspace", () => {
     vi.mocked(fetchPreview).mockReturnValue(new Promise(() => {}));
     render(<StepImportWorkspace />);
 
-    fireEvent.click(screen.getByRole("tab", { name: "3D Preview" }));
+    fireEvent.click(screen.getByRole("tab", { name: "3D preview" }));
 
     expect(screen.getByText("Generating 3D preview…")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "3D Preview" })).toHaveAttribute("aria-selected", "true");
-    fireEvent.click(screen.getByRole("tab", { name: "2D Section" }));
-    expect(screen.getByRole("tab", { name: "2D Section" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "3D preview" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("tab", { name: "2D section" }));
+    expect(screen.getByRole("tab", { name: "2D section" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("preserves a computed section while inspecting 3D", async () => {
@@ -105,8 +105,8 @@ describe("STEP workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: /compute section/i }));
     await screen.findByRole("button", { name: /export draft dxf/i });
 
-    fireEvent.click(screen.getByRole("tab", { name: "3D Preview" }));
-    fireEvent.click(screen.getByRole("tab", { name: "2D Section" }));
+    fireEvent.click(screen.getByRole("tab", { name: "3D preview" }));
+    fireEvent.click(screen.getByRole("tab", { name: "2D section" }));
 
     expect(screen.getByRole("button", { name: /export draft dxf/i })).toBeInTheDocument();
     expect(computeSection).toHaveBeenCalledTimes(1);
@@ -223,9 +223,9 @@ describe("STEP workspace", () => {
     fireEvent.keyDown(window, { key: "o", ctrlKey: true });
     expect(opened).toBe(true);
     fireEvent.keyDown(window, { key: "2", ctrlKey: true });
-    expect(screen.getByRole("tab", { name: "3D Preview" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "3D preview" })).toHaveAttribute("aria-selected", "true");
     fireEvent.keyDown(window, { key: "1", ctrlKey: true });
-    expect(screen.getByRole("tab", { name: "2D Section" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "2D section" })).toHaveAttribute("aria-selected", "true");
     fireEvent.keyDown(window, { key: "Escape" });
     expect(useWorkspaceStore.getState().selectedComponentId).toBeNull();
 
@@ -236,7 +236,7 @@ describe("STEP workspace", () => {
     fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
     await screen.findByRole("button", { name: /export draft dxf/i });
     fireEvent.keyDown(screen.getByRole("spinbutton", { name: /offset/i }), { key: "2" });
-    expect(screen.getByRole("tab", { name: "2D Section" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "2D section" })).toHaveAttribute("aria-selected", "true");
     fireEvent.keyDown(window, { key: "e", ctrlKey: true });
     expect(downloadSectionArchive).toHaveBeenCalledWith("session-1", "section-1");
   });

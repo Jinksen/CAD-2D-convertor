@@ -9,7 +9,7 @@ export function SectionView({ run }: { run: SectionRun }) {
     return <div className="section-view">
       <div className="empty-panel section-placeholder">
         <strong>{run.loading ? "Computing exact section…" : "No section computed"}</strong>
-        <span>Choose a plane and offset in Settings, then click Compute Section.</span>
+        <span>Choose a plane and offset in Settings, then click Compute section.</span>
       </div>
     </div>;
   }
