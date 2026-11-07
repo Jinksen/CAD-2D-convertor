@@ -61,7 +61,7 @@ describe("visibility store", () => {
   });
 });
 
-describe("Model Builder visibility", () => {
+describe("Model builder visibility", () => {
   it("eye button and V / I keys change visibility", () => {
     render(<ModelTree imported={imported} node={null} selectedComponentId="a" activePlane="XY"
       onNode={vi.fn()} onSelectBody={vi.fn()} />);
@@ -106,7 +106,7 @@ describe("diagnostics focus (T21)", () => {
     const all = viewBox(canvas);
     view.rerender(<><SectionViewport section={section} imported={imported}
       bounds={{ x: 0, y: -10, width: 100, height: 10 }} /><SectionMessages run={run} /></>);
-    expect(screen.getByText(/✕ ERROR/)).toBeInTheDocument();
+    expect(screen.getByText("Error")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Select Rotor" }));
     const state = useWorkspaceStore.getState();
     expect(state.selectedComponentId).toBe("a");
@@ -129,7 +129,7 @@ describe("Messages pane", () => {
   it("labels severities with icon and text, and Ctrl+L focuses the pane", () => {
     render(<MessagesPane {...props} importStartedAt={null} imported={{ ...imported, diagnostics: [
       { code: "w", severity: "warning", message: "Partial", component_id: null }] }} />);
-    expect(screen.getByText("⚠ WARNING")).toBeInTheDocument();
+    expect(screen.getByText("Warning")).toBeInTheDocument();
     fireEvent.keyDown(window, { key: "l", ctrlKey: true });
     expect(screen.getByLabelText("Messages")).toHaveFocus();
   });
