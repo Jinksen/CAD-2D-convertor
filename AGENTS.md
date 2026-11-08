@@ -6,19 +6,15 @@ Build CAD2Maxwell as a robust engineering preprocessor for converting exact 3D C
 
 Read `CAD2Maxwell_PROJECT_SPEC.md` before substantial changes.
 
-## UI rewrite direction
+## Desktop UI
 
-The project is migrating its desktop UI to the native Rust [Rune](https://github.com/anomalyco/rune) framework. Read [docs/rune-migration.md](docs/rune-migration.md) before UI or desktop-shell work; it defines the migration plan, compatibility gates, pinned Rune revision, and the one-worktree/one-PR policy for the rewrite.
+The desktop UI is the native Rust [Rune](https://github.com/anomalyco/rune) framework. It lives in `frontend/rune-app`. Read [docs/rune-migration.md](docs/rune-migration.md) before UI or desktop-shell work; it records the plan, gate results, known gaps and the pinned Rune revision. Update the pin only through a deliberate review.
 
-Treat the React/Vite/Tauri UI as the current production implementation, not the target architecture. Keep it working until the Rune replacement passes the documented parity and packaging gates. Do not start a broad rewrite or remove the current UI as part of an unrelated task.
-
-For the full rewrite, use exactly one dedicated worktree and branch, keep the migration commits together there, and open only one PR after the complete app works and passes its gates. Do not create intermediate PRs or additional rewrite worktrees.
-
-The migration changes the desktop UI and shell, not the geometry authority: Python/OpenCascade remains the only source of exact CAD geometry, sectioning, validation, and export. Preserve the typed local-service boundary and never move geometry algorithms into the UI.
+The rewrite changes the desktop UI and shell, not the geometry authority: Python/OpenCascade remains the only source of exact CAD geometry, sectioning, validation, and export. Preserve the typed local-service boundary and never move geometry algorithms into the UI.
 
 ## Architectural rules
 
-- Rune/Rust = target desktop UI; Tauri + React + TypeScript = current production UI during migration.
+- Rune/Rust = desktop UI (`frontend/rune-app`).
 - Python/OpenCascade = geometry authority.
 - Rust = thin desktop/service bridge.
 - Geometry logic must not live in the UI.
@@ -62,7 +58,7 @@ When the `pycharm` MCP server is connected, prefer its IDE-aware tools over plai
 Notes:
 - Run pytest with `--basetemp .test-tmp/<name>` (as `scripts/test.ps1` does); the system temp dir fails with `PermissionError` on this machine.
 - PyCharm warns "OCP not listed in project requirements" — OCP comes from the `cadquery-ocp-novtk` wheel; ignore that warning.
-- IDE inspections do not replace `scripts/test.ps1` (ruff, mypy, eslint, tsc, vitest, cargo clippy).
+- IDE inspections do not replace `scripts/test.ps1` (ruff, mypy, pytest, cargo clippy).
 
 ## Source-file guidelines
 

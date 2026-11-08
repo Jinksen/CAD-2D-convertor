@@ -37,6 +37,24 @@ function New-SessionToken {
     return ([BitConverter]::ToString($bytes)).Replace('-', '')
 }
 
+function Get-AppVersion {
+    param([Parameter(Mandatory)][string]$RepositoryRoot)
+
+    $manifest = Get-Content -Raw (Join-Path $RepositoryRoot 'frontend/rune-app/Cargo.toml')
+    if ($manifest -notmatch '(?m)^version\s*=\s*"([^"]+)"') { throw 'No version found in frontend/rune-app/Cargo.toml.' }
+    return $Matches[1]
+}
+
+function Get-InnoSetupCompiler {
+    $command = Get-Command 'ISCC.exe' -ErrorAction SilentlyContinue
+    if ($null -ne $command) { return $command.Source }
+    foreach ($base in @(${env:ProgramFiles(x86)}, $env:ProgramFiles, (Join-Path $env:LOCALAPPDATA 'Programs'))) {
+        $candidate = Join-Path $base 'Inno Setup 6/ISCC.exe'
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+    }
+    throw 'Inno Setup 6 (ISCC.exe) was not found. Install it with: winget install JRSoftware.InnoSetup'
+}
+
 function Get-BackendPythonPath {
     param([Parameter(Mandatory)][string]$BackendPath)
 
@@ -125,7 +143,7 @@ function Enable-MSVCLinker {
 }
 
 function Assert-DeveloperPrerequisites {
-    foreach ($command in @('corepack', 'uv', 'cargo', 'rustc')) {
+    foreach ($command in @('uv', 'cargo', 'rustc')) {
         Assert-CommandExists -Name $command
     }
 

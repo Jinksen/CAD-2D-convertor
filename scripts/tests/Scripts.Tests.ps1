@@ -27,6 +27,10 @@ Describe 'Developer script helpers' {
         New-SessionToken | Should Match '^[0-9A-F]{64}$'
     }
 
+    It 'reads the app version from the Rune manifest' {
+        Get-AppVersion -RepositoryRoot (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path | Should Match '^\d+\.\d+\.\d+$'
+    }
+
     It 'starts the installed backend Python process directly' {
         $python = Get-BackendPythonPath -BackendPath 'C:\CAD Projects\Motor Tool\backend'
         $arguments = Get-BackendProcessArguments

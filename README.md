@@ -70,7 +70,7 @@ Get the latest build from [Releases](https://github.com/Jinksen/CAD-2D-convertor
 | `CAD2Maxwell_<version>_x64-setup.exe` | You want a normal install. Per-user, no administrator rights, uninstall from *Settings → Apps*. |
 | `CAD2Maxwell_<version>_x64_portable.zip` | You cannot install software. Extract to a short path such as `C:\Tools\` and run `CAD2Maxwell\CAD2Maxwell.exe`. |
 
-Python, Node and Rust are **not** needed — the geometry service is bundled. Verify a download with
+Python and Rust are **not** needed — the geometry service is bundled. Verify a download with
 `Get-FileHash <file> -Algorithm SHA256` against `SHA256SUMS.txt`. The builds are not code-signed yet,
 so Windows SmartScreen may ask once: *More info → Run anyway*.
 The app writes its service log to `%LOCALAPPDATA%\com.cad2maxwell.desktop\logs\backend.log`.
@@ -97,11 +97,12 @@ silently repaired or merged, and existing files are never overwritten.
 
 ## One-time setup
 
-Only needed to build from source. Windows 11 with Git, Python 3.12+ and [uv](https://docs.astral.sh/uv/), Node.js LTS with Corepack,
-Rust stable, Visual Studio 2022 Build Tools (**Desktop development with C++**) and the WebView2 Runtime.
+Only needed to build from source. Windows 11 with Git, Python 3.12+ and [uv](https://docs.astral.sh/uv/), Rust stable and Visual Studio 2022 Build Tools
+(**Desktop development with C++**). Running the app needs a GPU-capable Windows desktop; tests are headless.
+Building the installer also needs [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`).
 
 ```powershell
-.\scripts\setup.ps1             # install pinned frontend and Python dependencies
+.\scripts\setup.ps1             # fetch the pinned Rust and Python dependencies
 .\scripts\build-trial.ps1       # build artifacts/CAD2Maxwell/CAD2Maxwell.exe
 .\scripts\install-shortcuts.ps1 # add CAD2Maxwell to the Desktop and Start menu
 ```
@@ -122,11 +123,11 @@ uv run --project backend python -m cad2maxwell_backend.cli `
 
 The output path must be absolute and unused; the command writes `section.dxf` and `section.json`.
 
-## Current production architecture
+## Architecture
 
 ```text
-React/TypeScript UI ──► thin Tauri/Rust shell ──► local FastAPI service ──► OpenCascade exact geometry
-   (no CAD objects)       (dialogs, process)        (sessions, validation)     (STEP/XCAF, B-Rep section)
+Rune native UI ──► Rust service adapter ──► local FastAPI service ──► OpenCascade exact geometry
+ (no CAD objects)   (dialogs, process)      (sessions, validation)     (STEP/XCAF, B-Rep section)
 ```
 
 The UI only ever sees typed DTOs; exact shapes stay in the Python process. Sessions are bounded,
@@ -135,8 +136,8 @@ More in [architecture](docs/architecture.md), [geometry](docs/geometry.md),
 [DXF export](docs/dxf-export.md) and [UX](docs/ux.md).
 [`CAD2Maxwell_PROJECT_SPEC.md`](CAD2Maxwell_PROJECT_SPEC.md) is the product source of truth.
 
-The target Rune architecture and staged replacement plan are documented in the
-[Rune migration plan](docs/rune-migration.md).
+The Rune migration plan, gate results and known gaps are in
+[docs/rune-migration.md](docs/rune-migration.md).
 
 ## Known limitations
 
@@ -148,12 +149,12 @@ The target Rune architecture and staged replacement plan are documented in the
 
 ## Development
 
-The desktop UI is being migrated from React/Tauri to the native Rust [Rune](https://github.com/anomalyco/rune) framework. The current app remains the production implementation during the staged migration. See the [Rune migration plan](docs/rune-migration.md) before changing desktop architecture.
+The desktop UI is a native Rust app built with the [Rune](https://github.com/anomalyco/rune) framework (`frontend/rune-app`, pinned revision). See the [Rune migration plan](docs/rune-migration.md) before changing desktop architecture.
 
 ```powershell
-.\scripts\dev.ps1    # hot-reload desktop app with a local backend
+.\scripts\dev.ps1    # desktop app (cargo run) with a local backend
 .\scripts\build-release.ps1   # installer, portable ZIP and SHA256SUMS in artifacts/release
-.\scripts\test.ps1   # quality gate: ESLint, tsc, Vitest, Ruff, mypy, pytest, cargo fmt/clippy/test, Pester
+.\scripts\test.ps1   # quality gate: Ruff, mypy, pytest, cargo fmt/clippy/test for the Rune app, Pester
 uv run --project backend python scripts/demo/make_demo_motor.py   # regenerate the demo model
 ```
 

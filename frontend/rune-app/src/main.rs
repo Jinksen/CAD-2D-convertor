@@ -1,0 +1,52 @@
+//! CAD2Maxwell native desktop app (Rune). Geometry stays in the local Python/OpenCascade service.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod api;
+mod archive;
+mod backend;
+mod format;
+mod project;
+mod render3d;
+mod state;
+mod tasks;
+mod ui;
+
+use rune::{App, AppSpec};
+
+use crate::api::Client;
+use crate::state::AppState;
+use crate::tasks::Tasks;
+
+/// Service start-up polls for about ten seconds before reporting it offline.
+const HEALTH_ATTEMPTS: u32 = 40;
+
+/// Folder name of the remembered theme and number format.
+const PREFS_ID: &str = "com.cad2maxwell.desktop";
+
+fn main() {
+    let backend = backend::start();
+    let client = Client::from_env(backend.token.clone());
+    let spec = AppSpec {
+        min_size: Some((960.0, 600.0)),
+        on_key: Some(ui::on_key),
+        poll: Some(ui::poll),
+        ..AppSpec::new("CAD2Maxwell", (1440.0, 900.0), AppState::default, ui::view)
+    };
+    let app = App::new(spec);
+    // `AppHandle::update` runs the closure on the UI thread and wakes the event loop.
+    let handle = app.handle();
+    let tasks = Tasks::new(client, move |update| {
+        handle.update(move |state, _| update(state))
+    });
+    app.init(move || {
+        let mut state = AppState {
+            shell: state::shell::ShellState::with_prefs(rune::prefs::Prefs::open(PREFS_ID)),
+            tasks: Some(tasks),
+            ..AppState::default()
+        };
+        state.check_service(HEALTH_ATTEMPTS);
+        state
+    })
+    .run();
+    backend::stop(&backend);
+}

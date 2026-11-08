@@ -4,10 +4,8 @@ $ErrorActionPreference = 'Stop'
 Assert-DeveloperPrerequisites
 $root = Get-RepositoryRoot
 $backend = Join-Path $root 'backend'
-$frontend = Join-Path $root 'frontend'
 $token = New-SessionToken
 $env:CAD2MAXWELL_SESSION_TOKEN = $token
-$env:VITE_SESSION_TOKEN = $token
 
 $backendProcess = $null
 try {
@@ -22,13 +20,8 @@ try {
 
     Wait-BackendReady -BackendProcess $backendProcess -Token $token
 
-    Push-Location $frontend
-    try {
-        Invoke-NativeCommand -Command (Join-Path $frontend 'node_modules/.bin/tauri.CMD') -Arguments @('dev')
-    }
-    finally {
-        Pop-Location
-    }
+    # The app sees the token and uses this service instead of spawning a bundled one.
+    Invoke-NativeCommand -Command 'cargo' -Arguments @('run', '--manifest-path', 'frontend/rune-app/Cargo.toml')
 }
 finally {
     if ($null -ne $backendProcess -and -not $backendProcess.HasExited) {
@@ -36,5 +29,4 @@ finally {
         $backendProcess.WaitForExit()
     }
     Remove-Item Env:CAD2MAXWELL_SESSION_TOKEN -ErrorAction SilentlyContinue
-    Remove-Item Env:VITE_SESSION_TOKEN -ErrorAction SilentlyContinue
 }

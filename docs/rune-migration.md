@@ -2,7 +2,7 @@
 
 ## Decision and status
 
-CAD2Maxwell's target desktop UI is a native Rust application built with [Rune](https://github.com/anomalyco/rune). The current React/Vite/Tauri application remains the production implementation until the replacement passes the acceptance gates below. This is a UI and desktop-shell migration, not a geometry-engine rewrite.
+CAD2Maxwell's target desktop UI is a native Rust application built with [Rune](https://github.com/anomalyco/rune). The Rune app in `frontend/rune-app` is the production implementation; the former React/Vite/Tauri application is retired. This is a UI and desktop-shell migration, not a geometry-engine rewrite.
 
 The Rune repository describes itself as a native GPU-rendered UI framework and provides native windows, accessibility, file-drop handlers, native file dialogs behind a feature, and headless rendering/input tests. It also exposes vector `Shape`/`Path` rendering. It is pre-release (`0.0.1`), its renderer is new to this project, and the repository asks consumers to pin a `dev` revision. The evaluation spike pins the revision current on 2026-11-08:
 
@@ -33,7 +33,7 @@ Rune native UI
 - Keep the service's loopback binding, per-session authentication, typed DTOs, error handling, and local-only data flow.
 - Rust may own the native window, keyboard/selection state, file dialogs, and service/process lifecycle. Keep it a thin adapter; do not port domain geometry to Rust.
 - The UI may prepare display-only representations from DTOs. It must not mutate/export those representations as if they were exact CAD geometry.
-- Remove React, Vite, Three.js, and Tauri only after the Rune replacement is the default production app and all parity gates pass.
+- React, Vite, Three.js, and Tauri have been removed; Rune is the only production UI.
 
 ## Why a staged migration
 
@@ -44,6 +44,8 @@ Rune is a UI framework, not a drop-in replacement for React or Tauri. Replacing 
 Perform the complete rewrite in exactly one dedicated worktree on one branch. Keep all migration commits together on that branch, including the feasibility work and implementation. Do not split phases into separate worktrees, stacked branches, or intermediate PRs. Open one PR only when the Rune app is complete, functional, and passes the acceptance gates; merge only that final PR. If a feasibility gate blocks the rewrite, report the blocker in that same worktree rather than opening a partial migration PR.
 
 ## Migration phases
+
+Status: phases 0-4 are done (the spike became `frontend/rune-app`).
 
 ### 0. Evaluation spike
 
@@ -83,3 +85,20 @@ Make Rune the default dev, test, build, install, and release path only after the
 - Viewport stress tests cover realistic and large models with measured frame time, memory, input responsiveness, and zoom-dependent display tolerance. Rendering never changes exact export results.
 - Keyboard, accessibility, native dialogs, error states, app lifecycle, and Windows packaging have automated or documented integration checks.
 - Developer setup, CI, packaging, and docs no longer require the retired UI stack once it is removed.
+
+## Spike and gate results
+
+Measured headless, release build, on the development machine (single run; rerun before relying on them).
+
+**2D section frame (median / p95):** 100 curves 0.12 / 0.14 ms; 5k curves 2.14 / 3.20 ms; 100k curves 44 / 54 ms (over the frame budget; real motor sections have about 100 curves, 0.10 ms). Arcs stay analytic in app state; zoom-dependent tessellation (0.2 px tolerance) is display-only and never reaches export.
+
+**3D preview:** Rune has no 3D or GPU-texture API, so the app uses a banded multithreaded CPU rasterizer into `rune::Pixels` with id-buffer picking. Frame time (median / p95) at 1280x760 / 2560x1520: 20k triangles 2.3 / 5.7 ms; 200k 7.1 / 12.5 ms; 1M 24.4 / 36.4 ms; 2M 45.1 / 56.7 ms. Buffers: 12 MB / 47 MB.
+
+**Not measured:** `Pixels` upload cost and an on-screen interactive check.
+
+**Known gaps:**
+- Triangles crossing the near plane are dropped, not clipped.
+- 2D fills skip wires above 3000 points.
+- Rune fills have no holes, so holes are painted over.
+
+**Packaging:** `scripts/build-release.ps1` freezes the service with PyInstaller, builds the release app, then produces a per-user Inno Setup installer (`installer/cad2maxwell.iss`) and a portable ZIP from the same staged folder. `cargo test` is headless and needs no GPU; one service test is `#[ignore]`d.

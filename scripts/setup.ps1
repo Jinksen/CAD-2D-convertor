@@ -7,7 +7,7 @@ $env:UV_CACHE_DIR = Join-Path $root '.uv-cache'
 
 Push-Location $root
 try {
-    Invoke-NativeCommand -Command 'corepack' -Arguments @('pnpm', 'install', '--frozen-lockfile')
+    Invoke-NativeCommand -Command 'cargo' -Arguments @('fetch', '--locked', '--manifest-path', 'frontend/rune-app/Cargo.toml')
     Invoke-NativeCommand -Command 'uv' -Arguments @('sync', '--project', (Join-Path $root 'backend'))
 }
 finally {
