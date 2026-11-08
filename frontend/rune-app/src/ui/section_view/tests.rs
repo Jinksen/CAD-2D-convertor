@@ -96,7 +96,10 @@ fn state_with(section: SectionResponse) -> AppState {
 fn runtime(state: AppState) -> Runtime<AppState> {
     let mut rt = Runtime::new(
         state,
-        |s: &AppState, _| canvas(s, &rune::tok::theme(false)),
+        |s: &AppState, cx| {
+            let t = rune::tok::theme(false);
+            canvas(s, &t, &crate::ui::kit(&t, cx.accent()))
+        },
         (800.0, 640.0),
         Env {
             system_dark: false,

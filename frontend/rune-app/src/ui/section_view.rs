@@ -11,6 +11,8 @@ use rune::{
     WheelEvent, canvas as draw, col, row, text,
 };
 
+use rune_kit::Kit;
+
 use super::button;
 use crate::api::dto::{SectionComponent, SectionResponse, SectionWire, Severity, WireRole};
 use crate::state::AppState;
@@ -340,7 +342,7 @@ fn click(s: &mut AppState, at: P) {
     }
 }
 
-pub fn canvas(s: &AppState, t: &Theme) -> El {
+pub fn canvas(s: &AppState, t: &Theme, k: &Kit) -> El {
     let note = |msg: &str| {
         text(msg.to_owned())
             .font(type_::LABEL)
@@ -397,16 +399,16 @@ pub fn canvas(s: &AppState, t: &Theme) -> El {
         .py(space::S1)
         .items_center()
         .child(
-            button(t, "fit-view", "Fit", true).on_press(|s: &mut AppState| {
+            button(k, "fit-view", "Fit", true).on_press(|s: &mut AppState| {
                 let id = s.model.selected.clone();
                 s.section.fit(id.as_deref());
             }),
         )
         .child(
-            button(t, "zoom-in", "+", true).on_press(|s: &mut AppState| s.section.zoom(0.8, None)),
+            button(k, "zoom-in", "+", true).on_press(|s: &mut AppState| s.section.zoom(0.8, None)),
         )
         .child(
-            button(t, "zoom-out", "-", true)
+            button(k, "zoom-out", "-", true)
                 .on_press(|s: &mut AppState| s.section.zoom(1.25, None)),
         )
         .child(note(status));

@@ -6,6 +6,8 @@ use rune::{
     Drag, El, Key, KeyEvent, Phase, PointerButton, SurfaceFit, Tx, WheelEvent, col, row, text,
 };
 
+use rune_kit::Kit;
+
 use super::{button, heading};
 use crate::api::dto::{BoundsMm, SectionPlane};
 use crate::render3d::raster::{Body, Line, Scene, guide_outline};
@@ -19,12 +21,12 @@ const DEFAULT_COLOR: [u8; 3] = [0x78, 0xa9, 0xca];
 const SELECTED_TINT: [f32; 3] = [26.0, 63.0, 107.0];
 const CLICK_SLOP: f32 = 4.0;
 
-pub fn viewport(s: &AppState, t: &Theme) -> El {
+pub fn viewport(s: &AppState, t: &Theme, k: &Kit) -> El {
     let three_d = s.preview.mode == ViewportMode::ThreeD;
     let body = if three_d {
         canvas(s, t)
     } else {
-        super::section_view::canvas(s, t)
+        super::section_view::canvas(s, t, k)
     };
     let mut c = col()
         .key("viewport")
@@ -42,12 +44,12 @@ pub fn viewport(s: &AppState, t: &Theme) -> El {
             },
         ));
     if three_d {
-        c = c.child(toolbar(s, t));
+        c = c.child(toolbar(s, t, k));
     }
     c.child(body)
 }
 
-fn toolbar(s: &AppState, t: &Theme) -> El {
+fn toolbar(s: &AppState, t: &Theme, k: &Kit) -> El {
     let ready = s.preview.status == MeshStatus::Ready;
     let mut r = row()
         .key("view-toolbar")
@@ -58,7 +60,7 @@ fn toolbar(s: &AppState, t: &Theme) -> El {
         .px(space::S2)
         .py(space::S1);
     r = r.child(
-        button(t, "view-fit", "Fit", ready).on_press(|s: &mut AppState| {
+        button(k, "view-fit", "Fit", ready).on_press(|s: &mut AppState| {
             if let Some(bounds) = bounds(s) {
                 let selected = s.model.selected.clone();
                 s.preview.fit(selected.as_deref(), &bounds);
@@ -67,7 +69,7 @@ fn toolbar(s: &AppState, t: &Theme) -> El {
     );
     for view in StandardView::ALL {
         r = r.child(
-            button(t, &format!("view-{}", view.label()), view.label(), ready).on_press(
+            button(k, &format!("view-{}", view.label()), view.label(), ready).on_press(
                 move |s: &mut AppState| {
                     if let Some(bounds) = bounds(s) {
                         s.preview.view(view, &bounds);

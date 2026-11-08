@@ -3,10 +3,11 @@
 use std::path::PathBuf;
 
 use rune::tok::{Theme, space, type_};
-use rune::{Color, El, Key, ScrollSpec, col, el, row, text, text_input};
+use rune::{Color, El, Key, col, el, row, text};
+use rune_kit::{Kit, TextInput};
 
 use super::shell::open_step_dialog;
-use super::{TREE_WIDTH, button, heading, label_value, rule};
+use super::{TREE_WIDTH, button, heading, label_value, rule, scroller, selected};
 use crate::api::dto::{ImportComponent, Severity};
 use crate::state::AppState;
 
@@ -21,8 +22,8 @@ fn swatch(color: Option<[u8; 3]>, t: &Theme) -> El {
         .a11y_hidden()
 }
 
-fn body_row(s: &AppState, t: &Theme, accent: Color, body: &ImportComponent, duplicate: bool) -> El {
-    let selected = s.model.selected.as_deref() == Some(body.id.as_str()) && !s.shell.show_prefs;
+fn body_row(s: &AppState, t: &Theme, k: &Kit, body: &ImportComponent, duplicate: bool) -> El {
+    let on_row = s.model.selected.as_deref() == Some(body.id.as_str()) && !s.shell.show_prefs;
     let hidden = s.model.hidden.contains(&body.id);
     let (select_id, eye_id) = (body.id.clone(), body.id.clone());
     let name_color = if hidden { t.text_secondary } else { t.text };
@@ -47,15 +48,15 @@ fn body_row(s: &AppState, t: &Theme, accent: Color, body: &ImportComponent, dupl
         .key(format!("body-{}", body.id))
         .role("button")
         .label(label)
-        .checked(selected)
+        .checked(on_row)
         .focusable(true)
         .w_full()
         .gap(space::S2)
         .px(space::S2)
         .py(3.0)
         .items_center()
-        .fill(if selected {
-            accent.alpha(0.3)
+        .fill(if on_row {
+            selected(k)
         } else {
             Color::TRANSPARENT
         })
@@ -79,7 +80,7 @@ fn body_row(s: &AppState, t: &Theme, accent: Color, body: &ImportComponent, dupl
 }
 
 /// A top-level tree node (Preferences, file, Section).
-fn node(t: &Theme, accent: Color, key: &str, label: &str, on: bool) -> El {
+fn node(t: &Theme, k: &Kit, key: &str, label: &str, on: bool) -> El {
     row()
         .key(key)
         .role("button")
@@ -89,24 +90,20 @@ fn node(t: &Theme, accent: Color, key: &str, label: &str, on: bool) -> El {
         .w_full()
         .px(space::S2)
         .py(3.0)
-        .fill(if on {
-            accent.alpha(0.3)
-        } else {
-            Color::TRANSPARENT
-        })
+        .fill(if on { selected(k) } else { Color::TRANSPARENT })
         .hover(t.hover)
         .child(text(label).font(type_::BODY).color(t.text).truncate())
 }
 
-fn filter_field(s: &AppState, t: &Theme) -> El {
-    text_input(&s.model.filter, type_::BODY)
-        .key("tree-filter")
+fn filter_field(s: &AppState, k: &Kit) -> El {
+    let input = TextInput::new(&s.model.filter)
         .label("Filter bodies")
-        .single_line()
-        .placeholder("Filter bodies (Ctrl+F)", t.text_secondary)
+        .placeholder("Filter bodies (Ctrl+F)")
+        .width(None)
+        .height(22.0)
         .on_edit(|s: &mut AppState| &mut s.model.filter)
         // Escape clears the filter; with nothing to clear it leaves the field.
-        .on_input_key(|s: &mut AppState, ev, tx| {
+        .on_key(|s: &mut AppState, ev, tx| {
             if ev.key != Key::Escape {
                 return false;
             }
@@ -117,12 +114,16 @@ fn filter_field(s: &AppState, t: &Theme) -> El {
             }
             true
         })
+        .build(k)
+        .key("tree-filter");
+    row()
         .w_full()
         .px(space::S2)
         .py(space::S1)
+        .child(input.grow(1.0))
 }
 
-pub fn tree(s: &AppState, t: &Theme, accent: Color) -> El {
+pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
     let panel = col()
         .key("model-tree")
         .role("region")
@@ -132,7 +133,7 @@ pub fn tree(s: &AppState, t: &Theme, accent: Color) -> El {
         .min_h(0.0)
         .border(1.0, t.separator)
         .child(heading(t, "Model Builder"));
-    let prefs = node(t, accent, "node-prefs", "Preferences", s.shell.show_prefs)
+    let prefs = node(t, k, "node-prefs", "Preferences", s.shell.show_prefs)
         .on_press(|s: &mut AppState| s.shell.show_prefs = !s.shell.show_prefs);
     let Some(imported) = &s.model.imported else {
         return panel.child(prefs).child(
@@ -169,16 +170,16 @@ pub fn tree(s: &AppState, t: &Theme, accent: Color) -> El {
         }
         for b in bodies {
             let duplicate = names.iter().filter(|n| **n == b.display_name).count() > 1;
-            rows = rows.child(body_row(s, t, accent, b, duplicate));
+            rows = rows.child(body_row(s, t, k, b, duplicate));
         }
     }
     let file = imported.path.rsplit(['\\', '/']).next().unwrap_or("");
     let model_on = s.model.selected.is_none() && !s.shell.show_prefs;
     let mut panel = panel
-        .child(filter_field(s, t))
+        .child(filter_field(s, k))
         .child(prefs)
         .child(
-            node(t, accent, "node-model", file, model_on).on_press(|s: &mut AppState| {
+            node(t, k, "node-model", file, model_on).on_press(|s: &mut AppState| {
                 s.shell.show_prefs = false;
                 s.model.select(None)
             }),
@@ -201,27 +202,12 @@ pub fn tree(s: &AppState, t: &Theme, accent: Color) -> El {
                 .padding(space::S2),
         )
     } else {
-        panel.child(
-            col()
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(rows),
-        )
+        panel.child(scroller(k, "tree-scroll", rows))
     };
     let plane = crate::project::kind_name(s.section.plane);
     panel.child(
-        node(
-            t,
-            accent,
-            "node-section",
-            &format!("Section {plane}"),
-            false,
-        )
-        .on_press(|s: &mut AppState| s.shell.show_prefs = false),
+        node(t, k, "node-section", &format!("Section {plane}"), false)
+            .on_press(|s: &mut AppState| s.shell.show_prefs = false),
     )
 }
 
@@ -230,12 +216,12 @@ fn rgb(color: [u8; 3]) -> String {
 }
 
 /// Property inspector: the selected body, else the imported model.
-pub fn properties(s: &AppState, t: &Theme) -> El {
+pub fn properties(s: &AppState, t: &Theme, k: &Kit) -> El {
     let fmt = s.shell.number_format;
     let panel = col().key("body-properties").w_full();
     let fields = col().w_full().padding(space::S2).gap(space::S1);
     let Some(imported) = &s.model.imported else {
-        return panel.child(heading(t, "Model")).child(step_form(s, t));
+        return panel.child(heading(t, "Model")).child(step_form(s, k));
     };
     let body = imported
         .components
@@ -249,7 +235,7 @@ pub fn properties(s: &AppState, t: &Theme) -> El {
         let sha: String = imported.sha256.chars().take(12).collect();
         return panel
             .child(heading(t, "Model"))
-            .child(step_form(s, t))
+            .child(step_form(s, k))
             .child(
                 fields
                     .child(label_value(t, "Path", &imported.path))
@@ -309,7 +295,7 @@ pub fn properties(s: &AppState, t: &Theme) -> El {
                         .gap(space::S1)
                         .child(
                             button(
-                                t,
+                                k,
                                 "hide-body",
                                 if hidden { "Show (V)" } else { "Hide (V)" },
                                 true,
@@ -317,7 +303,7 @@ pub fn properties(s: &AppState, t: &Theme) -> El {
                             .on_press(move |s: &mut AppState| s.model.toggle_hidden(&hide_id)),
                         )
                         .child(
-                            button(t, "isolate-body", "Isolate (I)", true)
+                            button(k, "isolate-body", "Isolate (I)", true)
                                 .on_press(move |s: &mut AppState| s.model.toggle_isolate(&id)),
                         ),
                 ),
@@ -325,25 +311,26 @@ pub fn properties(s: &AppState, t: &Theme) -> El {
 }
 
 /// STEP path field with Import and Browse.
-fn step_form(s: &AppState, t: &Theme) -> El {
+fn step_form(s: &AppState, k: &Kit) -> El {
     let idle = s.shell.busy.is_none();
     col()
         .w_full()
         .padding(space::S2)
         .gap(space::S1)
         .child(
-            text_input(&s.shell.step_path, type_::BODY)
-                .key("step-path")
+            TextInput::new(&s.shell.step_path)
                 .label("STEP path")
-                .single_line()
-                .placeholder("C:\\Projects\\motor.step", t.text_secondary)
+                .placeholder("C:\\Projects\\motor.step")
+                .width(None)
+                .height(22.0)
                 .on_edit(|s: &mut AppState| &mut s.shell.step_path)
-                .w_full(),
+                .build(k)
+                .key("step-path"),
         )
         .child(
             row()
                 .gap(space::S1)
-                .child(button(t, "import-path", "Import STEP", idle).on_press(
+                .child(button(k, "import-path", "Import STEP", idle).on_press(
                     |s: &mut AppState| {
                         let path = s.shell.step_path.text.trim().to_owned();
                         if path.is_empty() {
@@ -353,6 +340,6 @@ fn step_form(s: &AppState, t: &Theme) -> El {
                         }
                     },
                 ))
-                .child(button(t, "browse-step", "Browse...", idle).on_press_tx(open_step_dialog)),
+                .child(button(k, "browse-step", "Browse...", idle).on_press_tx(open_step_dialog)),
         )
 }

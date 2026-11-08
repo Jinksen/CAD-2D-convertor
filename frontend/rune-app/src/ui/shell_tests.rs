@@ -16,7 +16,7 @@ fn runtime_with(state: AppState) -> Runtime<AppState> {
     let mut rt = Runtime::new(
         state,
         view,
-        (1280.0, 760.0),
+        (1280.0, 900.0),
         Env {
             system_dark: false,
             scale: 1.0,
@@ -189,7 +189,7 @@ fn preferences_change_the_displayed_units_and_restore_defaults() {
     let mut rt = runtime_with(motor());
     click(&mut rt, "body-body-1");
     click(&mut rt, "node-prefs");
-    click(&mut rt, "unit-in");
+    click(&mut rt, "unit/segment3");
     assert_eq!(rt.state.shell.number_format.length_unit, LengthUnit::In);
     click(&mut rt, "length-decimals-dec");
     assert_eq!(rt.state.shell.number_format.length_decimals, 2);
@@ -239,7 +239,7 @@ fn every_interactive_control_has_a_role_and_a_name() {
         ("button", "Open STEP"),
         ("button", "Save"),
         ("button", "Open project"),
-        ("button", "XY"),
+        ("radio-button", "XY"),
         ("button", "Compute section"),
         ("button", "Export DXF"),
         ("button", "Undo"),
@@ -273,4 +273,20 @@ fn every_interactive_control_has_a_role_and_a_name() {
             .any(|n| n["role"] == "radio-button" && n["name"] == "Dark")
     );
     assert!(nodes.iter().any(|n| n["role"] == "check-box"));
+}
+
+#[test]
+fn confirmations_raise_a_toast_beside_the_log_and_close_it() {
+    let mut rt = runtime_with(motor());
+    rt.state
+        .shell
+        .notify("Project saved", "Project saved to p.c2mproj".into());
+    rt.invalidate();
+    rt.frame(1.0 / 60.0);
+    assert!(dump(&rt).contains("Notifications"));
+    let last = rt.state.shell.messages.last().expect("logged");
+    assert_eq!(last.text, "Project saved to p.c2mproj");
+    click(&mut rt, "close");
+    assert!(rt.state.shell.toast.is_none());
+    assert_eq!(rt.state.shell.messages.len(), 1, "the log keeps the record");
 }

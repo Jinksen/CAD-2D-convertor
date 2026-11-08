@@ -121,7 +121,7 @@ impl AppState {
         match write_project(&path, &serialize_project(&project)) {
             Ok(()) => {
                 let text = format!("Project saved to {}", path.display());
-                self.shell.log(Severity::Info, text);
+                self.shell.notify("Project saved", text);
                 self.shell.project_path = Some(path);
             }
             Err(error) => self.shell.log(Severity::Error, error),

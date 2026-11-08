@@ -79,6 +79,8 @@ pub struct ShellState {
     pub project_path: Option<PathBuf>,
     /// Bound to the STEP path field of the model settings.
     pub step_path: TextEdit,
+    /// A short-lived confirmation shown as a toast: title, detail, when it was raised.
+    pub toast: Option<(&'static str, String, std::time::Instant)>,
     /// Remembers theme and number format on this machine; `None` in tests.
     prefs: Option<Prefs>,
 }
@@ -101,6 +103,12 @@ impl ShellState {
             component_id: None,
             related_component_id: None,
         });
+    }
+
+    /// Logs a confirmation and also raises it as a toast (Messages stays the record).
+    pub fn notify(&mut self, title: &'static str, text: String) {
+        self.log(Severity::Info, text.clone());
+        self.toast = Some((title, text, std::time::Instant::now()));
     }
 
     /// Import, project open and section runs can be cancelled; the others finish in moments.

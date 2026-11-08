@@ -11,32 +11,44 @@ pub use shell::{on_key, poll};
 
 use rune::tok::{self, Theme, space, type_};
 use rune::{Color, Cx, El, ScrollSpec, col, el, oklch, row, text};
+use rune_kit::{Button, ControlSize, Kit, PaletteSeed, SegmentedControl, scroll_bar};
 
 use crate::api::dto::Severity;
 use crate::state::AppState;
 
 pub const TREE_WIDTH: f32 = 260.0;
-pub const SETTINGS_WIDTH: f32 = 300.0;
+pub const SETTINGS_WIDTH: f32 = 320.0;
 pub const MESSAGES_HEIGHT: f32 = 150.0;
+
+/// Kit tokens derived from the app's neutral theme, with small radii.
+pub(crate) fn kit(t: &Theme, accent: Color) -> Kit {
+    let mut k = Kit::from_palette(PaletteSeed {
+        bg: t.bg,
+        fg: t.text,
+        accent,
+    });
+    (k.radius.sm, k.radius.md) = (2.0, 3.0);
+    k
+}
 
 pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     let t = tok::theme(s.shell.theme.is_dark(cx.system_dark()));
-    let accent = cx.accent();
+    let k = kit(&t, cx.accent());
     s.preview.scale.set(cx.env().scale);
-    col()
+    let base = col()
         .key("root")
         .w_full()
         .h_full()
         .fill(t.bg)
-        .child(shell::toolbar(s, &t, accent))
+        .child(shell::toolbar(s, &t, &k))
         .child(
             row()
                 .key("workspace")
                 .w_full()
                 .grow(1.0)
                 .min_h(0.0)
-                .child(model_tree::tree(s, &t, accent))
-                .child(preview::viewport(s, &t))
+                .child(model_tree::tree(s, &t, &k))
+                .child(preview::viewport(s, &t, &k))
                 .child(
                     col()
                         .key("properties")
@@ -46,26 +58,21 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                         .h_full()
                         .min_h(0.0)
                         .border(1.0, t.separator)
-                        .child(
-                            col()
-                                .w_full()
-                                .grow(1.0)
-                                .min_h(0.0)
-                                .scroll(ScrollSpec {
-                                    stick_bottom: false,
-                                })
-                                .children(if s.shell.show_prefs {
-                                    vec![shell::preferences(s, &t, accent)]
-                                } else {
-                                    vec![
-                                        section::settings(s, &t, accent),
-                                        model_tree::properties(s, &t),
-                                    ]
-                                }),
-                        ),
+                        .child(scroller(
+                            &k,
+                            "properties-scroll",
+                            col().w_full().children(if s.shell.show_prefs {
+                                vec![shell::preferences(s, &t, &k)]
+                            } else {
+                                vec![
+                                    section::settings(s, &t, &k),
+                                    model_tree::properties(s, &t, &k),
+                                ]
+                            }),
+                        )),
                 ),
         )
-        .child(shell::messages(s, &t))
+        .child(shell::messages(s, &t, &k))
         .child(shell::status_bar(s, &t))
         .on_drop_files(|s: &mut AppState, files, _| match files.first() {
             Some(path)
@@ -77,7 +84,8 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             }
             Some(path) => s.open_step(path.clone()),
             None => {}
-        })
+        });
+    rune_kit::root(base, shell::toasts(s, &k))
 }
 
 /// Region title bar.
@@ -91,34 +99,50 @@ pub fn heading(t: &Theme, title: &str) -> El {
 }
 
 /// Compact toolbar / form button; the caller attaches `on_press`.
-pub fn button(t: &Theme, key: &str, label: &str, enabled: bool) -> El {
-    row()
-        .key(key)
-        .role("button")
-        .label(label)
-        .focusable(enabled)
+pub fn button(k: &Kit, key: &str, label: &str, enabled: bool) -> El {
+    Button::new(label)
+        .control_size(ControlSize::Small)
         .disabled(!enabled)
-        .px(space::S2)
-        .py(space::S1)
-        .radius(tok::radius::SM)
-        .fill(t.control_off)
-        .hover(t.hover)
-        .child(text(label).font(type_::LABEL).color(if enabled {
-            t.text
-        } else {
-            t.text_secondary
-        }))
+        .build(k)
+        .key(key)
 }
 
-/// A button that shows it is the active choice of its group.
-pub fn toggle(t: &Theme, accent: Color, key: &str, label: &str, on: bool) -> El {
-    button(t, key, label, true)
-        .fill(if on {
-            accent.alpha(0.35)
-        } else {
-            t.control_off
+/// A compact radio group of equal segments; `pick` gets the chosen index.
+pub fn choice<S: AsRef<str>>(
+    k: &Kit,
+    key: &str,
+    label: &str,
+    labels: &[S],
+    on: Option<usize>,
+    pick: impl Fn(&mut AppState, usize) + Clone + 'static,
+) -> El {
+    SegmentedControl::new(labels, on)
+        .label(label)
+        .fit()
+        .on_pick(move |s: &mut AppState, i, _| pick(s, i))
+        .build(k)
+        .key(key)
+}
+
+/// Fill of a selected tree row.
+pub fn selected(k: &Kit) -> Color {
+    k.alpha(k.c.text_accent, if k.dark { 0.24 } else { 0.2 })
+}
+
+/// A vertical scroll area filling its parent, with the kit's scroll bar.
+pub fn scroller(k: &Kit, key: &str, content: El) -> El {
+    let viewport = col()
+        .w_full()
+        .grow(1.0)
+        .min_h(0.0)
+        .scroll(ScrollSpec {
+            stick_bottom: false,
         })
-        .checked(on)
+        .child(content);
+    scroll_bar(k, &format!("{key}-area"), key, viewport)
+        .w_full()
+        .grow(1.0)
+        .min_h(0.0)
 }
 
 pub fn severity_color(severity: Severity, t: &Theme) -> Color {

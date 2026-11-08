@@ -1,10 +1,12 @@
 //! Toolbar, preferences, messages pane, status bar and global keyboard shortcuts.
 
 use rune::tok::{Theme, space, type_};
-use rune::{Color, El, FileDialogOptions, Key, KeyEvent, ScrollSpec, Tx, col, row, spacer, text};
+use rune::{El, FileDialogOptions, Key, KeyEvent, Tx, col, row, spacer, text};
+use rune_kit::{Checkbox, Kit, SegmentedControl, State, Toast, ToastRegion};
 
 use super::{
-    MESSAGES_HEIGHT, button, heading, label_value, rule, severity_color, severity_label, toggle,
+    MESSAGES_HEIGHT, button, choice, heading, label_value, rule, scroller, severity_color,
+    severity_label,
 };
 use crate::api::dto::Severity;
 use crate::format::{DecimalMarker, LengthUnit, MAX_DECIMALS, NumberFormat};
@@ -12,6 +14,8 @@ use crate::state::preview::ViewportMode;
 use crate::state::section::PlaneKind;
 use crate::state::shell::{BackendStatus, Theme as ThemeChoice};
 use crate::state::{AppState, now_ms};
+
+const TOAST_TTL: std::time::Duration = std::time::Duration::from_secs(5);
 
 fn dialog(title: &str, file_name: Option<&str>) -> FileDialogOptions {
     FileDialogOptions {
@@ -80,105 +84,99 @@ fn compute(s: &mut AppState) {
     s.compute_section();
 }
 
-fn group(t: &Theme, label: &str) -> El {
+fn group(label: &str) -> El {
     row()
         .key(format!("group-{label}"))
         .role("group")
         .label(label)
         .gap(space::S1)
         .items_center()
-        .px(space::S1)
-        .border(1.0, t.separator)
 }
 
-pub fn toolbar(s: &AppState, t: &Theme, accent: Color) -> El {
+const PRINCIPAL: [PlaneKind; 3] = [PlaneKind::XY, PlaneKind::XZ, PlaneKind::YZ];
+
+pub fn toolbar(s: &AppState, t: &Theme, k: &Kit) -> El {
     let idle = s.shell.busy.is_none();
     let has_model = s.model.imported.is_some();
-    let planes = [PlaneKind::XY, PlaneKind::XZ, PlaneKind::YZ].map(|kind| {
-        let name = crate::project::kind_name(kind);
-        let on = has_model && s.section.plane == kind;
-        let mut b = toggle(t, accent, &format!("ribbon-plane-{name}"), name, on);
-        b = b.disabled(!has_model);
-        b.on_press(move |s: &mut AppState| s.section.set_plane(kind, now_ms()))
-    });
+    let names = PRINCIPAL.map(crate::project::kind_name);
+    let on = PRINCIPAL.iter().position(|p| *p == s.section.plane);
+    let mut planes = SegmentedControl::new(&names, on.filter(|_| has_model))
+        .label("Section plane")
+        .fit()
+        .on_pick(|s: &mut AppState, i, _| s.section.set_plane(PRINCIPAL[i], now_ms()));
+    for i in (0..names.len()).filter(|_| !has_model) {
+        planes = planes.segment_state(i, State::Disabled);
+    }
     row()
         .key("toolbar")
         .role("toolbar")
         .label("Toolbar")
         .w_full()
-        .gap(space::S2)
+        .gap(space::S3)
         .padding(space::S2)
         .items_center()
         .border(1.0, t.separator)
         .child(text("CAD2Maxwell").font(type_::TITLE).color(t.text))
         .child(
-            group(t, "Model").child(
-                button(t, "open-step", "Open STEP...", idle)
+            group("Model").child(
+                button(k, "open-step", "Open STEP...", idle)
                     .shortcut_hint("Ctrl+O")
                     .on_press_tx(open_step_dialog),
             ),
         )
         .child(
-            group(t, "Project")
+            group("Project")
                 .child(
-                    button(t, "save-project", "Save", has_model)
+                    button(k, "save-project", "Save", has_model)
                         .shortcut_hint("Ctrl+S")
                         .on_press_tx(|s: &mut AppState, tx: &mut Tx| {
                             save_project_dialog(s, tx, false)
                         }),
                 )
                 .child(
-                    button(t, "open-project", "Open project...", idle)
+                    button(k, "open-project", "Open project...", idle)
                         .on_press_tx(open_project_dialog),
                 ),
         )
-        .child(group(t, "Section plane").children(planes))
+        .child(group("Section plane").child(planes.build(k).key("ribbon-plane")))
         .child(
-            group(t, "Run").child(
-                button(t, "run-section", "Compute section", idle && has_model)
+            group("Run").child(
+                button(k, "run-section", "Compute section", idle && has_model)
                     .shortcut_hint("Ctrl+Enter")
                     .on_press(compute),
             ),
         )
         .child(
-            group(t, "Export").child(
-                button(t, "export-dxf", "Export DXF...", idle && exportable(s))
+            group("Export").child(
+                button(k, "export-dxf", "Export DXF...", idle && exportable(s))
                     .shortcut_hint("Ctrl+E")
                     .on_press_tx(export_dialog),
             ),
         )
         .child(
-            group(t, "History")
+            group("History")
                 .child(
-                    button(t, "undo-plane", "Undo", !s.section.past.is_empty())
+                    button(k, "undo-plane", "Undo", !s.section.past.is_empty())
                         .shortcut_hint("Ctrl+Z")
                         .on_press(|s: &mut AppState| s.section.undo()),
                 )
                 .child(
-                    button(t, "redo-plane", "Redo", !s.section.future.is_empty())
+                    button(k, "redo-plane", "Redo", !s.section.future.is_empty())
                         .shortcut_hint("Ctrl+Y")
                         .on_press(|s: &mut AppState| s.section.redo()),
                 ),
         )
         .child(spacer())
-        .child(
-            button(
-                t,
-                "toggle-view",
-                if s.preview.mode == ViewportMode::TwoD {
-                    "View: 2D"
-                } else {
-                    "View: 3D"
-                },
-                true,
-            )
-            .on_press(|s: &mut AppState| {
-                s.preview.mode = match s.preview.mode {
-                    ViewportMode::TwoD => ViewportMode::ThreeD,
-                    ViewportMode::ThreeD => ViewportMode::TwoD,
-                }
-            }),
-        )
+        .child(choice(
+            k,
+            "toggle-view",
+            "View",
+            &["2D", "3D"],
+            Some(usize::from(s.preview.mode == ViewportMode::ThreeD)),
+            |s, i| {
+                s.preview.mode = [ViewportMode::TwoD, ViewportMode::ThreeD][i];
+            },
+        ))
 }
 
 /// Applies `change` to the number format and remembers it.
@@ -190,7 +188,14 @@ fn edit_format(change: impl Fn(&mut NumberFormat) + 'static) -> impl Fn(&mut App
     }
 }
 
-fn stepper(t: &Theme, key: &str, label: &str, value: u8, set: fn(&mut NumberFormat, u8)) -> El {
+fn stepper(
+    t: &Theme,
+    k: &Kit,
+    key: &str,
+    label: &str,
+    value: u8,
+    set: fn(&mut NumberFormat, u8),
+) -> El {
     row()
         .w_full()
         .gap(space::S1)
@@ -205,7 +210,7 @@ fn stepper(t: &Theme, key: &str, label: &str, value: u8, set: fn(&mut NumberForm
                 .w(96.0),
         )
         .child(
-            button(t, &format!("{key}-dec"), "-", value > 0)
+            button(k, &format!("{key}-dec"), "-", value > 0)
                 .label(format!("Fewer {label}"))
                 .on_press(edit_format(move |f| set(f, value.saturating_sub(1)))),
         )
@@ -216,57 +221,49 @@ fn stepper(t: &Theme, key: &str, label: &str, value: u8, set: fn(&mut NumberForm
                 .w(20.0),
         )
         .child(
-            button(t, &format!("{key}-inc"), "+", value < MAX_DECIMALS)
+            button(k, &format!("{key}-inc"), "+", value < MAX_DECIMALS)
                 .label(format!("More {label}"))
                 .on_press(edit_format(move |f| set(f, (value + 1).min(MAX_DECIMALS)))),
         )
 }
 
-fn checkbox(t: &Theme, accent: Color, key: &str, label: &str, on: bool) -> El {
-    toggle(t, accent, key, label, on).role("checkbox")
-}
-
 /// Display unit, notation and theme (replaces the settings column while open).
-pub fn preferences(s: &AppState, t: &Theme, accent: Color) -> El {
+pub fn preferences(s: &AppState, t: &Theme, k: &Kit) -> El {
     let f = s.shell.number_format;
-    let themes = ThemeChoice::ALL.map(|choice| {
-        let name = format!("{choice:?}");
-        toggle(
-            t,
-            accent,
-            &format!("theme-{name}"),
-            &name,
-            s.shell.theme == choice,
-        )
-        .role("radio")
-        .on_press(move |s: &mut AppState| s.shell.set_theme(choice))
-    });
-    let units = LengthUnit::ALL.map(|unit| {
-        toggle(
-            t,
-            accent,
-            &format!("unit-{}", unit.symbol()),
-            unit.symbol(),
-            f.length_unit == unit,
-        )
-        .role("radio")
-        .on_press(edit_format(move |f| f.length_unit = unit))
-    });
-    let markers = [
-        (DecimalMarker::Point, "Point (12.5)"),
-        (DecimalMarker::Comma, "Comma (12,5)"),
-    ]
-    .map(|(marker, label)| {
-        toggle(
-            t,
-            accent,
-            &format!("marker-{marker:?}"),
-            label,
-            f.decimal_marker == marker,
-        )
-        .role("radio")
-        .on_press(edit_format(move |f| f.decimal_marker = marker))
-    });
+    let themes = choice(
+        k,
+        "theme",
+        "Theme",
+        &ThemeChoice::ALL.map(|c| format!("{c:?}")),
+        ThemeChoice::ALL.iter().position(|c| *c == s.shell.theme),
+        |s, i| s.shell.set_theme(ThemeChoice::ALL[i]),
+    );
+    let units = choice(
+        k,
+        "unit",
+        "Display unit",
+        &LengthUnit::ALL.map(LengthUnit::symbol),
+        LengthUnit::ALL.iter().position(|u| *u == f.length_unit),
+        |s, i| edit_format(move |f| f.length_unit = LengthUnit::ALL[i])(s),
+    );
+    let markers = choice(
+        k,
+        "marker",
+        "Decimal marker",
+        &["Point (12.5)", "Comma (12,5)"],
+        Some(usize::from(f.decimal_marker == DecimalMarker::Comma)),
+        |s, i| {
+            let marker = [DecimalMarker::Point, DecimalMarker::Comma][i];
+            edit_format(move |f| f.decimal_marker = marker)(s)
+        },
+    );
+    let check = |key: &str, label: &str, on: bool, set: fn(&mut NumberFormat)| {
+        Checkbox::new(on)
+            .label(label)
+            .on_toggle(edit_format(set))
+            .build(k)
+            .key(key.to_string())
+    };
     let resolution = NumberFormat {
         trailing_zeros: true,
         ..f
@@ -288,26 +285,13 @@ pub fn preferences(s: &AppState, t: &Theme, accent: Color) -> El {
             text("Display notation per ISO 80000-1; geometry and DXF stay in mm.")
                 .font(type_::LABEL)
                 .color(t.text_secondary)
+                .wrap()
                 .padding(space::S2),
         )
         .child(section("Appearance"))
-        .child(
-            row()
-                .role("radiogroup")
-                .label("Theme")
-                .gap(space::S1)
-                .px(space::S2)
-                .children(themes),
-        )
+        .child(themes.mx(space::S2))
         .child(section("Length"))
-        .child(
-            row()
-                .role("radiogroup")
-                .label("Display unit")
-                .gap(space::S1)
-                .px(space::S2)
-                .children(units),
-        )
+        .child(units.mx(space::S2))
         .child(
             col()
                 .w_full()
@@ -315,6 +299,7 @@ pub fn preferences(s: &AppState, t: &Theme, accent: Color) -> El {
                 .gap(space::S1)
                 .child(stepper(
                     t,
+                    k,
                     "length-decimals",
                     "Decimal places",
                     f.length_decimals,
@@ -325,44 +310,30 @@ pub fn preferences(s: &AppState, t: &Theme, accent: Color) -> El {
         .child(section("Direction vectors"))
         .child(col().w_full().px(space::S2).child(stepper(
             t,
+            k,
             "direction-decimals",
             "Direction places",
             f.direction_decimals,
             |f, v| f.direction_decimals = v,
         )))
         .child(section("Notation"))
+        .child(markers.mx(space::S2))
         .child(
-            row()
-                .role("radiogroup")
-                .label("Decimal marker")
-                .gap(space::S1)
-                .px(space::S2)
-                .children(markers),
-        )
-        .child(
-            row()
+            col()
                 .gap(space::S1)
                 .padding(space::S2)
-                .child(
-                    checkbox(
-                        t,
-                        accent,
-                        "grouping",
-                        "Group digits in threes",
-                        f.digit_grouping,
-                    )
-                    .on_press(edit_format(|f| f.digit_grouping = !f.digit_grouping)),
-                )
-                .child(
-                    checkbox(
-                        t,
-                        accent,
-                        "trailing-zeros",
-                        "Keep trailing zeros",
-                        f.trailing_zeros,
-                    )
-                    .on_press(edit_format(|f| f.trailing_zeros = !f.trailing_zeros)),
-                ),
+                .child(check(
+                    "grouping",
+                    "Group digits in threes",
+                    f.digit_grouping,
+                    |f| f.digit_grouping = !f.digit_grouping,
+                ))
+                .child(check(
+                    "trailing-zeros",
+                    "Keep trailing zeros",
+                    f.trailing_zeros,
+                    |f| f.trailing_zeros = !f.trailing_zeros,
+                )),
         )
         .child(section("Preview"))
         .child(
@@ -389,7 +360,7 @@ pub fn preferences(s: &AppState, t: &Theme, accent: Color) -> El {
         )
         .child(
             col().padding(space::S2).child(
-                button(t, "restore-format", "Restore defaults", true)
+                button(k, "restore-format", "Restore defaults", true)
                     .on_press(|s: &mut AppState| s.shell.set_format(NumberFormat::default())),
             ),
         )
@@ -398,11 +369,12 @@ pub fn preferences(s: &AppState, t: &Theme, accent: Color) -> El {
             text("Values are rounded for display only; computation uses the full value.")
                 .font(type_::LABEL)
                 .color(t.text_secondary)
+                .wrap()
                 .padding(space::S2),
         )
 }
 
-pub fn messages(s: &AppState, t: &Theme) -> El {
+pub fn messages(s: &AppState, t: &Theme, k: &Kit) -> El {
     let rows = s.shell.messages.iter().enumerate().rev().map(|(index, m)| {
         let focus = m
             .component_id
@@ -456,7 +428,7 @@ pub fn messages(s: &AppState, t: &Theme) -> El {
         );
         if s.shell.cancellable() {
             list = list.child(
-                button(t, "cancel-operation", "Cancel", true).on_press(AppState::cancel_operation),
+                button(k, "cancel-operation", "Cancel", true).on_press(AppState::cancel_operation),
             );
         }
     }
@@ -479,16 +451,18 @@ pub fn messages(s: &AppState, t: &Theme) -> El {
             t,
             &format!("Messages ({})", s.shell.messages.len()),
         ))
-        .child(
-            col()
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(list.children(rows)),
-        )
+        .child(scroller(k, "messages-scroll", list.children(rows)))
+}
+
+/// The newest confirmation (save, export) as a toast; Messages stays the record.
+pub fn toasts(s: &AppState, k: &Kit) -> Vec<El> {
+    let Some((title, detail, _)) = &s.shell.toast else {
+        return vec![];
+    };
+    let toast = Toast::new("toast", *title)
+        .description(detail.clone())
+        .on_close(|s: &mut AppState| s.shell.toast = None);
+    vec![ToastRegion::new().toast(toast.build(k)).build(k)]
 }
 
 pub fn status_bar(s: &AppState, t: &Theme) -> El {
@@ -604,11 +578,17 @@ pub fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
     true
 }
 
-/// While an operation runs, redraw once a second so its elapsed time counts up.
+/// While an operation runs, redraw once a second so its elapsed time counts up; toasts expire.
 pub fn poll(s: &mut AppState, _: f64, tx: &mut Tx) -> bool {
-    if s.shell.busy.is_none() {
-        return false;
+    let mut changed = s.shell.busy.is_some();
+    if changed {
+        tx.wake_after(std::time::Duration::from_secs(1));
     }
-    tx.wake_after(std::time::Duration::from_secs(1));
-    true
+    if let Some((.., at)) = &s.shell.toast {
+        match TOAST_TTL.checked_sub(at.elapsed()) {
+            Some(left) => tx.wake_after(left),
+            None => (s.shell.toast, changed) = (None, true),
+        }
+    }
+    changed
 }

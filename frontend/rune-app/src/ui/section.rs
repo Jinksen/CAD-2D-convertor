@@ -1,9 +1,10 @@
 //! Section settings: plane, offset, run status and result statistics.
 
 use rune::tok::{Theme, space, type_};
-use rune::{Color, El, TextEdit, col, edit_access, row, text, text_input};
+use rune::{El, TextEdit, col, edit_access, row, text};
+use rune_kit::{Kit, TextInput};
 
-use super::{button, heading, label_value, severity_color, toggle};
+use super::{button, choice, heading, label_value, severity_color};
 use crate::api::dto::Severity;
 use crate::state::section::PlaneKind;
 use crate::state::{AppState, now_ms};
@@ -25,12 +26,14 @@ fn note(t: &Theme, msg: impl Into<String>) -> El {
     text(msg)
         .font(type_::LABEL)
         .color(t.text_secondary)
+        .wrap()
         .w_full()
 }
 
 /// A labelled single-line number field; Enter applies it.
 fn field(
     t: &Theme,
+    k: &Kit,
     key: &str,
     label: &str,
     edit: &TextEdit,
@@ -48,44 +51,37 @@ fn field(
                 .w(96.0),
         )
         .child(
-            text_input(edit, type_::BODY)
-                .key(key)
+            TextInput::new(edit)
                 .label(label)
-                .single_line()
-                .placeholder(placeholder, t.text_secondary)
+                .placeholder(placeholder)
+                .width(None)
+                .height(22.0)
                 .on_edit(bind)
                 .on_submit(|s: &mut AppState, _| s.section.commit_fields(now_ms()))
-                .grow(1.0)
-                .px(space::S1)
-                .py(2.0)
-                .border(1.0, t.separator),
+                .build(k)
+                .key(key)
+                .grow(1.0),
         )
 }
 
-pub fn settings(s: &AppState, t: &Theme, accent: Color) -> El {
+pub fn settings(s: &AppState, t: &Theme, k: &Kit) -> El {
     let fmt = s.shell.number_format;
     s.section.fmt.set(fmt);
     let sec = &s.section;
     let kinds = [
-        (PlaneKind::XY, "XY"),
-        (PlaneKind::XZ, "XZ"),
-        (PlaneKind::YZ, "YZ"),
-        (PlaneKind::Custom, "Custom"),
+        PlaneKind::XY,
+        PlaneKind::XZ,
+        PlaneKind::YZ,
+        PlaneKind::Custom,
     ];
-    let plane_row = kinds
-        .into_iter()
-        .fold(row().gap(space::S1), |r, (kind, label)| {
-            r.child(
-                toggle(
-                    t,
-                    accent,
-                    &format!("plane-{label}"),
-                    label,
-                    sec.plane == kind,
-                )
-                .on_press(move |s: &mut AppState| s.section.set_plane(kind, now_ms())),
-            )
-        });
+    let plane_row = choice(
+        k,
+        "plane",
+        "Plane",
+        &["XY", "XZ", "YZ", "Custom"],
+        kinds.iter().position(|p| *p == sec.plane),
+        move |s, i| s.section.set_plane(kinds[i], now_ms()),
+    );
     let panel = col()
         .key("section-settings")
         .w_full()
@@ -116,6 +112,7 @@ pub fn settings(s: &AppState, t: &Theme, accent: Color) -> El {
         for (i, axis) in AXES.iter().enumerate() {
             form = form.child(field(
                 t,
+                k,
                 &format!("normal-{axis}"),
                 &format!("Normal n{axis}"),
                 &sec.normal_text[i],
@@ -128,6 +125,7 @@ pub fn settings(s: &AppState, t: &Theme, accent: Color) -> El {
     form = form
         .child(field(
             t,
+            k,
             "section-offset",
             &label,
             &sec.offset_text,
@@ -138,12 +136,12 @@ pub fn settings(s: &AppState, t: &Theme, accent: Color) -> El {
             row()
                 .gap(space::S1)
                 .child(
-                    button(t, "offset-dec", "-1 mm", true).on_press(move |s: &mut AppState| {
+                    button(k, "offset-dec", "-1 mm", true).on_press(move |s: &mut AppState| {
                         s.section.set_offset(offset - OFFSET_STEP_MM, now_ms())
                     }),
                 )
                 .child(
-                    button(t, "offset-inc", "+1 mm", true).on_press(move |s: &mut AppState| {
+                    button(k, "offset-inc", "+1 mm", true).on_press(move |s: &mut AppState| {
                         s.section.set_offset(offset + OFFSET_STEP_MM, now_ms())
                     }),
                 ),
@@ -153,7 +151,7 @@ pub fn settings(s: &AppState, t: &Theme, accent: Color) -> El {
         form = form
             .child(
                 button(
-                    t,
+                    k,
                     "align-plane",
                     "Align to selected body",
                     !busy && selected,
@@ -189,7 +187,7 @@ pub fn settings(s: &AppState, t: &Theme, accent: Color) -> El {
     form = form
         .child(
             button(
-                t,
+                k,
                 "section-compute",
                 if computing {
                     "Computing..."
@@ -258,7 +256,10 @@ mod tests {
     fn runtime(state: AppState) -> Runtime<AppState> {
         let mut rt = Runtime::new(
             state,
-            |s: &AppState, cx| settings(s, &rune::tok::theme(true), cx.accent()),
+            |s: &AppState, cx| {
+                let t = rune::tok::theme(true);
+                settings(s, &t, &crate::ui::kit(&t, cx.accent()))
+            },
             (320.0, 700.0),
             Env {
                 system_dark: true,
@@ -287,7 +288,7 @@ mod tests {
     fn the_custom_plane_exposes_normal_fields_and_the_other_planes_do_not() {
         let mut rt = runtime(loaded());
         assert!(rt.find("normal-x").is_none());
-        press(&mut rt, "plane-Custom");
+        press(&mut rt, "plane/segment3");
         assert_eq!(rt.state.section.plane, PlaneKind::Custom);
         assert!(rt.find("normal-z").is_some() && rt.find("align-plane").is_some());
     }
@@ -298,7 +299,7 @@ mod tests {
         press(&mut rt, "offset-inc");
         assert_eq!(rt.state.section.offset_mm, Some(16.0));
         assert_eq!(rt.state.section.offset_text.text, "16.000");
-        press(&mut rt, "plane-XZ");
+        press(&mut rt, "plane/segment1");
         assert_eq!(rt.state.section.offset_text.text, "");
     }
 }

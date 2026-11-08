@@ -250,8 +250,8 @@ impl AppState {
                 Ok(())
             },
             move |state, ()| {
-                state.shell.log(
-                    Severity::Info,
+                state.shell.notify(
+                    "DXF bundle exported",
                     format!("Saved DXF bundle: {}", target.display()),
                 )
             },
