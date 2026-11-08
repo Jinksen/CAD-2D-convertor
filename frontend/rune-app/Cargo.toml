@@ -1,0 +1,26 @@
+[package]
+name = "cad2maxwell-desktop"
+version = "0.1.1"
+description = "CAD2Maxwell native desktop app (Rune)"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+
+[[bin]]
+name = "cad2maxwell-desktop"
+path = "src/main.rs"
+
+[dependencies]
+rune = { git = "https://github.com/anomalyco/rune", rev = "a7f276c3630f85a06a0230295da4d2bd172d8d3b", features = ["native-file-dialog"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = "3"
+base64 = "0.22"
+rfd = { version = "=0.16.0", default-features = false }
+getrandom = "0.3"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+strip = true
