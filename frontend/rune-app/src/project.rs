@@ -49,15 +49,20 @@ pub fn kind_name(kind: PlaneKind) -> &'static str {
 }
 
 pub fn parse_kind(name: &str) -> Option<PlaneKind> {
-    [PlaneKind::XY, PlaneKind::XZ, PlaneKind::YZ, PlaneKind::Custom]
-        .into_iter()
-        .find(|k| kind_name(*k) == name)
+    [
+        PlaneKind::XY,
+        PlaneKind::XZ,
+        PlaneKind::YZ,
+        PlaneKind::Custom,
+    ]
+    .into_iter()
+    .find(|k| kind_name(*k) == name)
 }
 
 /// Parses project text; the error is user-readable.
 pub fn parse_project(text: &str) -> Result<ProjectFile, String> {
-    let value: serde_json::Value =
-        serde_json::from_str(text).map_err(|_| "The project file is not valid JSON.".to_string())?;
+    let value: serde_json::Value = serde_json::from_str(text)
+        .map_err(|_| "The project file is not valid JSON.".to_string())?;
     if value["app"] == "CAD2Maxwell"
         && let Some(version) = value["version"].as_u64()
         && version > u64::from(PROJECT_VERSION)
@@ -212,7 +217,8 @@ mod tests {
             ..AppState::default()
         };
         state.open_project(path.clone());
-        rx.recv_timeout(Duration::from_secs(5)).expect("import result")(&mut state);
+        rx.recv_timeout(Duration::from_secs(5))
+            .expect("import result")(&mut state);
         assert_eq!(state.shell.project_path.as_ref(), Some(&path));
         std::fs::remove_dir_all(dir).unwrap();
         state
@@ -227,7 +233,10 @@ mod tests {
         );
         assert_eq!(state.model.hidden, ["b2".to_string()].into());
         let last = state.shell.messages.last().unwrap();
-        assert_eq!((last.severity, last.text.as_str()), (Severity::Info, "Project opened."));
+        assert_eq!(
+            (last.severity, last.text.as_str()),
+            (Severity::Info, "Project opened.")
+        );
     }
 
     #[test]
@@ -256,7 +265,10 @@ mod tests {
     fn saving_without_a_model_is_an_error() {
         let mut state = AppState::default();
         state.save_project(PathBuf::from("C:/p.c2mproj"));
-        assert_eq!(state.shell.messages.last().unwrap().severity, Severity::Error);
+        assert_eq!(
+            state.shell.messages.last().unwrap().severity,
+            Severity::Error
+        );
     }
 
     #[test]

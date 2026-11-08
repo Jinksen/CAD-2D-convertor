@@ -28,14 +28,22 @@ struct Reply {
     body: Vec<u8>,
 }
 
-/// Percent-encodes a path segment (ids may contain any character).
-#[allow(dead_code)] // used by the 3D preview and section features in phase 3
+/// Percent-encodes a path segment like JS `encodeURIComponent` (ids may contain any character).
 fn segment(raw: &str) -> String {
     raw.bytes()
         .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                (b as char).to_string()
-            }
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'_'
+            | b'.'
+            | b'~'
+            | b'!'
+            | b'\''
+            | b'('
+            | b')'
+            | b'*' => (b as char).to_string(),
             _ => format!("%{b:02X}"),
         })
         .collect()
@@ -165,7 +173,6 @@ impl Client {
         Ok(summary)
     }
 
-    #[allow(dead_code)] // used by the 3D preview and section features in phase 3
     pub fn preview(&self, import_id: &str) -> Result<PreviewMesh, String> {
         let invalid = "The geometry service returned an invalid preview response.";
         let reply = self.call(
@@ -201,7 +208,6 @@ impl Client {
         Ok(section)
     }
 
-    #[allow(dead_code)] // used by the 3D preview and section features in phase 3
     pub fn component_plane(
         &self,
         import_id: &str,
@@ -301,6 +307,7 @@ pub(crate) mod fake {
 mod tests {
     use super::fake::serve;
     use super::*;
+    use crate::api::dto::BoundsMm;
 
     const IMPORT: &str = r#"{"import_id":"i1","path":"C:/m.step","sha256":"ab","source_unit":"mm","to_mm_scale":1.0,
         "bounds_mm":{"min_xyz":[0,0,0],"max_xyz":[10,20,30]},"component_count":1,
@@ -452,6 +459,157 @@ mod tests {
         assert!(mesh(&[0, 1, 3]).decode().is_err());
     }
 
+    /// Request line and JSON body the client sent, to compare with the TS clients
+    /// (`frontend/src/features/*/client.ts`) for the same user action.
+    fn sent(fake: &fake::Fake, n: usize) -> (String, Value) {
+        let raw = fake.requests.lock().unwrap()[n].clone();
+        let (head, body) = raw.split_once("\r\n\r\n").unwrap();
+        let body = if body.is_empty() {
+            Value::Null
+        } else {
+            serde_json::from_str(body).unwrap()
+        };
+        (head.to_owned(), body)
+    }
+
+    #[test]
+    fn requests_match_the_ts_clients() {
+        use crate::state::section::{PlaneKind, SectionState};
+        let fake = serve(
+            (0..5)
+                .map(|_| (500, "application/json", b"{}".to_vec()))
+                .collect(),
+        );
+        let c = client(&fake.url);
+        let bounds = BoundsMm {
+            min_xyz: [0.0; 3],
+            max_xyz: [10.0, 20.0, 30.0],
+        };
+        let mut state = SectionState::default();
+        let _ = c.import_step(r"C:\models\Motor.step");
+        let _ = c.preview("imp 1/\u{fc}!'()*~");
+        let _ = c.component_plane("imp-1", "body 1");
+        let _ = c.export_dxf("imp-1", "sec-1");
+        let _ = c.section("imp-1", &state.request(&bounds).unwrap());
+
+        let (head, body) = sent(&fake, 0);
+        assert!(
+            head.starts_with("POST /api/v1/imports/step HTTP/1.1"),
+            "{head}"
+        );
+        assert_eq!(body, json!({"path": r"C:\models\Motor.step"}));
+        // encodeURIComponent("imp 1/\u{fc}!'()*~")
+        let (head, _) = sent(&fake, 1);
+        assert!(
+            head.starts_with("GET /api/v1/imports/imp%201%2F%C3%BC!'()*~/preview "),
+            "{head}"
+        );
+        let (head, _) = sent(&fake, 2);
+        assert!(
+            head.starts_with("GET /api/v1/imports/imp-1/components/body%201/plane "),
+            "{head}"
+        );
+        let (head, body) = sent(&fake, 3);
+        assert!(head.starts_with("POST /api/v1/export/dxf "), "{head}");
+        assert!(head.to_lowercase().contains("accept: application/zip"));
+        assert_eq!(body, json!({"import_id": "imp-1", "section_id": "sec-1"}));
+        // Default plane: XY through the model midpoint (z = 15).
+        let (head, body) = sent(&fake, 4);
+        assert!(head.starts_with("POST /api/v1/section "), "{head}");
+        assert_eq!(
+            body,
+            json!({"import_id": "imp-1", "plane": {"kind": "XY", "offset_mm": 15.0}})
+        );
+
+        // Planes, with the JSON the TS `sectionPlaneRequest` produced (run with node on
+        // plane.ts): numbers must be bit-identical.
+        for (kind, name, offset) in [
+            (PlaneKind::XY, "XY", 0.1 + 0.2),
+            (PlaneKind::XZ, "XZ", -3.5),
+            (PlaneKind::YZ, "YZ", 1e-7),
+        ] {
+            state.plane = kind;
+            state.offset_mm = Some(offset);
+            let plane = serde_json::to_value(state.request(&bounds).unwrap()).unwrap();
+            assert_eq!(plane, json!({"kind": name, "offset_mm": offset}));
+        }
+        let custom = |n: [f64; 3], o: f64, normal: [f64; 3], x: [f64; 3], origin: [f64; 3]| {
+            let mut s = SectionState::default();
+            s.plane = PlaneKind::Custom;
+            s.custom_normal = n;
+            s.offset_mm = Some(o);
+            let want = json!({"kind": "custom", "normal_xyz": normal, "x_dir_xyz": x, "origin_xyz": origin});
+            assert_eq!(
+                serde_json::to_value(s.request(&bounds).unwrap()).unwrap(),
+                want,
+                "{n:?}"
+            );
+        };
+        custom(
+            [0.331, 0.013, 0.944],
+            12.5,
+            [0.3308567700211607, 0.01299437465339906, 0.9435915132929779],
+            [
+                0.9436809830293099,
+                -0.0045558582864172435,
+                -0.33082540172137526,
+            ],
+            [4.135709625264509, 0.16242968316748824, 11.794893916162223],
+        );
+        custom(
+            [1.0, 2.0, 3.0],
+            -7.25,
+            [0.2672612419124244, 0.5345224838248488, 0.8017837257372733],
+            [
+                0.9636241116594316,
+                -0.14824986333222026,
+                -0.2223747949983304,
+            ],
+            [-1.9376440038650768, -3.8752880077301537, -5.812932011595231],
+        );
+        custom(
+            [0.1, 0.2, 0.3],
+            0.1,
+            [0.2672612419124244, 0.5345224838248488, 0.8017837257372731],
+            [
+                0.9636241116594316,
+                -0.14824986333222026,
+                -0.22237479499833035,
+            ],
+            [
+                0.026726124191242442,
+                0.053452248382484885,
+                0.08017837257372731,
+            ],
+        );
+        custom(
+            [3.0, 4.0, 12.0],
+            1.0 / 3.0,
+            [0.23076923076923078, 0.3076923076923077, 0.9230769230769231],
+            [0.9730085108210399, -0.072975638311578, -0.218926914934734],
+            [0.07692307692307693, 0.10256410256410256, 0.3076923076923077],
+        );
+        custom(
+            [-0.7, 0.7, 0.0001],
+            250.0,
+            [
+                -0.7071067775788599,
+                0.7071067775788599,
+                0.00010101525393983714,
+            ],
+            [
+                0.7071067847942352,
+                0.7071067703634847,
+                0.00010101525290906925,
+            ],
+            [
+                -176.77669439471498,
+                176.77669439471498,
+                0.025253813484959284,
+            ],
+        );
+    }
+
     /// `cargo test -- --ignored` with a running service: CAD2MAXWELL_SESSION_TOKEN and CAD2MAXWELL_TEST_STEP.
     #[test]
     #[ignore = "needs the running geometry service"]
@@ -485,5 +643,33 @@ mod tests {
             "plane {:?}",
             c.component_plane(&summary.import_id, &first.id)
         );
+    }
+
+    /// Writes `rust_{XY,XZ,YZ}.zip` into `CAD2MAXWELL_PARITY_OUT` using the app's request path
+    /// (default plane offsets); a script sends the TS client's requests and diffs the archives.
+    #[test]
+    #[ignore = "needs the running geometry service"]
+    fn real_service_export_per_plane() {
+        use crate::state::section::{PlaneKind, SectionState};
+        let step = std::env::var("CAD2MAXWELL_TEST_STEP").expect("CAD2MAXWELL_TEST_STEP");
+        let out = std::path::PathBuf::from(
+            std::env::var("CAD2MAXWELL_PARITY_OUT").expect("CAD2MAXWELL_PARITY_OUT"),
+        );
+        let c = Client::from_env(std::env::var("CAD2MAXWELL_SESSION_TOKEN").ok());
+        let summary = c.import_step(&step).unwrap();
+        for (kind, name) in [
+            (PlaneKind::XY, "XY"),
+            (PlaneKind::XZ, "XZ"),
+            (PlaneKind::YZ, "YZ"),
+        ] {
+            let mut state = SectionState::default();
+            state.plane = kind;
+            let plane = state.request(&summary.bounds_mm).unwrap();
+            let section = c.section(&summary.import_id, &plane).unwrap();
+            let zip = c
+                .export_dxf(&summary.import_id, &section.section_id)
+                .unwrap();
+            std::fs::write(out.join(format!("rust_{name}.zip")), zip).unwrap();
+        }
     }
 }

@@ -76,8 +76,14 @@ pub fn settings(s: &AppState, t: &Theme, accent: Color) -> El {
         .into_iter()
         .fold(row().gap(space::S1), |r, (kind, label)| {
             r.child(
-                toggle(t, accent, &format!("plane-{label}"), label, sec.plane == kind)
-                    .on_press(move |s: &mut AppState| s.section.set_plane(kind, now_ms())),
+                toggle(
+                    t,
+                    accent,
+                    &format!("plane-{label}"),
+                    label,
+                    sec.plane == kind,
+                )
+                .on_press(move |s: &mut AppState| s.section.set_plane(kind, now_ms())),
             )
         });
     let panel = col()
@@ -146,8 +152,13 @@ pub fn settings(s: &AppState, t: &Theme, accent: Color) -> El {
         let selected = s.model.selected.is_some();
         form = form
             .child(
-                button(t, "align-plane", "Align to selected body", !busy && selected)
-                    .on_press(AppState::align_plane_to_selected),
+                button(
+                    t,
+                    "align-plane",
+                    "Align to selected body",
+                    !busy && selected,
+                )
+                .on_press(AppState::align_plane_to_selected),
             )
             .child(match sec.basis() {
                 Some([n, ..]) => note(t, format!("Unit normal n = {}", fmt.direction(&n))),
@@ -180,14 +191,22 @@ pub fn settings(s: &AppState, t: &Theme, accent: Color) -> El {
             button(
                 t,
                 "section-compute",
-                if computing { "Computing..." } else { "Compute section" },
+                if computing {
+                    "Computing..."
+                } else {
+                    "Compute section"
+                },
                 !busy,
             )
             .on_press(AppState::compute_section),
         )
         .child(note(
             t,
-            format!("History: {} undo, {} redo", sec.past.len(), sec.future.len()),
+            format!(
+                "History: {} undo, {} redo",
+                sec.past.len(),
+                sec.future.len()
+            ),
         ));
 
     // Run status and result.
@@ -201,7 +220,11 @@ pub fn settings(s: &AppState, t: &Theme, accent: Color) -> El {
                     .child(label_value(
                         t,
                         "Bodies",
-                        format!("{} of {}", section.components.len(), imported.component_count),
+                        format!(
+                            "{} of {}",
+                            section.components.len(),
+                            imported.component_count
+                        ),
                     ))
                     .child(label_value(t, "Regions", st.regions.to_string()))
                     .child(label_value(t, "Errors", st.errors.to_string()))

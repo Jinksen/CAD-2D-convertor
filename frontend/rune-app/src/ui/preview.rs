@@ -2,7 +2,9 @@
 //! into a `Pixels` image. Frames are drawn on demand only: `draw` skips when its key is unchanged.
 
 use rune::tok::{Theme, space, type_};
-use rune::{Drag, El, Phase, PointerButton, SurfaceFit, Tx, WheelEvent, col, row, text};
+use rune::{
+    Drag, El, Key, KeyEvent, Phase, PointerButton, SurfaceFit, Tx, WheelEvent, col, row, text,
+};
 
 use super::{button, heading};
 use crate::api::dto::{BoundsMm, SectionPlane};
@@ -47,7 +49,14 @@ pub fn viewport(s: &AppState, t: &Theme) -> El {
 
 fn toolbar(s: &AppState, t: &Theme) -> El {
     let ready = s.preview.status == MeshStatus::Ready;
-    let mut r = row().key("view-toolbar").role("toolbar").label("3D view").w_full().gap(space::S1).px(space::S2).py(space::S1);
+    let mut r = row()
+        .key("view-toolbar")
+        .role("toolbar")
+        .label("3D view")
+        .w_full()
+        .gap(space::S1)
+        .px(space::S2)
+        .py(space::S1);
     r = r.child(
         button(t, "view-fit", "Fit", ready).on_press(|s: &mut AppState| {
             if let Some(bounds) = bounds(s) {
@@ -94,10 +103,15 @@ fn help(s: &AppState) -> String {
         })
         .unwrap_or_default();
     let coarse = match &s.preview.mesh {
-        Some(m) if m.coarsened => format!(" | Coarse display mesh ({:.3} mm); sectioning uses exact geometry", m.deflection_mm),
+        Some(m) if m.coarsened => format!(
+            " | Coarse display mesh ({:.3} mm); sectioning uses exact geometry",
+            m.deflection_mm
+        ),
         _ => String::new(),
     };
-    format!("{plane} | Drag to orbit, right or middle drag to pan, wheel to zoom, click a body to select{coarse}")
+    format!(
+        "{plane} | Drag to orbit, right or middle drag to pan, wheel to zoom, click a body to select, F fit selection, Shift+F fit all{coarse}"
+    )
 }
 
 fn canvas(s: &AppState, t: &Theme) -> El {
@@ -124,6 +138,8 @@ fn canvas(s: &AppState, t: &Theme) -> El {
                     s.preview.camera.zoom(f64::from(e.dy));
                     true
                 })
+                .focusable(true)
+                .on_key(|s: &mut AppState, e: &KeyEvent, _| on_key(s, e))
                 .pointer_buttons([PointerButton::Middle, PointerButton::Secondary])
                 .on_drag(drag);
         }
@@ -134,6 +150,23 @@ fn canvas(s: &AppState, t: &Theme) -> El {
             .color(t.text_secondary)
             .padding(space::S3),
     )
+}
+
+/// F fits the selected body, Shift+F the whole model (as in the 2D view).
+fn on_key(s: &mut AppState, e: &KeyEvent) -> bool {
+    let Key::Text(k) = &e.key else { return false };
+    if !k.eq_ignore_ascii_case("f") {
+        return false;
+    }
+    if let Some(bounds) = bounds(s) {
+        let id = if e.mods.shift {
+            None
+        } else {
+            s.model.selected.clone()
+        };
+        s.preview.fit(id.as_deref(), &bounds);
+    }
+    true
 }
 
 /// Left drag orbits (a short one is a click that picks), other buttons pan.
@@ -163,10 +196,15 @@ fn drag(s: &mut AppState, d: &mut Drag, tx: &mut Tx) {
 fn pick(s: &mut AppState, fx: f32, fy: f32) {
     let id = {
         let frame = s.preview.frame.borrow();
-        let (x, y) = ((fx * frame.width as f32) as usize, (fy * frame.height as f32) as usize);
+        let (x, y) = (
+            (fx * frame.width as f32) as usize,
+            (fy * frame.height as f32) as usize,
+        );
         let Some(body) = frame.pick(x, y) else { return };
         let Some(mesh) = &s.preview.mesh else { return };
-        mesh.components.get(body as usize).map(|c| c.component_id.clone())
+        mesh.components
+            .get(body as usize)
+            .map(|c| c.component_id.clone())
     };
     if let Some(id) = id {
         s.model.select(Some(id));
@@ -179,13 +217,23 @@ fn draw(s: &AppState, t: &Theme) {
     let (Some(mesh), Some(imported)) = (&p.mesh, &s.model.imported) else {
         return;
     };
-    let scale = if p.scale.get() > 0.0 { p.scale.get() } else { 1.0 };
-    let size = ((p.viewport.0 * scale).round() as usize, (p.viewport.1 * scale).round() as usize);
+    let scale = if p.scale.get() > 0.0 {
+        p.scale.get()
+    } else {
+        1.0
+    };
+    let size = (
+        (p.viewport.0 * scale).round() as usize,
+        (p.viewport.1 * scale).round() as usize,
+    );
     if size.0 == 0 || size.1 == 0 {
         return;
     }
     let bounds = &imported.bounds_mm;
-    let guide = s.section.request(bounds).map(|plane| plane_guide(bounds, &plane));
+    let guide = s
+        .section
+        .request(bounds)
+        .map(|plane| plane_guide(bounds, &plane));
     let key = RenderKey {
         size,
         camera: p.camera,
@@ -229,31 +277,60 @@ fn draw(s: &AppState, t: &Theme) {
         background: key.background,
         edge_color: [0x1f, 0x23, 0x28],
     };
-    let rgba = p.frame.borrow_mut().render(size.0, size.1, &p.camera, &scene);
+    let rgba = p
+        .frame
+        .borrow_mut()
+        .render(size.0, size.1, &p.camera, &scene);
     p.pixels.set(size.0 as u32, size.1 as u32, rgba);
-    p.last_frame_ms.set(started.elapsed().as_secs_f32() * 1000.0);
+    p.last_frame_ms
+        .set(started.elapsed().as_secs_f32() * 1000.0);
     *p.drawn.borrow_mut() = Some(key);
 }
 
 /// The React scene's ground grid (10 divisions over twice the model diagonal, at the model's
 /// lowest Z) and axes at the model center.
 fn helpers(bounds: &BoundsMm, dark: bool) -> Vec<Line> {
-    let diagonal = (0..3).map(|i| (bounds.max_xyz[i] - bounds.min_xyz[i]).powi(2)).sum::<f64>().sqrt();
+    let diagonal = (0..3)
+        .map(|i| (bounds.max_xyz[i] - bounds.min_xyz[i]).powi(2))
+        .sum::<f64>()
+        .sqrt();
     let radius = diagonal.max(1.0);
-    let (major, minor) = if dark { ([80, 86, 94], [55, 60, 66]) } else { ([0xb9, 0xbe, 0xc4], [0xdf, 0xe2, 0xe5]) };
+    let (major, minor) = if dark {
+        ([80, 86, 94], [55, 60, 66])
+    } else {
+        ([0xb9, 0xbe, 0xc4], [0xdf, 0xe2, 0xe5])
+    };
     let z = bounds.min_xyz[2];
     let mut lines = vec![];
     for k in -5..=5 {
         let at = f64::from(k) * radius / 5.0;
         let color = if k == 0 { major } else { minor };
-        lines.push(Line { a: [at, -radius, z], b: [at, radius, z], color, on_top: false });
-        lines.push(Line { a: [-radius, at, z], b: [radius, at, z], color, on_top: false });
+        lines.push(Line {
+            a: [at, -radius, z],
+            b: [at, radius, z],
+            color,
+            on_top: false,
+        });
+        lines.push(Line {
+            a: [-radius, at, z],
+            b: [radius, at, z],
+            color,
+            on_top: false,
+        });
     }
     let c = bounds.center();
-    for (axis, color) in [[255, 0, 0], [0, 255, 0], [0, 0, 255]].into_iter().enumerate() {
+    for (axis, color) in [[255, 0, 0], [0, 255, 0], [0, 0, 255]]
+        .into_iter()
+        .enumerate()
+    {
         let mut b = c;
         b[axis] += radius * 0.2;
-        lines.push(Line { a: c, b, color, on_top: false });
+        lines.push(Line {
+            a: c,
+            b,
+            color,
+            on_top: false,
+        });
     }
     lines
 }
@@ -323,6 +400,34 @@ mod tests {
         rt.frame(1.0 / 60.0);
         assert_ne!(rt.state.preview.camera.yaw, before.yaw, "drag orbits");
         assert_ne!(*rt.state.preview.drawn.borrow(), drawn);
+    }
+
+    #[test]
+    fn f_fits_the_selection_and_shift_f_fits_everything() {
+        let mut rt = runtime();
+        let s = &mut rt.state;
+        let key = |s: &mut AppState, k: &str, shift: bool| {
+            let mods = rune::Mods {
+                shift,
+                ..rune::Mods::default()
+            };
+            on_key(
+                s,
+                &KeyEvent {
+                    key: Key::Text(k.into()),
+                    mods,
+                },
+            )
+        };
+        s.model.select(Some("a".into()));
+        s.preview.camera.pan(50.0, 50.0, 100.0);
+        let panned = s.preview.camera;
+        assert!(key(s, "f", false));
+        assert_ne!(s.preview.camera, panned);
+        s.preview.camera = panned;
+        assert!(key(s, "F", true));
+        assert_ne!(s.preview.camera, panned);
+        assert!(!key(s, "x", false));
     }
 
     #[test]

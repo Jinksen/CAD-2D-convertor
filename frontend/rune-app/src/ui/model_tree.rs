@@ -214,8 +214,14 @@ pub fn tree(s: &AppState, t: &Theme, accent: Color) -> El {
     };
     let plane = crate::project::kind_name(s.section.plane);
     panel.child(
-        node(t, accent, "node-section", &format!("Section {plane}"), false)
-            .on_press(|s: &mut AppState| s.shell.show_prefs = false),
+        node(
+            t,
+            accent,
+            "node-section",
+            &format!("Section {plane}"),
+            false,
+        )
+        .on_press(|s: &mut AppState| s.shell.show_prefs = false),
     )
 }
 
@@ -337,16 +343,16 @@ fn step_form(s: &AppState, t: &Theme) -> El {
         .child(
             row()
                 .gap(space::S1)
-                .child(
-                    button(t, "import-path", "Import STEP", idle).on_press(|s: &mut AppState| {
+                .child(button(t, "import-path", "Import STEP", idle).on_press(
+                    |s: &mut AppState| {
                         let path = s.shell.step_path.text.trim().to_owned();
                         if path.is_empty() {
                             s.shell.log(Severity::Error, "Enter a STEP path.");
                         } else {
                             s.open_step(PathBuf::from(path));
                         }
-                    }),
-                )
+                    },
+                ))
                 .child(button(t, "browse-step", "Browse...", idle).on_press_tx(open_step_dialog)),
         )
 }

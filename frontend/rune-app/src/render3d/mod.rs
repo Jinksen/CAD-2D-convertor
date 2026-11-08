@@ -172,7 +172,8 @@ impl PlaneGuide {
 /// for a custom plane (whose `origin_xyz` is `normal * offset`).
 pub fn plane_guide(bounds: &BoundsMm, plane: &SectionPlane) -> PlaneGuide {
     let m = bounds.center();
-    let span: V3 = std::array::from_fn(|i| ((bounds.max_xyz[i] - bounds.min_xyz[i]) * 1.08).max(1.0));
+    let span: V3 =
+        std::array::from_fn(|i| ((bounds.max_xyz[i] - bounds.min_xyz[i]) * 1.08).max(1.0));
     match *plane {
         SectionPlane::XY { offset_mm } => PlaneGuide {
             center: [m[0], m[1], offset_mm],
@@ -216,9 +217,15 @@ mod tests {
 
     #[test]
     fn fits_a_sphere_into_the_narrower_field_of_view() {
-        assert!(near(fit_distance(1.0, 90.0, 1.0), std::f64::consts::SQRT_2 * 1.05));
+        assert!(near(
+            fit_distance(1.0, 90.0, 1.0),
+            std::f64::consts::SQRT_2 * 1.05
+        ));
         assert!(fit_distance(1.0, 90.0, 0.5) > fit_distance(1.0, 90.0, 1.0));
-        assert!(near(fit_distance(1.0, 90.0, 2.0), fit_distance(1.0, 90.0, 1.0)));
+        assert!(near(
+            fit_distance(1.0, 90.0, 2.0),
+            fit_distance(1.0, 90.0, 1.0)
+        ));
     }
 
     #[test]

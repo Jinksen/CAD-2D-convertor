@@ -1,4 +1,5 @@
 //! CAD2Maxwell native desktop app (Rune). Geometry stays in the local Python/OpenCascade service.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod api;
 mod archive;
@@ -28,6 +29,7 @@ fn main() {
     let spec = AppSpec {
         min_size: Some((960.0, 600.0)),
         on_key: Some(ui::on_key),
+        poll: Some(ui::poll),
         ..AppSpec::new("CAD2Maxwell", (1440.0, 900.0), AppState::default, ui::view)
     };
     let app = App::new(spec);

@@ -61,7 +61,9 @@ const GUIDE_ALPHA: f32 = 0.2;
 const GUIDE_EDGE: [u8; 3] = [0x1a, 0x5f, 0xb4];
 
 fn threads() -> usize {
-    thread::available_parallelism().map_or(1, |n| n.get()).min(16)
+    thread::available_parallelism()
+        .map_or(1, |n| n.get())
+        .min(16)
 }
 
 /// Runs `f(offset, chunk)` over `out` split across threads (inline when small).
@@ -133,7 +135,15 @@ fn shade(n: &[f32]) -> f32 {
 }
 
 /// Calls `px(x, y, z, shade)` for every pixel center inside the triangle within rows `y0..y1`.
-fn fill(a: Sv, mut b: Sv, mut c: Sv, y0: usize, y1: usize, w: usize, mut px: impl FnMut(usize, usize, f32, f32)) {
+fn fill(
+    a: Sv,
+    mut b: Sv,
+    mut c: Sv,
+    y0: usize,
+    y1: usize,
+    w: usize,
+    mut px: impl FnMut(usize, usize, f32, f32),
+) {
     if a.z <= 0.0 || b.z <= 0.0 || c.z <= 0.0 {
         return;
     }
@@ -173,7 +183,12 @@ fn fill(a: Sv, mut b: Sv, mut c: Sv, y0: usize, y1: usize, w: usize, mut px: imp
             if e0 >= 0.0 && e1 >= 0.0 && e2 >= 0.0 {
                 inside = true;
                 let (l0, l1, l2) = (e0 * inv, e1 * inv, e2 * inv);
-                px(x, y, l0 * a.z + l1 * b.z + l2 * c.z, l0 * a.shade + l1 * b.shade + l2 * c.shade);
+                px(
+                    x,
+                    y,
+                    l0 * a.z + l1 * b.z + l2 * c.z,
+                    l0 * a.shade + l1 * b.shade + l2 * c.shade,
+                );
             } else if inside {
                 break;
             }
@@ -244,16 +259,32 @@ impl Frame {
             par_chunks(out, |first, chunk| {
                 for (k, sv) in chunk.iter_mut().enumerate() {
                     let i = (first + k) * 3;
-                    *sv = proj.point([body.positions[i], body.positions[i + 1], body.positions[i + 2]], shade(&body.normals[i..i + 3]));
+                    *sv = proj.point(
+                        [
+                            body.positions[i],
+                            body.positions[i + 1],
+                            body.positions[i + 2],
+                        ],
+                        shade(&body.normals[i..i + 3]),
+                    );
                 }
             });
         }
         let lines: Vec<(Sv, Sv, [u8; 3], bool)> = scene
             .lines
             .iter()
-            .map(|l| (proj.point(l.a.map(|v| v as f32), 1.0), proj.point(l.b.map(|v| v as f32), 1.0), l.color, l.on_top))
+            .map(|l| {
+                (
+                    proj.point(l.a.map(|v| v as f32), 1.0),
+                    proj.point(l.b.map(|v| v as f32), 1.0),
+                    l.color,
+                    l.on_top,
+                )
+            })
             .collect();
-        let guide = scene.guide.map(|g| g.map(|c| proj.point(c.map(|v| v as f32), 1.0)));
+        let guide = scene
+            .guide
+            .map(|g| g.map(|c| proj.point(c.map(|v| v as f32), 1.0)));
 
         let mut rgba = vec![0u8; width * height * 4];
         let rows = height.div_ceil(threads());
@@ -267,7 +298,13 @@ impl Frame {
                 let (lines, guide) = (&lines, &guide);
                 s.spawn(move || {
                     let y0 = i * rows;
-                    let band = Band { y0, y1: (y0 + rows).min(height), rgba, depth, ids };
+                    let band = Band {
+                        y0,
+                        y1: (y0 + rows).min(height),
+                        rgba,
+                        depth,
+                        ids,
+                    };
                     draw_band(band, width, scene, svs, lines, guide);
                 });
             }
@@ -284,8 +321,21 @@ impl Frame {
     }
 }
 
-fn draw_band(band: Band, w: usize, scene: &Scene, svs: &[Vec<Sv>], lines: &[(Sv, Sv, [u8; 3], bool)], guide: &Option<[Sv; 4]>) {
-    let Band { y0, y1, rgba, depth, ids } = band;
+fn draw_band(
+    band: Band,
+    w: usize,
+    scene: &Scene,
+    svs: &[Vec<Sv>],
+    lines: &[(Sv, Sv, [u8; 3], bool)],
+    guide: &Option<[Sv; 4]>,
+) {
+    let Band {
+        y0,
+        y1,
+        rgba,
+        depth,
+        ids,
+    } = band;
     let bg = scene.background;
     for p in rgba.chunks_exact_mut(4) {
         p.copy_from_slice(&[bg[0], bg[1], bg[2], 255]);
@@ -295,16 +345,24 @@ fn draw_band(band: Band, w: usize, scene: &Scene, svs: &[Vec<Sv>], lines: &[(Sv,
     for (body, sv) in scene.bodies.iter().zip(svs) {
         let (base, em) = (body.color, body.emissive);
         for t in body.indices.chunks_exact(3) {
-            fill(sv[t[0] as usize], sv[t[1] as usize], sv[t[2] as usize], y0, y1, w, |x, y, z, sh| {
-                let i = (y - y0) * w + x;
-                if z > depth[i] {
-                    depth[i] = z;
-                    ids[i] = body.id + 1;
-                    for k in 0..3 {
-                        rgba[i * 4 + k] = (base[k] * sh + em[k]).clamp(0.0, 255.0) as u8;
+            fill(
+                sv[t[0] as usize],
+                sv[t[1] as usize],
+                sv[t[2] as usize],
+                y0,
+                y1,
+                w,
+                |x, y, z, sh| {
+                    let i = (y - y0) * w + x;
+                    if z > depth[i] {
+                        depth[i] = z;
+                        ids[i] = body.id + 1;
+                        for k in 0..3 {
+                            rgba[i * 4 + k] = (base[k] * sh + em[k]).clamp(0.0, 255.0) as u8;
+                        }
                     }
-                }
-            });
+                },
+            );
         }
     }
     if let Some([a, b, c, d]) = *guide {
@@ -328,7 +386,14 @@ fn draw_band(band: Band, w: usize, scene: &Scene, svs: &[Vec<Sv>], lines: &[(Sv,
     };
     for (body, sv) in scene.bodies.iter().zip(svs) {
         for e in body.edges.chunks_exact(2) {
-            line(sv[e[0] as usize], sv[e[1] as usize], y0, y1, w, |x, y, z| put(x, y, z, scene.edge_color, false));
+            line(
+                sv[e[0] as usize],
+                sv[e[1] as usize],
+                y0,
+                y1,
+                w,
+                |x, y, z| put(x, y, z, scene.edge_color, false),
+            );
         }
     }
     for &(a, b, color, on_top) in lines {
@@ -339,7 +404,12 @@ fn draw_band(band: Band, w: usize, scene: &Scene, svs: &[Vec<Sv>], lines: &[(Sv,
 /// The guide outline, drawn over the model.
 pub fn guide_outline(corners: [V3; 4]) -> Vec<Line> {
     (0..4)
-        .map(|i| Line { a: corners[i], b: corners[(i + 1) % 4], color: GUIDE_EDGE, on_top: true })
+        .map(|i| Line {
+            a: corners[i],
+            b: corners[(i + 1) % 4],
+            color: GUIDE_EDGE,
+            on_top: true,
+        })
         .collect()
 }
 
@@ -354,12 +424,29 @@ pub(crate) mod tests {
     pub(crate) fn cube(s: f32, at: [f32; 3]) -> Mesh {
         let mut pos = vec![];
         for i in 0..8u32 {
-            pos.extend([at[0] + s * (i & 1) as f32, at[1] + s * (i >> 1 & 1) as f32, at[2] + s * (i >> 2 & 1) as f32]);
+            pos.extend([
+                at[0] + s * (i & 1) as f32,
+                at[1] + s * (i >> 1 & 1) as f32,
+                at[2] + s * (i >> 2 & 1) as f32,
+            ]);
         }
         let normals = pos.iter().map(|_| 0.577).collect();
-        let quads = [[0, 1, 3, 2], [4, 5, 7, 6], [0, 1, 5, 4], [2, 3, 7, 6], [0, 2, 6, 4], [1, 3, 7, 5]];
-        let idx = quads.iter().flat_map(|q| [q[0], q[1], q[2], q[0], q[2], q[3]]).collect();
-        let edges = quads.iter().flat_map(|q| [q[0], q[1], q[1], q[2], q[2], q[3], q[3], q[0]]).collect();
+        let quads = [
+            [0, 1, 3, 2],
+            [4, 5, 7, 6],
+            [0, 1, 5, 4],
+            [2, 3, 7, 6],
+            [0, 2, 6, 4],
+            [1, 3, 7, 5],
+        ];
+        let idx = quads
+            .iter()
+            .flat_map(|q| [q[0], q[1], q[2], q[0], q[2], q[3]])
+            .collect();
+        let edges = quads
+            .iter()
+            .flat_map(|q| [q[0], q[1], q[1], q[2], q[2], q[3], q[3], q[0]])
+            .collect();
         (pos, normals, idx, edges)
     }
 
@@ -396,7 +483,10 @@ pub(crate) mod tests {
         assert_eq!(frame.pick(2, 2), None);
         assert_eq!(&rgba[..4], &[10, 20, 30, 255]);
         let c = &rgba[(100 * 200 + 100) * 4..][..3];
-        assert!(c[0] > c[1] && c[1] > c[2], "body color, not background: {c:?}");
+        assert!(
+            c[0] > c[1] && c[1] > c[2],
+            "body color, not background: {c:?}"
+        );
         assert_eq!(frame.pick(500, 0), None);
     }
 
@@ -421,12 +511,23 @@ pub(crate) mod tests {
         let mut s = scene(&cubes);
         let mut frame = Frame::default();
         let plain = frame.render(200, 200, &cam, &s);
-        let dark = plain.chunks_exact(4).filter(|p| p[..3] == [0, 0, 0]).count();
+        let dark = plain
+            .chunks_exact(4)
+            .filter(|p| p[..3] == [0, 0, 0])
+            .count();
         assert!(dark > 100, "feature edges drawn: {dark}");
-        s.guide = Some([[-1.1, -2.0, -1.1], [1.1, -2.0, -1.1], [1.1, -2.0, 1.1], [-1.1, -2.0, 1.1]]);
+        s.guide = Some([
+            [-1.1, -2.0, -1.1],
+            [1.1, -2.0, -1.1],
+            [1.1, -2.0, 1.1],
+            [-1.1, -2.0, 1.1],
+        ]);
         s.lines = guide_outline(s.guide.unwrap());
         let guided = frame.render(200, 200, &cam, &s);
-        assert_ne!(plain[(100 * 200 + 100) * 4 + 2], guided[(100 * 200 + 100) * 4 + 2]);
+        assert_ne!(
+            plain[(100 * 200 + 100) * 4 + 2],
+            guided[(100 * 200 + 100) * 4 + 2]
+        );
         assert!(guided.chunks_exact(4).any(|p| p[..3] == GUIDE_EDGE));
     }
 
@@ -459,11 +560,23 @@ pub(crate) mod tests {
     #[test]
     #[ignore]
     fn bench_frame_times_and_pick_latency() {
-        for (label, bodies, n) in [("small 20k", 20, 22), ("typical 200k", 50, 45), ("large 1M", 100, 71), ("huge 2M", 100, 100)] {
-            let meshes: Vec<_> = (0..bodies).map(|b| sphere(n, 1.0, [(b % 10) as f32 * 1.5, (b / 10) as f32 * 1.5, 0.0])).collect();
+        for (label, bodies, n) in [
+            ("small 20k", 20, 22),
+            ("typical 200k", 50, 45),
+            ("large 1M", 100, 71),
+            ("huge 2M", 100, 100),
+        ] {
+            let meshes: Vec<_> = (0..bodies)
+                .map(|b| sphere(n, 1.0, [(b % 10) as f32 * 1.5, (b / 10) as f32 * 1.5, 0.0]))
+                .collect();
             let tris: usize = meshes.iter().map(|m| m.2.len() / 3).sum();
             let mut s = scene(&meshes);
-            s.lines = vec![Line { a: [0.0; 3], b: [15.0, 15.0, 0.0], color: [9, 9, 9], on_top: false }];
+            s.lines = vec![Line {
+                a: [0.0; 3],
+                b: [15.0, 15.0, 0.0],
+                color: [9, 9, 9],
+                on_top: false,
+            }];
             let cam = Camera::looking([7.0, 7.0, 0.0], StandardView::Iso.direction(), 11.0, 1.7);
             for (w, h) in [(1280, 760), (2560, 1520)] {
                 let mut frame = Frame::default();
@@ -474,10 +587,15 @@ pub(crate) mod tests {
                 }
                 let ms = t.elapsed().as_secs_f64() * 200.0;
                 let t = std::time::Instant::now();
-                let hit = (0..1000).filter(|i| frame.pick(i % w, i % h).is_some()).count();
+                let hit = (0..1000)
+                    .filter(|i| frame.pick(i % w, i % h).is_some())
+                    .count();
                 let pick_us = t.elapsed().as_secs_f64() * 1e3;
                 let mb = (w * h * (4 + 4 + 4)) as f64 / 1e6;
-                println!("{label:>13} {tris:>8} tris {w}x{h}: {ms:7.1} ms/frame, pick {pick_us:.2} us ({hit}), buffers {mb:.0} MB, threads {}", threads());
+                println!(
+                    "{label:>13} {tris:>8} tris {w}x{h}: {ms:7.1} ms/frame, pick {pick_us:.2} us ({hit}), buffers {mb:.0} MB, threads {}",
+                    threads()
+                );
             }
         }
     }

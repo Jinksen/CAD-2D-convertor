@@ -24,10 +24,19 @@ fn a_tilted_normal_gets_an_orthonormal_frame() {
 
 #[test]
 fn axis_aligned_frames_match_the_backend() {
-    assert_eq!(plane_basis(PlaneKind::XZ, [0.0; 3]).unwrap()[0], [0.0, -1.0, 0.0]);
-    assert_eq!(plane_basis(PlaneKind::YZ, [0.0; 3]).unwrap()[1], [0.0, 1.0, 0.0]);
+    assert_eq!(
+        plane_basis(PlaneKind::XZ, [0.0; 3]).unwrap()[0],
+        [0.0, -1.0, 0.0]
+    );
+    assert_eq!(
+        plane_basis(PlaneKind::YZ, [0.0; 3]).unwrap()[1],
+        [0.0, 1.0, 0.0]
+    );
     let [n, x, y] = plane_basis(PlaneKind::Custom, [0.0, 0.0, 1.0]).unwrap();
-    assert_eq!((n, x, y), ([0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]));
+    assert_eq!(
+        (n, x, y),
+        ([0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0])
+    );
     let [_, x, _] = plane_basis(PlaneKind::Custom, [1.0, 0.0, 0.0]).unwrap();
     assert_eq!(x, [0.0, 1.0, 0.0]);
 }
@@ -91,7 +100,11 @@ fn a_decimal_comma_is_accepted_and_invalid_text_stays_out_of_the_plane() {
     s.offset_text.replace_text("12,5 mm");
     s.commit_fields(20_000);
     assert_eq!(s.offset_mm, Some(12.5));
-    assert!(s.field_error.as_deref().is_some_and(|e| e.contains("not a number")));
+    assert!(
+        s.field_error
+            .as_deref()
+            .is_some_and(|e| e.contains("not a number"))
+    );
 }
 
 #[test]
@@ -125,7 +138,10 @@ fn normal_fields_edit_the_custom_normal_and_undo_restores_the_text() {
 fn a_custom_plane_from_the_service_is_one_undo_step() {
     let mut s = SectionState::default();
     s.set_custom([0.0, 1.0, 0.0], Some(7.0), 0);
-    assert_eq!((s.plane, s.custom_normal, s.offset_mm), (PlaneKind::Custom, [0.0, 1.0, 0.0], Some(7.0)));
+    assert_eq!(
+        (s.plane, s.custom_normal, s.offset_mm),
+        (PlaneKind::Custom, [0.0, 1.0, 0.0], Some(7.0))
+    );
     s.undo();
     assert_eq!(s.plane, PlaneKind::XY);
 }
@@ -152,19 +168,26 @@ fn export_is_blocked_until_the_current_section_is_complete_and_says_why() {
     let mut s = SectionState::default();
     assert!(s.export_blocker().is_some_and(|m| m.contains("Compute")));
     s.last = Some(complete_section());
-    assert!(s.export_blocker().is_some_and(|m| m.contains("plane changed")));
+    assert!(
+        s.export_blocker()
+            .is_some_and(|m| m.contains("plane changed"))
+    );
     s.stats = Some(SectionStats::default());
     assert_eq!(s.export_blocker(), None);
     s.last.as_mut().unwrap().components[0].wires[0].closed = false;
     assert!(s.export_blocker().is_some_and(|m| m.contains("gap")));
     s.last.as_mut().unwrap().components[0].wires[0].closed = true;
-    s.last.as_mut().unwrap().diagnostics.push(SectionDiagnostic {
-        code: "x".into(),
-        severity: Severity::Error,
-        message: "m".into(),
-        component_id: None,
-        related_component_id: None,
-    });
+    s.last
+        .as_mut()
+        .unwrap()
+        .diagnostics
+        .push(SectionDiagnostic {
+            code: "x".into(),
+            severity: Severity::Error,
+            message: "m".into(),
+            component_id: None,
+            related_component_id: None,
+        });
     assert!(s.export_blocker().is_some_and(|m| m.contains("errors")));
     s.last.as_mut().unwrap().diagnostics.clear();
     s.last.as_mut().unwrap().components.clear();

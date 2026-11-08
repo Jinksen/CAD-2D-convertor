@@ -34,15 +34,8 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Node and frontend builds
-node_modules/
-.pnpm-store/
-dist/
-*.tsbuildinfo
-
-# Rust and Tauri generated files
+# Rust build output
 target/
-/frontend/src-tauri/gen/
 .pytest-tmp/
 
 # Committed demo model

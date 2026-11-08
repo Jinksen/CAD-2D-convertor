@@ -253,7 +253,12 @@ mod tests {
     #[test]
     fn a_full_circle_stays_within_tolerance_and_closes_on_itself() {
         let mut pts = vec![];
-        tessellate(&circle(10.0, 0.0, std::f64::consts::TAU), 0.01, false, &mut pts);
+        tessellate(
+            &circle(10.0, 0.0, std::f64::consts::TAU),
+            0.01,
+            false,
+            &mut pts,
+        );
         assert!(pts.len() > 40);
         let (first, last) = (pts[0], pts[pts.len() - 1]);
         assert!((first[0] - last[0]).abs() < 1e-9 && (first[1] - last[1]).abs() < 1e-9);

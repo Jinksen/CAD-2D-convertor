@@ -132,7 +132,10 @@ fn hide_and_isolate_buttons_and_keys_only_change_display_visibility() {
     assert!(rt.state.model.hidden.contains("body-1"));
     click(&mut rt, "body-body-2");
     press(&mut rt, text_key("i"), Mods::default());
-    assert!(rt.state.model.hidden.is_empty(), "body-1 was already the only visible-by-isolation set");
+    assert!(
+        rt.state.model.hidden.is_empty(),
+        "body-1 was already the only visible-by-isolation set"
+    );
     press(&mut rt, text_key("i"), Mods::default());
     assert_eq!(rt.state.model.hidden, ["body-1".to_string()].into());
     press(&mut rt, text_key("v"), Mods::default());
@@ -152,7 +155,14 @@ fn global_shortcuts_pick_planes_views_and_undo_redo() {
     let (key, mods) = ctrl('z');
     press(&mut rt, key.clone(), mods);
     assert_eq!(rt.state.section.plane, PlaneKind::XY);
-    press(&mut rt, key, Mods { shift: true, ..mods });
+    press(
+        &mut rt,
+        key,
+        Mods {
+            shift: true,
+            ..mods
+        },
+    );
     assert_eq!(rt.state.section.plane, PlaneKind::YZ);
     let (key, mods) = ctrl('2');
     press(&mut rt, key, mods);
@@ -257,6 +267,10 @@ fn every_interactive_control_has_a_role_and_a_name() {
             );
         }
     }
-    assert!(nodes.iter().any(|n| n["role"] == "radio-button" && n["name"] == "Dark"));
+    assert!(
+        nodes
+            .iter()
+            .any(|n| n["role"] == "radio-button" && n["name"] == "Dark")
+    );
     assert!(nodes.iter().any(|n| n["role"] == "check-box"));
 }

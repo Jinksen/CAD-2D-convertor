@@ -251,7 +251,11 @@ fn picking_ignores_hidden_bodies_and_treats_a_hole_as_empty() {
     };
     assert_eq!(pk([1.0, 1.0], &shown).as_deref(), Some("a"));
     assert_eq!(pk([5.0, 5.0], &shown), None, "inside the hole");
-    assert_eq!(pk([5.0, 7.0], &shown).as_deref(), Some("a"), "on the hole edge");
+    assert_eq!(
+        pk([5.0, 7.0], &shown).as_deref(),
+        Some("a"),
+        "on the hole edge"
+    );
     assert_eq!(pk([1.0, 1.0], &hide_a), None);
     assert_eq!(pk([-5.0, -5.0], &shown), None);
 }
@@ -382,7 +386,10 @@ fn bench_real_sections() {
         let plane = state.request(&summary.bounds_mm).unwrap();
         let t0 = Instant::now();
         let section = client.section(&summary.import_id, &plane).unwrap();
-        println!("BENCH service section {kind:?} took {:.0} ms", t0.elapsed().as_secs_f64() * 1e3);
+        println!(
+            "BENCH service section {kind:?} took {:.0} ms",
+            t0.elapsed().as_secs_f64() * 1e3
+        );
         report(&format!("real-{kind:?}"), section);
     }
 }

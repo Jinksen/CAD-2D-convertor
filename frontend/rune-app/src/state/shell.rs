@@ -70,6 +70,9 @@ pub struct ShellState {
     pub backend: BackendStatus,
     /// What the service is working on, shown in the status bar while set.
     pub busy: Option<String>,
+    pub busy_since: Option<std::time::Instant>,
+    /// Bumped by Cancel: a result started under an older value is dropped (like React's abort).
+    pub cancel_gen: u64,
     /// The preferences panel replaces the settings column while open.
     pub show_prefs: bool,
     /// Where the open project was saved; Ctrl+S saves there.
@@ -98,6 +101,19 @@ impl ShellState {
             component_id: None,
             related_component_id: None,
         });
+    }
+
+    /// Import, project open and section runs can be cancelled; the others finish in moments.
+    pub fn cancellable(&self) -> bool {
+        matches!(
+            self.busy.as_deref(),
+            Some("Importing STEP" | "Opening project" | "Computing exact section")
+        )
+    }
+
+    /// Whole seconds the running operation has taken.
+    pub fn elapsed_secs(&self) -> u64 {
+        self.busy_since.map_or(0, |t| t.elapsed().as_secs())
     }
 
     pub fn set_theme(&mut self, theme: Theme) {

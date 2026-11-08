@@ -105,7 +105,11 @@ impl NumberFormat {
         }
         let fixed = format!("{:.*}", usize::from(decimals), value.abs());
         let (int, frac) = fixed.split_once('.').unwrap_or((&fixed, ""));
-        let frac = if self.trailing_zeros { frac } else { frac.trim_end_matches('0') };
+        let frac = if self.trailing_zeros {
+            frac
+        } else {
+            frac.trim_end_matches('0')
+        };
         let negative = value < 0.0 && int.bytes().chain(frac.bytes()).any(|b| b != b'0');
         let (int, frac) = if self.digit_grouping {
             (group(int, false), group(frac, true))
@@ -118,7 +122,11 @@ impl NumberFormat {
         }
         out.push_str(&int);
         if !frac.is_empty() {
-            out.push(if self.decimal_marker == DecimalMarker::Comma { ',' } else { '.' });
+            out.push(if self.decimal_marker == DecimalMarker::Comma {
+                ','
+            } else {
+                '.'
+            });
             out.push_str(&frac);
         }
         out
@@ -130,23 +138,38 @@ impl NumberFormat {
 
     /// A length given in millimetres, converted to and labelled with the display unit.
     pub fn length(&self, mm: f64) -> String {
-        format!("{}{NBSP}{}", self.length_number(mm), self.length_unit.symbol())
+        format!(
+            "{}{NBSP}{}",
+            self.length_number(mm),
+            self.length_unit.symbol()
+        )
     }
 
     /// Extents sharing one unit: "(10.000 x 20.000 x 30.000) mm".
     pub fn length_product(&self, mm: &[f64]) -> String {
         let numbers: Vec<String> = mm.iter().map(|v| self.length_number(*v)).collect();
-        format!("({}){NBSP}{}", numbers.join(" \u{d7} "), self.length_unit.symbol())
+        format!(
+            "({}){NBSP}{}",
+            numbers.join(" \u{d7} "),
+            self.length_unit.symbol()
+        )
     }
 
     /// Separates list items so a comma decimal marker is never ambiguous.
     pub fn list_separator(&self) -> &'static str {
-        if self.decimal_marker == DecimalMarker::Comma { "; " } else { ", " }
+        if self.decimal_marker == DecimalMarker::Comma {
+            "; "
+        } else {
+            ", "
+        }
     }
 
     /// A dimensionless direction such as a plane normal: "(0.0000, 0.0000, 1.0000)".
     pub fn direction(&self, v: &[f64]) -> String {
-        let parts: Vec<String> = v.iter().map(|x| self.number(*x, self.direction_decimals)).collect();
+        let parts: Vec<String> = v
+            .iter()
+            .map(|x| self.number(*x, self.direction_decimals))
+            .collect();
         format!("({})", parts.join(self.list_separator()))
     }
 }
@@ -192,7 +215,10 @@ mod tests {
         digit_grouping: true,
         trailing_zeros: true,
     };
-    const COMMA: NumberFormat = NumberFormat { decimal_marker: DecimalMarker::Comma, ..D };
+    const COMMA: NumberFormat = NumberFormat {
+        decimal_marker: DecimalMarker::Comma,
+        ..D
+    };
 
     #[test]
     fn writes_a_length_with_a_fixed_resolution_and_a_no_break_space_before_the_unit() {
@@ -208,32 +234,54 @@ mod tests {
     #[test]
     fn groups_digits_in_threes_leaving_four_digit_groups_alone() {
         assert_eq!(D.number(1234.5, 1), "1234.5");
-        assert_eq!(D.number(1234567.123456, 6), "1\u{202f}234\u{202f}567.123\u{202f}456");
-        assert_eq!(NumberFormat { digit_grouping: false, ..D }.number(1234567.0, 0), "1234567");
+        assert_eq!(
+            D.number(1234567.123456, 6),
+            "1\u{202f}234\u{202f}567.123\u{202f}456"
+        );
+        assert_eq!(
+            NumberFormat {
+                digit_grouping: false,
+                ..D
+            }
+            .number(1234567.0, 0),
+            "1234567"
+        );
     }
 
     #[test]
     fn comma_marker_uses_semicolon_separated_lists() {
         assert_eq!(COMMA.length(12.5), "12,500\u{a0}mm");
-        assert_eq!(COMMA.direction(&[0.0, 0.6, -0.8]), "(0,0000; 0,6000; \u{2212}0,8000)");
+        assert_eq!(
+            COMMA.direction(&[0.0, 0.6, -0.8]),
+            "(0,0000; 0,6000; \u{2212}0,8000)"
+        );
         assert_eq!(D.direction(&[0.0, 0.0, 1.0]), "(0.0000, 0.0000, 1.0000)");
     }
 
     #[test]
     fn can_drop_trailing_zeros() {
-        let f = NumberFormat { trailing_zeros: false, ..D };
+        let f = NumberFormat {
+            trailing_zeros: false,
+            ..D
+        };
         assert_eq!(f.length(10.0), "10\u{a0}mm");
         assert_eq!(f.length(10.25), "10.25\u{a0}mm");
     }
 
     #[test]
     fn writes_extents_with_one_shared_unit() {
-        assert_eq!(D.length_product(&[10.0, 20.0, 30.0]), "(10.000 \u{d7} 20.000 \u{d7} 30.000)\u{a0}mm");
+        assert_eq!(
+            D.length_product(&[10.0, 20.0, 30.0]),
+            "(10.000 \u{d7} 20.000 \u{d7} 30.000)\u{a0}mm"
+        );
     }
 
     #[test]
     fn converts_only_the_displayed_length_unit() {
-        let unit = |u| NumberFormat { length_unit: u, ..D };
+        let unit = |u| NumberFormat {
+            length_unit: u,
+            ..D
+        };
         assert_eq!(unit(LengthUnit::In).length(25.4), "1.000\u{a0}in");
         assert_eq!(unit(LengthUnit::M).length(1500.0), "1.500\u{a0}m");
     }
@@ -251,7 +299,11 @@ mod tests {
 
     #[test]
     fn project_files_of_the_react_app_deserialize() {
-        let f: NumberFormat = serde_json::from_str(r#"{"lengthUnit":"in","decimalMarker":","}"#).unwrap();
-        assert_eq!((f.length_unit, f.decimal_marker, f.length_decimals), (LengthUnit::In, DecimalMarker::Comma, 3));
+        let f: NumberFormat =
+            serde_json::from_str(r#"{"lengthUnit":"in","decimalMarker":","}"#).unwrap();
+        assert_eq!(
+            (f.length_unit, f.decimal_marker, f.length_decimals),
+            (LengthUnit::In, DecimalMarker::Comma, 3)
+        );
     }
 }

@@ -48,7 +48,11 @@ impl Look {
             bg: t.bg,
             selected: rgb(if dark { [98, 160, 234] } else { [26, 95, 180] }),
             related: rgb(if dark { [255, 163, 72] } else { [179, 92, 0] }),
-            default: rgb(if dark { [120, 160, 200] } else { [74, 111, 143] }),
+            default: rgb(if dark {
+                [120, 160, 200]
+            } else {
+                [74, 111, 143]
+            }),
         }
     }
 }
@@ -104,10 +108,14 @@ fn visible_box(map: &Map, size: Size, margin_px: f64) -> [f64; 4] {
 }
 
 fn wire_box(wire: &SectionWire) -> Option<[f64; 4]> {
-    wire.curves
-        .iter()
-        .map(geometry::curve_box)
-        .reduce(|a, b| [a[0].min(b[0]), a[1].min(b[1]), a[2].max(b[2]), a[3].max(b[3])])
+    wire.curves.iter().map(geometry::curve_box).reduce(|a, b| {
+        [
+            a[0].min(b[0]),
+            a[1].min(b[1]),
+            a[2].max(b[2]),
+            a[3].max(b[3]),
+        ]
+    })
 }
 
 /// The wires of a body that touch the view and are larger than a speck, tessellated to pixels.
@@ -212,7 +220,12 @@ pub fn pick(p: &Paint, view: ViewBox, size: Size, at: P) -> Option<String> {
     let w = camera::screen_to_view(view, size, at);
     let world = [w[0], -w[1]];
     let reach = PICK_PX / map.scale;
-    let near = [world[0] - reach, world[1] - reach, world[0] + reach, world[1] + reach];
+    let near = [
+        world[0] - reach,
+        world[1] - reach,
+        world[0] + reach,
+        world[1] + reach,
+    ];
     for &i in p.scene.paint_order.iter().rev() {
         let comp = &p.section.components[i];
         if (p.hidden)(&comp.component_id) {
@@ -268,7 +281,11 @@ fn on_key(s: &mut AppState, e: &KeyEvent) -> bool {
         Key::Down => s.section.pan_fraction(0.0, 0.1),
         Key::Text(k) => match k.as_str() {
             "f" | "F" => {
-                let id = if e.mods.shift { None } else { s.model.selected.clone() };
+                let id = if e.mods.shift {
+                    None
+                } else {
+                    s.model.selected.clone()
+                };
                 s.section.fit(id.as_deref());
             }
             "+" | "=" => s.section.zoom(0.8, None),
@@ -324,7 +341,11 @@ fn click(s: &mut AppState, at: P) {
 }
 
 pub fn canvas(s: &AppState, t: &Theme) -> El {
-    let note = |msg: &str| text(msg.to_owned()).font(type_::LABEL).color(t.text_secondary);
+    let note = |msg: &str| {
+        text(msg.to_owned())
+            .font(type_::LABEL)
+            .color(t.text_secondary)
+    };
     let Some(section) = &s.section.last else {
         return col()
             .key("section-canvas")
@@ -382,8 +403,7 @@ pub fn canvas(s: &AppState, t: &Theme) -> El {
             }),
         )
         .child(
-            button(t, "zoom-in", "+", true)
-                .on_press(|s: &mut AppState| s.section.zoom(0.8, None)),
+            button(t, "zoom-in", "+", true).on_press(|s: &mut AppState| s.section.zoom(0.8, None)),
         )
         .child(
             button(t, "zoom-out", "-", true)

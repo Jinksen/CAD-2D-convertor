@@ -71,13 +71,35 @@ impl AppState {
             return;
         }
         self.shell.busy = Some(what.to_owned());
+        self.shell.busy_since = Some(std::time::Instant::now());
+        let generation = self.shell.cancel_gen;
         tasks.run(work, move |state, result| {
+            if state.shell.cancel_gen != generation {
+                return; // cancelled: the worker's result is abandoned
+            }
             state.shell.busy = None;
+            state.shell.busy_since = None;
             match result {
                 Ok(value) => done(state, value),
                 Err(message) => state.shell.log(Severity::Error, message),
             }
         });
+    }
+
+    /// Abandons the running operation; its result is dropped when it arrives. Like React, a
+    /// cancelled section also clears the shown result.
+    pub fn cancel_operation(&mut self) {
+        if !self.shell.cancellable() {
+            return;
+        }
+        if self.shell.busy.as_deref() == Some("Computing exact section") {
+            self.section.last = None;
+            self.section.stats = None;
+        }
+        self.shell.busy = None;
+        self.shell.busy_since = None;
+        self.shell.cancel_gen += 1;
+        self.shell.log(Severity::Info, "Cancelled.");
     }
 
     /// Polls the service health, retrying while it starts up.
@@ -454,6 +476,23 @@ mod tests {
             (Severity::Error, "Not a STEP file.")
         );
         assert!(state.model.imported.is_none());
+    }
+
+    #[test]
+    fn cancelled_operation_result_is_dropped_and_the_next_one_still_runs() {
+        let fake = serve(vec![
+            (200, "application/json", IMPORT.as_bytes().to_vec()),
+            (200, "application/json", IMPORT.as_bytes().to_vec()),
+        ]);
+        let (mut state, rx) = harness(&fake.url);
+        state.open_step(PathBuf::from("a.step"));
+        state.cancel_operation();
+        assert!(state.shell.busy.is_none());
+        settle(&mut state, &rx); // the cancelled import's result: ignored
+        assert!(state.model.imported.is_none());
+        state.open_step(PathBuf::from("b.step"));
+        settle(&mut state, &rx);
+        assert!(state.model.imported.is_some());
     }
 
     #[test]

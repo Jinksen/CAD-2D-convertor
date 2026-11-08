@@ -153,8 +153,23 @@ impl Default for SectionState {
     }
 }
 
+/// Unit vector. The length is computed like JS `Math.hypot` (V8: scaled, Kahan-summed) so the
+/// custom plane sent to the service is bit-identical to the React app's.
 fn norm(v: Vec3) -> Option<Vec3> {
-    let length = v.iter().map(|x| x * x).sum::<f64>().sqrt();
+    let max = v.iter().fold(0.0_f64, |m, x| m.max(x.abs()));
+    let length = if max == 0.0 || !max.is_finite() {
+        max
+    } else {
+        let (mut sum, mut compensation) = (0.0_f64, 0.0_f64);
+        for x in v {
+            let n = x.abs() / max;
+            let summand = n * n - compensation;
+            let next = sum + summand;
+            compensation = (next - sum) - summand;
+            sum = next;
+        }
+        sum.sqrt() * max
+    };
     (length.is_finite() && length >= 1e-12).then(|| v.map(|x| x / length))
 }
 

@@ -1,11 +1,11 @@
 //! Toolbar, preferences, messages pane, status bar and global keyboard shortcuts.
 
 use rune::tok::{Theme, space, type_};
-use rune::{
-    Color, El, FileDialogOptions, Key, KeyEvent, ScrollSpec, Tx, col, row, spacer, text,
-};
+use rune::{Color, El, FileDialogOptions, Key, KeyEvent, ScrollSpec, Tx, col, row, spacer, text};
 
-use super::{MESSAGES_HEIGHT, button, heading, label_value, rule, severity_color, severity_label, toggle};
+use super::{
+    MESSAGES_HEIGHT, button, heading, label_value, rule, severity_color, severity_label, toggle,
+};
 use crate::api::dto::Severity;
 use crate::format::{DecimalMarker, LengthUnit, MAX_DECIMALS, NumberFormat};
 use crate::state::preview::ViewportMode;
@@ -123,7 +123,9 @@ pub fn toolbar(s: &AppState, t: &Theme, accent: Color) -> El {
                 .child(
                     button(t, "save-project", "Save", has_model)
                         .shortcut_hint("Ctrl+S")
-                        .on_press_tx(|s: &mut AppState, tx: &mut Tx| save_project_dialog(s, tx, false)),
+                        .on_press_tx(|s: &mut AppState, tx: &mut Tx| {
+                            save_project_dialog(s, tx, false)
+                        }),
                 )
                 .child(
                     button(t, "open-project", "Open project...", idle)
@@ -196,13 +198,23 @@ fn stepper(t: &Theme, key: &str, label: &str, value: u8, set: fn(&mut NumberForm
         .key(format!("{key}-stepper"))
         .role("group")
         .label(label)
-        .child(text(label).font(type_::LABEL).color(t.text_secondary).w(96.0))
+        .child(
+            text(label)
+                .font(type_::LABEL)
+                .color(t.text_secondary)
+                .w(96.0),
+        )
         .child(
             button(t, &format!("{key}-dec"), "-", value > 0)
                 .label(format!("Fewer {label}"))
                 .on_press(edit_format(move |f| set(f, value.saturating_sub(1)))),
         )
-        .child(text(value.to_string()).font(type_::BODY).color(t.text).w(20.0))
+        .child(
+            text(value.to_string())
+                .font(type_::BODY)
+                .color(t.text)
+                .w(20.0),
+        )
         .child(
             button(t, &format!("{key}-inc"), "+", value < MAX_DECIMALS)
                 .label(format!("More {label}"))
@@ -219,23 +231,47 @@ pub fn preferences(s: &AppState, t: &Theme, accent: Color) -> El {
     let f = s.shell.number_format;
     let themes = ThemeChoice::ALL.map(|choice| {
         let name = format!("{choice:?}");
-        toggle(t, accent, &format!("theme-{name}"), &name, s.shell.theme == choice)
-            .role("radio")
-            .on_press(move |s: &mut AppState| s.shell.set_theme(choice))
+        toggle(
+            t,
+            accent,
+            &format!("theme-{name}"),
+            &name,
+            s.shell.theme == choice,
+        )
+        .role("radio")
+        .on_press(move |s: &mut AppState| s.shell.set_theme(choice))
     });
     let units = LengthUnit::ALL.map(|unit| {
-        toggle(t, accent, &format!("unit-{}", unit.symbol()), unit.symbol(), f.length_unit == unit)
-            .role("radio")
-            .on_press(edit_format(move |f| f.length_unit = unit))
+        toggle(
+            t,
+            accent,
+            &format!("unit-{}", unit.symbol()),
+            unit.symbol(),
+            f.length_unit == unit,
+        )
+        .role("radio")
+        .on_press(edit_format(move |f| f.length_unit = unit))
     });
-    let markers = [(DecimalMarker::Point, "Point (12.5)"), (DecimalMarker::Comma, "Comma (12,5)")]
-        .map(|(marker, label)| {
-            toggle(t, accent, &format!("marker-{marker:?}"), label, f.decimal_marker == marker)
-                .role("radio")
-                .on_press(edit_format(move |f| f.decimal_marker = marker))
-        });
-    let resolution = NumberFormat { trailing_zeros: true, ..f }
-        .length(10f64.powi(-i32::from(f.length_decimals)) * f.length_unit.mm_per_unit());
+    let markers = [
+        (DecimalMarker::Point, "Point (12.5)"),
+        (DecimalMarker::Comma, "Comma (12,5)"),
+    ]
+    .map(|(marker, label)| {
+        toggle(
+            t,
+            accent,
+            &format!("marker-{marker:?}"),
+            label,
+            f.decimal_marker == marker,
+        )
+        .role("radio")
+        .on_press(edit_format(move |f| f.decimal_marker = marker))
+    });
+    let resolution = NumberFormat {
+        trailing_zeros: true,
+        ..f
+    }
+    .length(10f64.powi(-i32::from(f.length_decimals)) * f.length_unit.mm_per_unit());
     let section = |title: &str| {
         text(title)
             .font(type_::SECTION)
@@ -255,40 +291,77 @@ pub fn preferences(s: &AppState, t: &Theme, accent: Color) -> El {
                 .padding(space::S2),
         )
         .child(section("Appearance"))
-        .child(row().role("radiogroup").label("Theme").gap(space::S1).px(space::S2).children(themes))
+        .child(
+            row()
+                .role("radiogroup")
+                .label("Theme")
+                .gap(space::S1)
+                .px(space::S2)
+                .children(themes),
+        )
         .child(section("Length"))
-        .child(row().role("radiogroup").label("Display unit").gap(space::S1).px(space::S2).children(units))
+        .child(
+            row()
+                .role("radiogroup")
+                .label("Display unit")
+                .gap(space::S1)
+                .px(space::S2)
+                .children(units),
+        )
         .child(
             col()
                 .w_full()
                 .padding(space::S2)
                 .gap(space::S1)
-                .child(stepper(t, "length-decimals", "Decimal places", f.length_decimals, |f, v| f.length_decimals = v))
+                .child(stepper(
+                    t,
+                    "length-decimals",
+                    "Decimal places",
+                    f.length_decimals,
+                    |f, v| f.length_decimals = v,
+                ))
                 .child(label_value(t, "Resolution", resolution)),
         )
         .child(section("Direction vectors"))
-        .child(
-            col().w_full().px(space::S2).child(stepper(
-                t,
-                "direction-decimals",
-                "Direction places",
-                f.direction_decimals,
-                |f, v| f.direction_decimals = v,
-            )),
-        )
+        .child(col().w_full().px(space::S2).child(stepper(
+            t,
+            "direction-decimals",
+            "Direction places",
+            f.direction_decimals,
+            |f, v| f.direction_decimals = v,
+        )))
         .child(section("Notation"))
-        .child(row().role("radiogroup").label("Decimal marker").gap(space::S1).px(space::S2).children(markers))
+        .child(
+            row()
+                .role("radiogroup")
+                .label("Decimal marker")
+                .gap(space::S1)
+                .px(space::S2)
+                .children(markers),
+        )
         .child(
             row()
                 .gap(space::S1)
                 .padding(space::S2)
                 .child(
-                    checkbox(t, accent, "grouping", "Group digits in threes", f.digit_grouping)
-                        .on_press(edit_format(|f| f.digit_grouping = !f.digit_grouping)),
+                    checkbox(
+                        t,
+                        accent,
+                        "grouping",
+                        "Group digits in threes",
+                        f.digit_grouping,
+                    )
+                    .on_press(edit_format(|f| f.digit_grouping = !f.digit_grouping)),
                 )
                 .child(
-                    checkbox(t, accent, "trailing-zeros", "Keep trailing zeros", f.trailing_zeros)
-                        .on_press(edit_format(|f| f.trailing_zeros = !f.trailing_zeros)),
+                    checkbox(
+                        t,
+                        accent,
+                        "trailing-zeros",
+                        "Keep trailing zeros",
+                        f.trailing_zeros,
+                    )
+                    .on_press(edit_format(|f| f.trailing_zeros = !f.trailing_zeros)),
                 ),
         )
         .child(section("Preview"))
@@ -298,11 +371,19 @@ pub fn preferences(s: &AppState, t: &Theme, accent: Color) -> El {
                 .px(space::S2)
                 .gap(space::S1)
                 .child(label_value(t, "Length", f.length(-12345.6789)))
-                .child(label_value(t, "Size", f.length_product(&[120.0, 85.5, 0.35])))
+                .child(label_value(
+                    t,
+                    "Size",
+                    f.length_product(&[120.0, 85.5, 0.35]),
+                ))
                 .child(label_value(
                     t,
                     "Normal n",
-                    f.direction(&[std::f64::consts::FRAC_1_SQRT_2, 0.0, -std::f64::consts::FRAC_1_SQRT_2]),
+                    f.direction(&[
+                        std::f64::consts::FRAC_1_SQRT_2,
+                        0.0,
+                        -std::f64::consts::FRAC_1_SQRT_2,
+                    ]),
                 ))
                 .child(label_value(t, "Number", f.number(1_234_567.25, 2))),
         )
@@ -361,9 +442,23 @@ pub fn messages(s: &AppState, t: &Theme) -> El {
                 .gap(space::S2)
                 .px(space::S2)
                 .py(2.0)
-                .child(text("RUN").font(type_::LABEL).color(t.text_secondary).w(44.0))
-                .child(text(format!("{busy}...")).font(type_::BODY).color(t.text)),
+                .child(
+                    text("RUN")
+                        .font(type_::LABEL)
+                        .color(t.text_secondary)
+                        .w(44.0),
+                )
+                .child(
+                    text(format!("{busy}... {} s", s.shell.elapsed_secs()))
+                        .font(type_::BODY)
+                        .color(t.text),
+                ),
         );
+        if s.shell.cancellable() {
+            list = list.child(
+                button(t, "cancel-operation", "Cancel", true).on_press(AppState::cancel_operation),
+            );
+        }
     }
     if s.shell.messages.is_empty() && s.shell.busy.is_none() {
         list = list.child(
@@ -410,10 +505,14 @@ pub fn status_bar(s: &AppState, t: &Theme) -> El {
     } else {
         t.text_secondary
     };
-    let model = s.model.imported.as_ref().map_or("No model".to_string(), |i| {
-        let unit = i.source_unit.as_deref().unwrap_or("unknown units");
-        format!("{} bodies, source {unit}", i.component_count)
-    });
+    let model = s
+        .model
+        .imported
+        .as_ref()
+        .map_or("No model".to_string(), |i| {
+            let unit = i.source_unit.as_deref().unwrap_or("unknown units");
+            format!("{} bodies, source {unit}", i.component_count)
+        });
     row()
         .key("status")
         .role("status")
@@ -425,18 +524,18 @@ pub fn status_bar(s: &AppState, t: &Theme) -> El {
         .child(text(backend).font(type_::LABEL).color(backend_color))
         .child(text(model).font(type_::LABEL).color(t.text_secondary))
         .child(
-            text(format!("Units: {}", s.shell.number_format.length_unit.symbol()))
-                .font(type_::LABEL)
-                .color(t.text_secondary),
+            text(format!(
+                "Units: {}",
+                s.shell.number_format.length_unit.symbol()
+            ))
+            .font(type_::LABEL)
+            .color(t.text_secondary),
         )
         .child(spacer())
         .child(
-            text(
-                s.shell
-                    .busy
-                    .as_deref()
-                    .map_or_else(String::new, |b| format!("{b}...")),
-            )
+            text(s.shell.busy.as_deref().map_or_else(String::new, |b| {
+                format!("{b}... {} s", s.shell.elapsed_secs())
+            }))
             .font(type_::LABEL)
             .color(t.text),
         )
@@ -489,7 +588,8 @@ pub fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let selected = s.model.selected.clone();
     match &ev.key {
         Key::Text(k) if has_model && matches!(k.as_str(), "1" | "2" | "3") => {
-            let kind = [PlaneKind::XY, PlaneKind::XZ, PlaneKind::YZ][usize::from(k.as_bytes()[0] - b'1')];
+            let kind =
+                [PlaneKind::XY, PlaneKind::XZ, PlaneKind::YZ][usize::from(k.as_bytes()[0] - b'1')];
             s.section.set_plane(kind, now_ms());
         }
         Key::Escape => s.model.select(None),
@@ -501,5 +601,14 @@ pub fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         _ => return false,
     }
+    true
+}
+
+/// While an operation runs, redraw once a second so its elapsed time counts up.
+pub fn poll(s: &mut AppState, _: f64, tx: &mut Tx) -> bool {
+    if s.shell.busy.is_none() {
+        return false;
+    }
+    tx.wake_after(std::time::Duration::from_secs(1));
     true
 }

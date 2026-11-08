@@ -98,7 +98,13 @@ impl PreviewState {
         let (min, max) = body
             .and_then(|id| {
                 let mesh = self.mesh.as_ref()?;
-                positions_box(&mesh.components.iter().find(|c| c.component_id == id)?.positions)
+                positions_box(
+                    &mesh
+                        .components
+                        .iter()
+                        .find(|c| c.component_id == id)?
+                        .positions,
+                )
             })
             .unwrap_or((bounds.min_xyz, bounds.max_xyz));
         let (center, radius) = bounds_sphere(min, max);
