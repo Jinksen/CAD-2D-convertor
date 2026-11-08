@@ -6,13 +6,13 @@
 
 **Exact 2D sections from 3D STEP models, ready for ANSYS Maxwell 2D.**
 
-Open a STEP assembly, pick a plane, check the section, export a 1:1 DXF in millimetres —
-with every region traced back to its source body.
+Open a STEP assembly, pick a plane, check the section and export a 1:1 DXF in millimetres.
+Every 2D region traces back to its source body.
 
 [![CI](https://github.com/Jinksen/CAD-2D-convertor/actions/workflows/ci.yml/badge.svg)](https://github.com/Jinksen/CAD-2D-convertor/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Jinksen/CAD-2D-convertor?include_prereleases&sort=semver)](https://github.com/Jinksen/CAD-2D-convertor/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Platform](https://img.shields.io/badge/platform-Windows%2011-0078d4)
+![Platform](https://img.shields.io/badge/platform-Windows%20x64-0078d4)
 
 <img src="docs/images/section-2d.png" alt="Exact XY section of the demo motor: stator, rotor, magnets and coils as filled regions" width="900">
 
@@ -21,9 +21,9 @@ with every region traced back to its source body.
 ## Why
 
 Preparing a 2D electromagnetic model usually means a CAD drawing setup, manual cleanup and
-guessing which polyline belonged to which part. CAD2Maxwell cuts the **exact B-Rep** with
-OpenCascade, keeps names and colours, validates the result and refuses to export anything
-broken — so what lands in Maxwell is what you modelled.
+guessing which polyline belonged to which part. CAD2Maxwell cuts the exact B-Rep with
+OpenCascade, keeps names and colours, validates the result and refuses to export a broken
+section. What lands in Maxwell is what you modelled.
 
 ## Features
 
@@ -31,10 +31,10 @@ broken — so what lands in Maxwell is what you modelled.
 |---|---|
 | **Exact geometry** | B-Rep sectioning with OpenCascade. No mesh slicing; lines, arcs and circles stay analytic. |
 | **Traceability** | Source names, colours and assembly paths are kept. A JSON manifest maps every 2D region to its body; export names are ASCII-safe and deterministic. |
-| **Validation** | Open contours, self-intersections, duplicate edges and overlaps block export. Tiny edges, small regions and slivers are flagged. Nothing is repaired silently. Click a diagnostic to jump to the body. |
+| **Validation** | Defects block export, small features are flagged, nothing is repaired silently (see [Export checks](#export-checks)). Click a diagnostic to jump to the body. |
 | **Any plane** | XY / XZ / YZ with an offset, or a custom tilted plane aligned to a selected sheet in one click. Plane edits have undo/redo; the shown section is marked stale until you compute again. |
 | **Engineering UI** | Model Builder tree, property pane, 2D viewport with zoom-at-cursor and pan, 3D preview with feature edges and standard views, visibility and isolate, light and dark themes, ISO 80000-1 number formatting. |
-| **Projects** | Save the session as a `.c2mproj` (STEP path + hash, plane, preferences, visibility — never geometry) and reopen it later. |
+| **Projects** | Save the session as a `.c2mproj` (STEP path + hash, plane, preferences, visibility; never geometry) and reopen it later. |
 | **Local only** | Runs fully offline. The geometry service listens on `127.0.0.1` with a per-session token; no telemetry. |
 
 <table>
@@ -57,7 +57,7 @@ broken — so what lands in Maxwell is what you modelled.
    For laminations that are not axis-aligned, select one sheet and click **Align to selected body**.
 5. **Compute** (Ctrl+Enter). Filled regions are closed contours; holes stay empty.
 6. **DXF** (Ctrl+E) saves a ZIP with `section.dxf` (1:1, mm) and `section.json`.
-7. Import `section.dxf` into Maxwell 2D — see the [Maxwell import checklist](docs/maxwell-import-checklist.md).
+7. Import `section.dxf` into Maxwell 2D using the [Maxwell import checklist](docs/maxwell-import-checklist.md).
 
 The [walkthrough](docs/first-trial.md) covers the details and troubleshooting.
 
@@ -70,23 +70,29 @@ Get the latest build from [Releases](https://github.com/Jinksen/CAD-2D-convertor
 | `CAD2Maxwell_<version>_x64-setup.exe` | You want a normal install. Per-user, no administrator rights, uninstall from *Settings → Apps*. |
 | `CAD2Maxwell_<version>_x64_portable.zip` | You cannot install software. Extract to a short path such as `C:\Tools\` and run `CAD2Maxwell\CAD2Maxwell.exe`. |
 
-Python and Rust are **not** needed — the geometry service is bundled. Verify a download with
+Python and Rust are not needed; the geometry service is bundled. Verify a download with
 `Get-FileHash <file> -Algorithm SHA256` against `SHA256SUMS.txt`. The builds are not code-signed yet,
 so Windows SmartScreen may ask once: *More info → Run anyway*.
 The app writes its service log to `%LOCALAPPDATA%\com.cad2maxwell.desktop\logs\backend.log`.
 
 ## Keyboard shortcuts
 
-| Key | Action | | Key | Action |
-|-----|--------|-|-----|--------|
-| Ctrl+O | Open STEP (projects: Open project… or drop a `.c2mproj`) | | F | Fit selection |
-| Ctrl+S / Ctrl+Shift+S | Save project / save as | | Shift+F | Fit all |
-| Ctrl+Enter | Compute section | | V | Show / hide selected body |
-| Ctrl+E | Export DXF | | I | Isolate selected body |
-| Ctrl+Z / Ctrl+Y | Undo / redo plane edits | | | |
-| Ctrl+F | Filter bodies in Model Builder | | Esc | Clear selection |
-| 1 / 2 / 3 | Plane XY / XZ / YZ | | Ctrl+1 / Ctrl+2 | 2D section / 3D preview |
-| Wheel · drag | Zoom · pan (2D), zoom · orbit (3D) | | | |
+| Key | Action |
+|-----|--------|
+| Ctrl+O | Open STEP (to open a project, use *Open project…* or drop a `.c2mproj` on the window) |
+| Ctrl+S / Ctrl+Shift+S | Save project / save as |
+| Ctrl+Enter | Compute section |
+| Ctrl+E | Export DXF |
+| Ctrl+Z / Ctrl+Y | Undo / redo plane edits |
+| Ctrl+F | Filter bodies in Model Builder |
+| Ctrl+1 / Ctrl+2 | 2D section / 3D preview |
+| 1 / 2 / 3 | Plane XY / XZ / YZ |
+| F / Shift+F | Fit selection / fit all |
+| V | Show or hide the selected body |
+| I | Isolate the selected body |
+| Esc | Clear selection |
+| Wheel, drag | 2D: zoom at cursor, pan. 3D: zoom, orbit with the left button, pan with the others |
+| Arrows, + / − | Pan and zoom the 2D view |
 
 ## Export checks
 
@@ -136,9 +142,6 @@ More in [architecture](docs/architecture.md), [geometry](docs/geometry.md),
 [DXF export](docs/dxf-export.md) and [UX](docs/ux.md).
 [`CAD2Maxwell_PROJECT_SPEC.md`](CAD2Maxwell_PROJECT_SPEC.md) is the product source of truth.
 
-The Rune migration plan, gate results and known gaps are in
-[docs/rune-migration.md](docs/rune-migration.md).
-
 ## Known limitations
 
 - Exports are marked `draft_unvalidated` until the [Maxwell import checklist](docs/maxwell-import-checklist.md) has been run on real models.
@@ -149,12 +152,12 @@ The Rune migration plan, gate results and known gaps are in
 
 ## Development
 
-The desktop UI is a native Rust app built with the [Rune](https://github.com/anomalyco/rune) framework (`frontend/rune-app`, pinned revision). See the [Rune migration plan](docs/rune-migration.md) before changing desktop architecture.
+The desktop UI is a native Rust app built with the pre-release [Rune](https://github.com/anomalyco/rune) framework (`frontend/rune-app`, pinned revision). Read [docs/rune-migration.md](docs/rune-migration.md) for the pin, gate results and known gaps before changing the desktop architecture.
 
 ```powershell
-.\scripts\dev.ps1    # desktop app (cargo run) with a local backend
+.\scripts\dev.ps1             # desktop app (cargo run) with a local backend
+.\scripts\test.ps1            # quality gate: Ruff, mypy, pytest, cargo fmt/clippy/test, Pester
 .\scripts\build-release.ps1   # installer, portable ZIP and SHA256SUMS in artifacts/release
-.\scripts\test.ps1   # quality gate: Ruff, mypy, pytest, cargo fmt/clippy/test for the Rune app, Pester
 uv run --project backend python scripts/demo/make_demo_motor.py   # regenerate the demo model
 ```
 
