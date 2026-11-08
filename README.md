@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="frontend/public/favicon.svg" width="72" alt="CAD2Maxwell logo">
+<img src="docs/images/logo.svg" width="72" alt="CAD2Maxwell logo">
 
 # CAD2Maxwell
 
@@ -32,7 +32,7 @@ broken — so what lands in Maxwell is what you modelled.
 | **Exact geometry** | B-Rep sectioning with OpenCascade. No mesh slicing; lines, arcs and circles stay analytic. |
 | **Traceability** | Source names, colours and assembly paths are kept. A JSON manifest maps every 2D region to its body; export names are ASCII-safe and deterministic. |
 | **Validation** | Open contours, self-intersections, duplicate edges and overlaps block export. Tiny edges, small regions and slivers are flagged. Nothing is repaired silently. Click a diagnostic to jump to the body. |
-| **Any plane** | XY / XZ / YZ with an offset, or a custom tilted plane aligned to a selected sheet in one click. Edits recompute the section automatically, with undo/redo. |
+| **Any plane** | XY / XZ / YZ with an offset, or a custom tilted plane aligned to a selected sheet in one click. Plane edits have undo/redo; the shown section is marked stale until you compute again. |
 | **Engineering UI** | Model Builder tree, property pane, 2D viewport with zoom-at-cursor and pan, 3D preview with feature edges and standard views, visibility and isolate, light and dark themes, ISO 80000-1 number formatting. |
 | **Projects** | Save the session as a `.c2mproj` (STEP path + hash, plane, preferences, visibility — never geometry) and reopen it later. |
 | **Local only** | Runs fully offline. The geometry service listens on `127.0.0.1` with a per-session token; no telemetry. |
@@ -79,14 +79,14 @@ The app writes its service log to `%LOCALAPPDATA%\com.cad2maxwell.desktop\logs\b
 
 | Key | Action | | Key | Action |
 |-----|--------|-|-----|--------|
-| Ctrl+O | Open STEP or project | | F | Fit selection |
+| Ctrl+O | Open STEP (projects: Open project… or drop a `.c2mproj`) | | F | Fit selection |
 | Ctrl+S / Ctrl+Shift+S | Save project / save as | | Shift+F | Fit all |
 | Ctrl+Enter | Compute section | | V | Show / hide selected body |
 | Ctrl+E | Export DXF | | I | Isolate selected body |
-| Ctrl+Z / Ctrl+Y | Undo / redo plane edits | | Ctrl+L | Focus Messages |
+| Ctrl+Z / Ctrl+Y | Undo / redo plane edits | | | |
 | Ctrl+F | Filter bodies in Model Builder | | Esc | Clear selection |
 | 1 / 2 / 3 | Plane XY / XZ / YZ | | Ctrl+1 / Ctrl+2 | 2D section / 3D preview |
-| Wheel · drag | Zoom at cursor · pan | | | |
+| Wheel · drag | Zoom · pan (2D), zoom · orbit (3D) | | | |
 
 ## Export checks
 
@@ -158,7 +158,7 @@ The desktop UI is a native Rust app built with the [Rune](https://github.com/ano
 uv run --project backend python scripts/demo/make_demo_motor.py   # regenerate the demo model
 ```
 
-CI runs `scripts/test.ps1` on pull requests and pushes to `main`. See [CONTRIBUTING.md](CONTRIBUTING.md),
+CI runs `scripts/test.ps1` on pull requests and pushes to `main` when GitHub Actions is enabled for the repository; otherwise run it locally before merging. See [CONTRIBUTING.md](CONTRIBUTING.md),
 [SECURITY.md](SECURITY.md) and [AGENTS.md](AGENTS.md) (also covers using the PyCharm MCP tools).
 
 ## License

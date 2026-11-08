@@ -34,8 +34,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Rust build output
+# Build output
 target/
+/backend/dist/
 .pytest-tmp/
 
 # Committed demo model
