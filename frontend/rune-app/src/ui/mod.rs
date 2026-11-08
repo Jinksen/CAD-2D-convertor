@@ -7,8 +7,10 @@ mod section;
 mod section_view;
 mod shell;
 
+pub use shell::on_key;
+
 use rune::tok::{self, Theme, space, type_};
-use rune::{Color, Cx, El, col, el, oklch, row, text};
+use rune::{Color, Cx, El, ScrollSpec, col, el, oklch, row, text};
 
 use crate::api::dto::Severity;
 use crate::state::AppState;
@@ -25,7 +27,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .w_full()
         .h_full()
         .fill(t.bg)
-        .child(shell::toolbar(s, &t))
+        .child(shell::toolbar(s, &t, accent))
         .child(
             row()
                 .key("workspace")
@@ -43,15 +45,32 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                         .h_full()
                         .min_h(0.0)
                         .border(1.0, t.separator)
-                        .child(section::settings(s, &t, accent))
-                        .child(model_tree::properties(s, &t)),
+                        .child(
+                            col()
+                                .w_full()
+                                .grow(1.0)
+                                .min_h(0.0)
+                                .scroll(ScrollSpec { stick_bottom: false })
+                                .children(if s.shell.show_prefs {
+                                    vec![shell::preferences(s, &t, accent)]
+                                } else {
+                                    vec![
+                                        section::settings(s, &t, accent),
+                                        model_tree::properties(s, &t),
+                                    ]
+                                }),
+                        ),
                 ),
         )
         .child(shell::messages(s, &t))
         .child(shell::status_bar(s, &t))
         .on_drop_files(|s: &mut AppState, files, _| {
-            if let Some(path) = files.first() {
-                s.open_step(path.clone());
+            match files.first() {
+                Some(path) if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("c2mproj")) => {
+                    s.open_project(path.clone())
+                }
+                Some(path) => s.open_step(path.clone()),
+                None => {}
             }
         })
 }
@@ -206,3 +225,6 @@ mod tests {
         assert_eq!(runtime.state.model.selected.as_deref(), Some("b"));
     }
 }
+
+#[cfg(test)]
+mod shell_tests;

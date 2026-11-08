@@ -1,8 +1,16 @@
 //! App-wide state: theme, number format, messages log and backend status.
 
-use crate::api::dto::{Health, Severity};
+use std::path::PathBuf;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+use rune::TextEdit;
+use rune::prefs::Prefs;
+use serde::{Deserialize, Serialize};
+
+use crate::api::dto::{Health, Severity};
+pub use crate::format::NumberFormat;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Theme {
     #[default]
     System,
@@ -11,30 +19,14 @@ pub enum Theme {
 }
 
 impl Theme {
+    pub const ALL: [Theme; 3] = [Theme::System, Theme::Light, Theme::Dark];
+
     pub fn is_dark(self, system_dark: bool) -> bool {
         match self {
             Theme::System => system_dark,
             Theme::Light => false,
             Theme::Dark => true,
         }
-    }
-}
-
-/// Display notation only; geometry and export stay in mm.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct NumberFormat {
-    pub length_decimals: u8,
-}
-
-impl Default for NumberFormat {
-    fn default() -> Self {
-        NumberFormat { length_decimals: 3 }
-    }
-}
-
-impl NumberFormat {
-    pub fn length(&self, mm: f64) -> String {
-        format!("{mm:.*}", usize::from(self.length_decimals))
     }
 }
 
@@ -78,9 +70,27 @@ pub struct ShellState {
     pub backend: BackendStatus,
     /// What the service is working on, shown in the status bar while set.
     pub busy: Option<String>,
+    /// The preferences panel replaces the settings column while open.
+    pub show_prefs: bool,
+    /// Where the open project was saved; Ctrl+S saves there.
+    pub project_path: Option<PathBuf>,
+    /// Bound to the STEP path field of the model settings.
+    pub step_path: TextEdit,
+    /// Remembers theme and number format on this machine; `None` in tests.
+    prefs: Option<Prefs>,
 }
 
 impl ShellState {
+    /// Loads the remembered theme and number format.
+    pub fn with_prefs(prefs: Prefs) -> Self {
+        ShellState {
+            theme: prefs.get("theme").unwrap_or_default(),
+            number_format: prefs.get("number_format").unwrap_or_default(),
+            prefs: Some(prefs),
+            ..ShellState::default()
+        }
+    }
+
     pub fn log(&mut self, severity: Severity, text: impl Into<String>) {
         self.messages.push(Message {
             severity,
@@ -88,5 +98,51 @@ impl ShellState {
             component_id: None,
             related_component_id: None,
         });
+    }
+
+    pub fn set_theme(&mut self, theme: Theme) {
+        self.theme = theme;
+        self.remember();
+    }
+
+    pub fn set_format(&mut self, format: NumberFormat) {
+        self.number_format = format;
+        self.remember();
+    }
+
+    fn remember(&mut self) {
+        let (theme, format) = (self.theme, self.number_format);
+        let Some(prefs) = &mut self.prefs else { return };
+        let saved = prefs
+            .set("theme", &theme)
+            .and(prefs.set("number_format", &format));
+        if let Err(error) = saved {
+            self.log(Severity::Warning, error.to_string());
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::format::LengthUnit;
+
+    #[test]
+    fn theme_and_format_survive_a_restart() {
+        let path = std::env::temp_dir().join(format!("c2m-prefs-{}.json", std::process::id()));
+        let mut shell = ShellState::with_prefs(Prefs::at(&path));
+        assert_eq!(
+            (shell.theme, shell.number_format),
+            (Theme::System, NumberFormat::default())
+        );
+        shell.set_theme(Theme::Dark);
+        shell.set_format(NumberFormat {
+            length_unit: LengthUnit::In,
+            ..NumberFormat::default()
+        });
+        let again = ShellState::with_prefs(Prefs::at(&path));
+        assert_eq!(again.theme, Theme::Dark);
+        assert_eq!(again.number_format.length_unit, LengthUnit::In);
+        std::fs::remove_file(path).unwrap();
     }
 }

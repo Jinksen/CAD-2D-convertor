@@ -3,9 +3,9 @@
 mod api;
 mod archive;
 mod backend;
-// Project open/save is wired in migration phase 3.
-#[allow(dead_code)]
+mod format;
 mod project;
+mod render3d;
 mod state;
 mod tasks;
 mod ui;
@@ -19,11 +19,15 @@ use crate::tasks::Tasks;
 /// Service start-up polls for about ten seconds before reporting it offline.
 const HEALTH_ATTEMPTS: u32 = 40;
 
+/// Folder name of the remembered theme and number format.
+const PREFS_ID: &str = "com.cad2maxwell.desktop";
+
 fn main() {
     let backend = backend::start();
     let client = Client::from_env(backend.token.clone());
     let spec = AppSpec {
         min_size: Some((960.0, 600.0)),
+        on_key: Some(ui::on_key),
         ..AppSpec::new("CAD2Maxwell", (1440.0, 900.0), AppState::default, ui::view)
     };
     let app = App::new(spec);
@@ -34,6 +38,7 @@ fn main() {
     });
     app.init(move || {
         let mut state = AppState {
+            shell: state::shell::ShellState::with_prefs(rune::prefs::Prefs::open(PREFS_ID)),
             tasks: Some(tasks),
             ..AppState::default()
         };

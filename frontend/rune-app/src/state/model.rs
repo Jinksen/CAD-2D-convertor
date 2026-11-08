@@ -71,6 +71,30 @@ impl ModelState {
             .filter(|c| body_matches(c, query))
             .collect()
     }
+
+    /// Matching bodies grouped by parent assembly path, in model order.
+    pub fn visible_groups(&self) -> Vec<(String, Vec<&ImportComponent>)> {
+        group_by_parent(self.visible_bodies())
+    }
+
+    /// One parent for the whole model means no extra tree level.
+    pub fn is_flat(&self) -> bool {
+        let all = self.imported.iter().flat_map(|i| &i.components);
+        group_by_parent(all.collect()).len() <= 1
+    }
+}
+
+fn group_by_parent(bodies: Vec<&ImportComponent>) -> Vec<(String, Vec<&ImportComponent>)> {
+    let mut groups: Vec<(String, Vec<&ImportComponent>)> = vec![];
+    for body in bodies {
+        let path = &body.hierarchy_path;
+        let parent = path[..path.len().saturating_sub(1)].join(" / ");
+        match groups.iter_mut().find(|(p, _)| *p == parent) {
+            Some((_, members)) => members.push(body),
+            None => groups.push((parent, vec![body])),
+        }
+    }
+    groups
 }
 
 #[cfg(test)]
@@ -122,6 +146,24 @@ pub(crate) mod tests {
         assert!(body_matches(&rotor, "rotor_1"));
         assert!(body_matches(&rotor, "motor"));
         assert!(!body_matches(&rotor, "stator"));
+    }
+
+    #[test]
+    fn filtered_bodies_are_grouped_by_parent_assembly() {
+        let mut m = ModelState::default();
+        let mut s = summary(&[]);
+        s.components = vec![
+            body("1", "Rotor", &["Motor", "Rotor"]),
+            body("2", "Stator", &["Motor", "Housing", "Stator"]),
+        ];
+        m.set_imported(s);
+        assert!(!m.is_flat());
+        m.filter.text = "stat".into();
+        let groups = m.visible_groups();
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].0, "Motor / Housing");
+        m.set_imported(summary(&["a", "b"]));
+        assert!(m.is_flat());
     }
 
     #[test]

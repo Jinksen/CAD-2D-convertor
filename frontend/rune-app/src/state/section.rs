@@ -1,6 +1,17 @@
 //! Section plane settings, their undo/redo history, and the last computed section.
 
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+
+use rune::TextEdit;
+
 use crate::api::dto::{BoundsMm, SectionPlane, SectionResponse, Severity, Vec3, WireRole};
+use crate::format::{NumberFormat, parse_number};
+
+pub mod camera;
+pub mod geometry;
+
+use camera::{Size, ViewBox};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PlaneKind {
@@ -8,7 +19,6 @@ pub enum PlaneKind {
     XY,
     XZ,
     YZ,
-    #[allow(dead_code)] // custom-normal editing arrives with the section settings feature
     Custom,
 }
 
@@ -52,6 +62,55 @@ impl SectionStats {
     }
 }
 
+/// What the 2D view derives once per computed section (keyed by `section_id`).
+pub struct Scene {
+    pub section_id: String,
+    /// Bounds of all curves (y up).
+    pub bounds: Option<ViewBox>,
+    /// Per-component bounds, parallel to `components`.
+    pub component_bounds: Vec<Option<ViewBox>>,
+    /// Component indices, largest bounds first, so holes painted over a body never hide a smaller
+    /// body nested inside.
+    pub paint_order: Vec<usize>,
+}
+
+impl Scene {
+    pub fn of(section: &SectionResponse) -> Scene {
+        let component_bounds: Vec<Option<ViewBox>> = section
+            .components
+            .iter()
+            .map(|c| geometry::bounds(c.wires.iter().flat_map(|w| &w.curves)))
+            .collect();
+        let area = |i: usize| component_bounds[i].map_or(0.0, |b| b.width * b.height);
+        let mut paint_order: Vec<usize> = (0..component_bounds.len()).collect();
+        paint_order.sort_by(|&a, &b| area(b).total_cmp(&area(a)));
+        let all = geometry::bounds(
+            section
+                .components
+                .iter()
+                .flat_map(|c| &c.wires)
+                .flat_map(|w| &w.curves),
+        );
+        Scene {
+            section_id: section.section_id.clone(),
+            bounds: all,
+            component_bounds,
+            paint_order,
+        }
+    }
+}
+
+/// The 2D view: element size, the camera for the current section, and the derived scene.
+#[derive(Default)]
+pub struct View2d {
+    pub size: Option<Size>,
+    /// The user's camera and the section it belongs to; a new section starts from a fit.
+    camera: Option<(String, ViewBox)>,
+    /// Camera at the start of a drag.
+    pub drag_origin: Option<ViewBox>,
+    scene: RefCell<Option<Rc<Scene>>>,
+}
+
 pub struct SectionState {
     pub plane: PlaneKind,
     pub offset_mm: Option<f64>,
@@ -62,11 +121,19 @@ pub struct SectionState {
     last_edit_ms: Option<u64>,
     pub last: Option<SectionResponse>,
     pub stats: Option<SectionStats>,
+    pub view: View2d,
+    /// Text of the plane fields: offset, then the custom normal components.
+    pub offset_text: TextEdit,
+    pub normal_text: [TextEdit; 3],
+    /// Why the last field entry was not applied.
+    pub field_error: Option<String>,
+    /// Notation of the fields, mirrored from the shell by the settings panel.
+    pub fmt: Cell<NumberFormat>,
 }
 
 impl Default for SectionState {
     fn default() -> Self {
-        SectionState {
+        let mut s = SectionState {
             plane: PlaneKind::XY,
             offset_mm: None,
             custom_normal: [0.0, 0.0, 1.0],
@@ -75,7 +142,14 @@ impl Default for SectionState {
             last_edit_ms: None,
             last: None,
             stats: None,
-        }
+            view: View2d::default(),
+            offset_text: TextEdit::default(),
+            normal_text: Default::default(),
+            field_error: None,
+            fmt: Cell::new(NumberFormat::default()),
+        };
+        s.write_fields();
+        s
     }
 }
 
@@ -86,6 +160,24 @@ fn norm(v: Vec3) -> Option<Vec3> {
 
 fn dot(a: Vec3, b: Vec3) -> f64 {
     a.iter().zip(b).map(|(x, y)| x * y).sum()
+}
+
+fn cross(a: Vec3, b: Vec3) -> Vec3 {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+/// (normal, x, y) of a plane. Principal frames match the backend, so 2D coordinates agree with the DXF.
+pub fn plane_basis(kind: PlaneKind, normal: Vec3) -> Option<[Vec3; 3]> {
+    match kind {
+        PlaneKind::XY => Some([[0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]),
+        PlaneKind::XZ => Some([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]),
+        PlaneKind::YZ => Some([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
+        PlaneKind::Custom => custom_frame(normal).map(|(n, x)| [n, x, cross(n, x)]),
+    }
 }
 
 /// A deterministic in-plane x direction: global X (or Y for planes facing X).
@@ -115,6 +207,7 @@ impl SectionState {
         self.offset_mm = s.offset_mm;
         self.custom_normal = s.custom_normal;
         self.stats = None;
+        self.write_fields();
     }
 
     /// Call before a plane edit: pushes the current plane unless this edit continues the previous one.
@@ -141,20 +234,176 @@ impl SectionState {
         self.plane = kind;
         self.offset_mm = None;
         self.stats = None;
+        self.write_fields();
     }
 
     pub fn set_offset(&mut self, offset_mm: f64, now_ms: u64) {
         self.record(now_ms);
         self.offset_mm = Some(offset_mm);
         self.stats = None;
+        self.write_fields();
     }
 
-    #[allow(dead_code)] // used by the 3D preview and section features in phase 3
     pub fn set_custom(&mut self, normal: Vec3, offset_mm: Option<f64>, now_ms: u64) {
         self.record(now_ms);
+        self.plane = PlaneKind::Custom;
         self.custom_normal = normal;
         self.offset_mm = offset_mm;
         self.stats = None;
+        self.write_fields();
+    }
+
+    /// Rewrites the field texts from the plane values (after undo, restore or a button edit).
+    fn write_fields(&mut self) {
+        let f = self.fmt.get();
+        let unit = f.length_unit.mm_per_unit();
+        self.offset_text.replace_text(
+            self.offset_mm
+                .map_or(String::new(), |v| f.number(v / unit, f.length_decimals)),
+        );
+        for (edit, v) in self.normal_text.iter_mut().zip(self.custom_normal) {
+            edit.replace_text(f.number(v, f.direction_decimals));
+        }
+        self.field_error = None;
+    }
+
+    /// Applies the typed field texts to the plane. A field still showing the stored value (to
+    /// display precision) is left alone, so exact values are never rounded by merely committing.
+    pub fn commit_fields(&mut self, now_ms: u64) {
+        let f = self.fmt.get();
+        let unit = f.length_unit.mm_per_unit();
+        let mut error = None;
+        let mut offset = self.offset_mm;
+        let text = self.offset_text.text.trim();
+        if !text.is_empty() {
+            match parse_number(text) {
+                Some(v) => {
+                    let mm = v * unit;
+                    let tol = 0.5 * 10f64.powi(-i32::from(f.length_decimals)) * unit;
+                    if offset.is_none_or(|old| (old - mm).abs() > tol) {
+                        offset = Some(mm);
+                    }
+                }
+                None => error = Some(format!("Offset \"{text}\" is not a number.")),
+            }
+        }
+        let mut normal = self.custom_normal;
+        let tol = 0.5 * 10f64.powi(-i32::from(f.direction_decimals));
+        for (i, edit) in self.normal_text.iter().enumerate() {
+            match parse_number(&edit.text) {
+                Some(v) if (v - normal[i]).abs() > tol => normal[i] = v,
+                Some(_) => {}
+                None => {
+                    error = Some(format!(
+                        "Normal component \"{}\" is not a number.",
+                        edit.text.trim()
+                    ));
+                }
+            }
+        }
+        if offset != self.offset_mm || normal != self.custom_normal {
+            self.record(now_ms);
+            self.offset_mm = offset;
+            self.custom_normal = normal;
+            self.stats = None;
+        }
+        self.field_error = error;
+    }
+
+    /// Exact basis (normal, x, y) of the current plane.
+    pub fn basis(&self) -> Option<[Vec3; 3]> {
+        plane_basis(self.plane, self.custom_normal)
+    }
+
+    /// Why the shown section cannot be exported, if it cannot.
+    pub fn export_blocker(&self) -> Option<&'static str> {
+        let Some(section) = &self.last else {
+            return Some("Compute a section before exporting.");
+        };
+        if self.stats.is_none() {
+            return Some(
+                "The plane changed since the last computation. Compute the section again before exporting.",
+            );
+        }
+        if section.components.is_empty() {
+            return Some("The section contains no bodies. Move the plane through the model.");
+        }
+        if section
+            .diagnostics
+            .iter()
+            .any(|d| d.severity == Severity::Error)
+        {
+            return Some(
+                "The section has errors. Resolve the errors listed in Messages before exporting.",
+            );
+        }
+        let closed = section
+            .components
+            .iter()
+            .all(|c| !c.wires.is_empty() && c.wires.iter().all(|w| w.closed && w.role.is_some()));
+        (!closed).then_some(
+            "A body has an open or unclassified wire. Check its gap diagnostics in Messages; gaps are never closed silently.",
+        )
+    }
+
+    /// The scene of the shown section, derived once per `section_id`.
+    pub fn scene(&self) -> Option<Rc<Scene>> {
+        let section = self.last.as_ref()?;
+        let mut slot = self.view.scene.borrow_mut();
+        if slot
+            .as_ref()
+            .is_none_or(|s| s.section_id != section.section_id)
+        {
+            *slot = Some(Rc::new(Scene::of(section)));
+        }
+        slot.clone()
+    }
+
+    /// The view box in use: the user's camera for this section, else a fit of everything.
+    pub fn camera(&self) -> Option<ViewBox> {
+        let id = &self.last.as_ref()?.section_id;
+        match &self.view.camera {
+            Some((owner, vb)) if owner == id => Some(*vb),
+            _ => self
+                .scene()?
+                .bounds
+                .map(|b| camera::fit_view(camera::from_world(b))),
+        }
+    }
+
+    pub fn set_camera(&mut self, vb: ViewBox) {
+        if let Some(section) = &self.last {
+            self.view.camera = Some((section.section_id.clone(), vb));
+        }
+    }
+
+    /// Fits one body (when it is in this section) or everything.
+    pub fn fit(&mut self, component_id: Option<&str>) {
+        let (Some(section), Some(scene)) = (&self.last, self.scene()) else {
+            return;
+        };
+        let own = component_id
+            .and_then(|id| section.components.iter().position(|c| c.component_id == id))
+            .and_then(|i| scene.component_bounds[i]);
+        if let Some(b) = own.or(scene.bounds) {
+            self.set_camera(camera::fit_view(camera::from_world(b)));
+        }
+    }
+
+    /// Zooms by `factor` (below 1 zooms in) about a screen point, or the center when `None`.
+    pub fn zoom(&mut self, factor: f64, at: Option<[f64; 2]>) {
+        let (Some(view), Some(size)) = (self.camera(), self.view.size) else {
+            return;
+        };
+        let anchor = at.map(|p| camera::screen_to_view(view, size, p));
+        self.set_camera(camera::zoom_view(view, factor, anchor));
+    }
+
+    /// Pans by a fraction of the view (arrow keys).
+    pub fn pan_fraction(&mut self, fx: f64, fy: f64) {
+        if let Some(v) = self.camera() {
+            self.set_camera(camera::pan_view(v, fx * v.width, fy * v.height));
+        }
     }
 
     pub fn undo(&mut self) {
@@ -189,14 +438,16 @@ impl SectionState {
 
     /// The offset in use: the explicit one, else the model midpoint along the plane axis.
     pub fn effective_offset(&self, bounds: &BoundsMm) -> f64 {
+        // The midpoint is an arbitrary start, so it is rounded to 1 um; typed offsets stay exact.
         self.offset_mm.unwrap_or_else(|| {
             let c = bounds.center();
-            match self.plane {
+            let mid = match self.plane {
                 PlaneKind::XY => c[2],
                 PlaneKind::XZ => c[1],
                 PlaneKind::YZ => c[0],
                 PlaneKind::Custom => norm(self.custom_normal).map_or(0.0, |n| dot(n, c)),
-            }
+            };
+            (mid * 1000.0).round() / 1000.0
         })
     }
 
@@ -322,3 +573,6 @@ mod tests {
         assert_eq!(s.request(&BOUNDS), None);
     }
 }
+
+#[cfg(test)]
+mod plane_tests;

@@ -139,9 +139,12 @@ impl AppState {
         });
         self.section.stats = None;
         self.model.set_imported(summary);
+        self.ensure_preview();
     }
 
     pub fn compute_section(&mut self) {
+        // Typed plane fields that were not submitted yet count as the plane to cut.
+        self.section.commit_fields(crate::state::now_ms());
         let Some(imported) = &self.model.imported else {
             self.shell.log(
                 Severity::Warning,
@@ -193,15 +196,23 @@ impl AppState {
                 related_component_id: d.related_component_id.clone(),
             });
         }
-        self.section.stats = Some(stats);
+        // The plane may have been edited while the cut ran: show the result, but as stale.
+        let current = self
+            .model
+            .imported
+            .as_ref()
+            .and_then(|i| self.section.request(&i.bounds_mm));
+        self.section.stats = (current.as_ref() == Some(sent)).then_some(stats);
         self.section.last = Some(section);
     }
 
     /// Downloads the DXF bundle of the last section into `path` (chosen with a save dialog).
     pub fn export_section(&mut self, mut path: PathBuf) {
+        if let Some(reason) = self.section.export_blocker() {
+            self.shell.log(Severity::Warning, reason);
+            return;
+        }
         let Some(section) = &self.section.last else {
-            self.shell
-                .log(Severity::Warning, "Compute a section before exporting.");
             return;
         };
         if path.extension().is_none() {
@@ -230,6 +241,119 @@ impl AppState {
         self.model.select(Some(id.to_owned()));
         self.model.related = related;
         self.preview.mode = ViewportMode::TwoD;
+    }
+}
+
+impl AppState {
+    /// Opens a `.c2mproj`: re-imports its STEP file, then restores plane, hidden bodies and
+    /// number format. Component IDs derive from the file hash, so unknown IDs are dropped.
+    pub fn open_project(&mut self, path: PathBuf) {
+        let project = match crate::project::read_project(&path)
+            .and_then(|text| crate::project::parse_project(&text))
+        {
+            Ok(project) => project,
+            Err(error) => {
+                self.shell.log(Severity::Error, error);
+                return;
+            }
+        };
+        let step = project.step.path.clone();
+        self.start(
+            "Opening project",
+            move |client| client.import_step(&step),
+            move |state, summary| {
+                let changed = summary.sha256 != project.step.sha256;
+                let known = |id: &String| summary.components.iter().any(|c| &c.id == id);
+                let hidden = project.hidden_component_ids.iter().flatten();
+                let hidden = hidden.filter(|id| known(id)).cloned().collect();
+                state.finish_import(summary);
+                state.section.restore(PlaneSnapshot {
+                    kind: crate::project::parse_kind(&project.plane.kind).unwrap_or_default(),
+                    offset_mm: project.plane.offset_mm,
+                    custom_normal: project.plane.normal_xyz,
+                });
+                state.model.hidden = hidden;
+                state.shell.set_format(project.number_format);
+                if changed {
+                    let text = format!(
+                        "The STEP file changed since the project was saved (SHA-256 mismatch for {}). Results may differ from the saved session.",
+                        project.step.path
+                    );
+                    state.shell.log(Severity::Warning, text);
+                } else {
+                    state.shell.log(Severity::Info, "Project opened.");
+                }
+                state.shell.project_path = Some(path);
+            },
+        );
+    }
+}
+
+impl AppState {
+    /// Fetches the display mesh once per import, when the 3D view is shown (like the React
+    /// `PreviewView` on mount). It is not a blocking operation: the viewport shows its status.
+    pub fn ensure_preview(&mut self) {
+        if self.preview.mode != ViewportMode::ThreeD {
+            return;
+        }
+        let Some(import_id) = self.model.import_id().map(str::to_owned) else {
+            return;
+        };
+        if self.preview.requested.as_deref() == Some(import_id.as_str()) {
+            return;
+        }
+        let Some(tasks) = self.tasks.clone() else {
+            return;
+        };
+        self.preview.requested = Some(import_id.clone());
+        self.preview.begin_loading();
+        let wanted = import_id.clone();
+        tasks.run(
+            move |client| client.preview(&import_id),
+            move |state, result| {
+                // A reply for an earlier import is stale.
+                if state.preview.requested.as_deref() != Some(wanted.as_str()) {
+                    return;
+                }
+                if let (Err(message), true) = (&result, state.preview.mesh.is_none()) {
+                    state.shell.log(Severity::Error, message.clone());
+                }
+                if let Some(imported) = &state.model.imported {
+                    let bounds = imported.bounds_mm.clone();
+                    state.preview.finish(result, &bounds);
+                }
+            },
+        );
+    }
+}
+
+impl AppState {
+    /// Sets a custom plane on the selected sheet body's own plane (normal and offset).
+    pub fn align_plane_to_selected(&mut self) {
+        let (Some(import_id), Some(body)) = (
+            self.model.import_id().map(str::to_owned),
+            self.model.selected.clone(),
+        ) else {
+            self.shell.log(
+                Severity::Warning,
+                "Select a body in the model tree or the 2D view first.",
+            );
+            return;
+        };
+        self.start(
+            "Aligning plane to body",
+            move |client| client.component_plane(&import_id, &body),
+            |state, plane| {
+                let now = crate::state::now_ms();
+                state
+                    .section
+                    .set_custom(plane.normal_xyz, Some(plane.offset_mm), now);
+                state.shell.log(
+                    Severity::Info,
+                    "Custom plane aligned to the selected body. Compute the section to cut it.",
+                );
+            },
+        );
     }
 }
 
