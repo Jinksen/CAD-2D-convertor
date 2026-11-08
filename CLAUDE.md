@@ -2,6 +2,8 @@
 
 Use `CAD2Maxwell_PROJECT_SPEC.md` as the product source of truth.
 
+For desktop UI work, the target is the native Rust Rune framework; the React/Vite/Tauri UI is the current implementation during migration. Follow [docs/rune-migration.md](docs/rune-migration.md) for the pinned revision, staged migration, and acceptance gates. Do not remove the current app before the Rune app passes those gates.
+
 ## Core priorities
 
 1. geometric correctness,
@@ -24,14 +26,16 @@ Never:
 ## Preferred architecture
 
 ```text
-React/TypeScript UI
-        ↓
-Tauri/Rust shell
-        ↓
-Local Python API
-        ↓
+Rune native UI
+      ↓
+Rust desktop/service adapter
+      ↓
+Authenticated local Python API
+      ↓
 OpenCascade exact geometry
 ```
+
+For the rewrite, use exactly one dedicated worktree and branch. Keep all migration commits there, open one PR only after the complete app is functional and all migration gates pass, and merge only that completed PR. Do not create phase-by-phase or stacked PRs/worktrees.
 
 ## Implementation behavior
 

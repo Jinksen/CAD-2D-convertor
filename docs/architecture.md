@@ -1,6 +1,6 @@
 # Architecture
 
-CAD2Maxwell uses three deliberately narrow layers:
+## Current production implementation
 
 ```text
 React/TypeScript UI -> Tauri/Rust host -> loopback FastAPI/Python geometry service
@@ -23,3 +23,13 @@ The section service reads exact solids from the import session, intersects each 
 The draft DXF exporter consumes typed import and section results, writes analytic modelspace entities through ezdxf, and emits a traceability manifest. The CLI runs import, section, and export in one process; the UI downloads a ZIP built from process-local session summaries. Section validation blocks export for positive-area cross-component overlaps and invalid planar faces.
 
 Heavy geometry work will never run on the UI thread. Exact B-Rep objects remain backend-only; serializable Pydantic DTOs cross the process boundary.
+
+## Target desktop architecture
+
+The desktop UI is migrating to Rune. The target replaces the React/Vite renderer and Tauri webview shell with a native Rune/Rust application while keeping Python/OpenCascade as the geometry authority:
+
+```text
+Rune native UI -> Rust desktop/service adapter -> authenticated loopback FastAPI -> Python/OpenCascade
+```
+
+This is a staged migration, not a change to the geometry or service contract. The current app remains the production app until Rune meets the parity, viewport, accessibility, and packaging gates in [rune-migration.md](rune-migration.md). In particular, Rune's 3D CAD rendering strategy must be proven in the evaluation spike before the migration is committed to a renderer implementation.

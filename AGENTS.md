@@ -6,12 +6,22 @@ Build CAD2Maxwell as a robust engineering preprocessor for converting exact 3D C
 
 Read `CAD2Maxwell_PROJECT_SPEC.md` before substantial changes.
 
+## UI rewrite direction
+
+The project is migrating its desktop UI to the native Rust [Rune](https://github.com/anomalyco/rune) framework. Read [docs/rune-migration.md](docs/rune-migration.md) before UI or desktop-shell work; it defines the migration plan, compatibility gates, pinned Rune revision, and the one-worktree/one-PR policy for the rewrite.
+
+Treat the React/Vite/Tauri UI as the current production implementation, not the target architecture. Keep it working until the Rune replacement passes the documented parity and packaging gates. Do not start a broad rewrite or remove the current UI as part of an unrelated task.
+
+For the full rewrite, use exactly one dedicated worktree and branch, keep the migration commits together there, and open only one PR after the complete app works and passes its gates. Do not create intermediate PRs or additional rewrite worktrees.
+
+The migration changes the desktop UI and shell, not the geometry authority: Python/OpenCascade remains the only source of exact CAD geometry, sectioning, validation, and export. Preserve the typed local-service boundary and never move geometry algorithms into the UI.
+
 ## Architectural rules
 
-- Tauri + React + TypeScript = desktop UI.
+- Rune/Rust = target desktop UI; Tauri + React + TypeScript = current production UI during migration.
 - Python/OpenCascade = geometry authority.
-- Rust = thin desktop/process bridge.
-- Geometry logic must not live in React.
+- Rust = thin desktop/service bridge.
+- Geometry logic must not live in the UI.
 - UI must not depend on OpenCascade internals.
 - Use typed DTOs across process boundaries.
 - Preserve source component identity and metadata.
@@ -84,7 +94,7 @@ Notes:
 
 Keep Rust thin:
 - native dialogs,
-- Tauri lifecycle,
+- desktop lifecycle,
 - local Python process supervision,
 - packaging/security.
 

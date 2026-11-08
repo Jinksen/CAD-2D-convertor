@@ -8,6 +8,8 @@ The application is intended primarily for electrical-machine geometry, but the c
 
 Codex should treat this document as the primary product and architecture specification. Do not replace the architecture with a simpler monolithic prototype unless an explicit task asks for it.
 
+> **Desktop UI migration override:** The original React/Tauri choices in this document describe the current implementation and its history. The target desktop UI is now native Rust using [Rune](https://github.com/anomalyco/rune); follow [docs/rune-migration.md](docs/rune-migration.md) for implementation direction and migration gates. This changes neither the product requirements nor the Python/OpenCascade geometry authority. Do not remove the current app until the Rune replacement passes those gates.
+
 ---
 
 # 1. Product vision
@@ -188,49 +190,21 @@ Architecture must not prevent these features.
 
 ## 6.1 Desktop shell and GUI
 
-Use:
+**Target:** native Rust UI using Rune, pinned to the revision in [docs/rune-migration.md](docs/rune-migration.md). Rune owns the desktop window and UI rendering; Rust remains a thin desktop/service adapter. The current Tauri + React + TypeScript + Vite implementation remains in service during migration and is not the target.
 
-- **Tauri**
-- **React**
-- **TypeScript**
-- **Vite**
-
-Reason:
-
-- polished modern desktop UI,
-- smaller footprint than Electron,
-- native desktop packaging,
-- easy implementation of docking-like engineering panels,
-- good long-term UI maintainability,
-- strong separation between GUI and geometry engine.
-
-Do NOT implement the geometry engine in TypeScript.
+Do NOT implement the geometry engine in Rust or the UI. Python/OpenCascade remains the geometry authority. The Rune migration must retain the existing typed, authenticated local-service boundary.
 
 ---
 
 ## 6.2 UI component stack
 
-Recommended:
-
-- React
-- TypeScript strict mode
-- Tailwind CSS
-- shadcn/ui or equivalent accessible primitives
-- Lucide icons
-- Zustand for lightweight UI state
-- TanStack Query only if asynchronous service state benefits from it
-- React Hook Form + Zod for editable property panels
-- React Router only if truly needed; this should primarily be a desktop workspace, not a website
-
-Avoid excessive dependency count.
+Use Rune's native element, layout, input, and accessibility APIs. Keep UI state in typed Rust structures and isolate service DTOs and commands from view construction. Avoid introducing a second web UI or unnecessary framework layers. See the migration plan for unresolved viewport and integration questions that must be answered by the spike.
 
 ---
 
 ## 6.3 3D rendering
 
-Preferred implementation:
-
-- Three.js via React Three Fiber
+The current implementation uses Three.js via React Three Fiber. The target Rune 3D renderer is an explicit migration risk and must be evaluated before selecting a production implementation; see [docs/rune-migration.md](docs/rune-migration.md).
 
 The 3D renderer is for:
 - visualization,
@@ -249,12 +223,7 @@ For imported STEP geometry, backend should provide render meshes separately from
 
 ## 6.4 2D rendering
 
-Use a dedicated 2D engineering viewport.
-
-Recommended options:
-
-- SVG for initial MVP if performance is sufficient,
-- Canvas/WebGL later for larger models.
+Use a dedicated 2D engineering viewport. The current implementation uses SVG. Evaluate Rune's native shape/canvas APIs against representative section DTOs before choosing the target rendering path. Rendering may approximate curves for display only; source DTOs and Python remain authoritative, and export must never use renderer geometry.
 
 Requirements:
 
@@ -301,9 +270,9 @@ The backend owns:
 
 ## 6.6 Backend process model
 
-Do NOT run heavy OpenCascade operations directly in the Tauri UI thread.
+Do NOT run heavy OpenCascade operations directly in the UI thread.
 
-Preferred architecture:
+Current architecture:
 
 ```text
 Tauri desktop
@@ -315,6 +284,14 @@ Tauri desktop
             ▼
       Python geometry service
 ```
+
+Target architecture:
+
+```text
+Rune native desktop UI -> Rust desktop/service adapter -> Python geometry service
+```
+
+The target keeps the existing loopback, authentication, and typed DTO guarantees. Migrate these boundaries and lifecycle responsibilities deliberately; do not make Rune depend on OpenCascade or move exact geometry into Rust.
 
 For MVP, the Python service may run as a local child process using a strict request/response protocol.
 
@@ -1123,6 +1100,8 @@ should NOT force section recomputation.
 ---
 
 # 31. Repo architecture
+
+The layout below documents the original React/Tauri organization. It is not the target UI architecture; see [docs/rune-migration.md](docs/rune-migration.md).
 
 Recommended monorepo:
 

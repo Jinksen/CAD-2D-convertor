@@ -121,7 +121,7 @@ uv run --project backend python -m cad2maxwell_backend.cli `
 
 The output path must be absolute and unused; the command writes `section.dxf` and `section.json`.
 
-## How it works
+## Current production architecture
 
 ```text
 React/TypeScript UI ──► thin Tauri/Rust shell ──► local FastAPI service ──► OpenCascade exact geometry
@@ -134,6 +134,9 @@ More in [architecture](docs/architecture.md), [geometry](docs/geometry.md),
 [DXF export](docs/dxf-export.md) and [UX](docs/ux.md).
 [`CAD2Maxwell_PROJECT_SPEC.md`](CAD2Maxwell_PROJECT_SPEC.md) is the product source of truth.
 
+The target Rune architecture and staged replacement plan are documented in the
+[Rune migration plan](docs/rune-migration.md).
+
 ## Known limitations
 
 - Exports are marked `draft_unvalidated` until the [Maxwell import checklist](docs/maxwell-import-checklist.md) has been run on real models.
@@ -143,6 +146,8 @@ More in [architecture](docs/architecture.md), [geometry](docs/geometry.md),
 - Windows x64 only; builds are not code-signed yet.
 
 ## Development
+
+The desktop UI is being migrated from React/Tauri to the native Rust [Rune](https://github.com/anomalyco/rune) framework. The current app remains the production implementation during the staged migration. See the [Rune migration plan](docs/rune-migration.md) before changing desktop architecture.
 
 ```powershell
 .\scripts\dev.ps1    # hot-reload desktop app with a local backend
