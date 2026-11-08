@@ -8,16 +8,13 @@ $testRunDirectory = Join-Path $root ('.test-tmp/quality-' + [guid]::NewGuid().To
 New-Item -ItemType Directory -Path $testRunDirectory | Out-Null
 Push-Location $root
 try {
-    Invoke-NativeCommand -Command 'corepack' -Arguments @('pnpm', 'lint')
-    Invoke-NativeCommand -Command 'corepack' -Arguments @('pnpm', 'typecheck')
-    Invoke-NativeCommand -Command 'corepack' -Arguments @('pnpm', 'test')
     Invoke-NativeCommand -Command 'uv' -Arguments @('run', '--project', 'backend', 'ruff', 'check', 'backend')
     Invoke-NativeCommand -Command 'uv' -Arguments @('run', '--project', 'backend', 'mypy', 'backend/src')
     Invoke-NativeCommand -Command 'uv' -Arguments @('run', '--project', 'backend', 'pytest', 'backend/tests', '-v',
         '--basetemp', (Join-Path $testRunDirectory 'pytest'), '-o', ('cache_dir=' + (Join-Path $testRunDirectory 'pytest-cache')))
-    Invoke-NativeCommand -Command 'cargo' -Arguments @('fmt', '--manifest-path', 'frontend/src-tauri/Cargo.toml', '--', '--check')
-    Invoke-NativeCommand -Command 'cargo' -Arguments @('clippy', '--manifest-path', 'frontend/src-tauri/Cargo.toml', '--', '-D', 'warnings')
-    Invoke-NativeCommand -Command 'cargo' -Arguments @('test', '--manifest-path', 'frontend/src-tauri/Cargo.toml')
+    Invoke-NativeCommand -Command 'cargo' -Arguments @('fmt', '--manifest-path', 'frontend/rune-app/Cargo.toml', '--', '--check')
+    Invoke-NativeCommand -Command 'cargo' -Arguments @('clippy', '--manifest-path', 'frontend/rune-app/Cargo.toml', '--', '-D', 'warnings')
+    Invoke-NativeCommand -Command 'cargo' -Arguments @('test', '--manifest-path', 'frontend/rune-app/Cargo.toml')
     # The launcher tests use Pester 3/4 syntax; Windows ships Pester 3.4 even where Pester 5 is also installed.
     Import-Module Pester -MaximumVersion 4.99 -Force
     $scriptTests = Invoke-Pester -Script (Join-Path $PSScriptRoot 'tests/Scripts.Tests.ps1') -PassThru

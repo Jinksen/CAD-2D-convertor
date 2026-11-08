@@ -2,7 +2,7 @@
 
 Use `CAD2Maxwell_PROJECT_SPEC.md` as the product source of truth.
 
-For desktop UI work, the target is the native Rust Rune framework; the React/Vite/Tauri UI is the current implementation during migration. Follow [docs/rune-migration.md](docs/rune-migration.md) for the pinned revision, staged migration, and acceptance gates. Do not remove the current app before the Rune app passes those gates.
+The desktop UI is the native Rust Rune app in `frontend/rune-app`. Follow [docs/rune-migration.md](docs/rune-migration.md) for the pinned revision, gate results and known gaps.
 
 ## Core priorities
 

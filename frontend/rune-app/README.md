@@ -1,11 +1,12 @@
-# CAD2Maxwell native desktop app (Rune)
+# CAD2Maxwell desktop app (Rune)
 
-Native Rune replacement for the React/Tauri UI (migration phases 1-2: service client, app state, shell and an import-section-export vertical slice). It is not yet wired into release packaging; the React/Tauri app remains the production UI until the gates in docs/rune-migration.md pass. The app starts the bundled geometry service (or uses `CAD2MAXWELL_SESSION_TOKEN` when a script already started it) and talks to it on 127.0.0.1:8000.
+Native Rust UI built on [Rune](https://github.com/anomalyco/rune), pinned in `Cargo.toml`. It talks to the authenticated local geometry service on 127.0.0.1:8000. At start-up it uses the service whose token is in `CAD2MAXWELL_SESSION_TOKEN` (set by `scripts/dev.ps1` and `scripts/run.ps1`), otherwise it spawns `backend/cad2maxwell-backend.exe` next to its own executable.
 
 ```powershell
-cargo run --manifest-path frontend/rune-app/Cargo.toml
-cargo test --manifest-path frontend/rune-app/Cargo.toml
+.\scripts\dev.ps1                                             # backend + cargo run
+cargo test --manifest-path frontend/rune-app/Cargo.toml        # headless, no GPU
 cargo run --manifest-path frontend/rune-app/Cargo.toml -- --snap .test-tmp/rune-app.png
+.\scripts\build-release.ps1                                    # installer + portable ZIP
 ```
 
-Rune is pinned to a specific upstream revision in `Cargo.toml`. Read [the migration plan](../../docs/rune-migration.md) before extending this scaffold; the 2D and especially 3D CAD viewport feasibility must be established before choosing a production renderer.
+`assets/icon.ico` is the app icon, used by the installer. Gate results and known gaps: [docs/rune-migration.md](../../docs/rune-migration.md).

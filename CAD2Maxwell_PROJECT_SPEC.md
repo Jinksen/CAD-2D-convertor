@@ -8,7 +8,7 @@ The application is intended primarily for electrical-machine geometry, but the c
 
 Codex should treat this document as the primary product and architecture specification. Do not replace the architecture with a simpler monolithic prototype unless an explicit task asks for it.
 
-> **Desktop UI migration override:** The original React/Tauri choices in this document describe the current implementation and its history. The target desktop UI is now native Rust using [Rune](https://github.com/anomalyco/rune); follow [docs/rune-migration.md](docs/rune-migration.md) for implementation direction and migration gates. This changes neither the product requirements nor the Python/OpenCascade geometry authority. Do not remove the current app until the Rune replacement passes those gates.
+> **Desktop UI migration override:** The original React/Tauri choices in this document are historical. The desktop UI is now native Rust using [Rune](https://github.com/anomalyco/rune); follow [docs/rune-migration.md](docs/rune-migration.md) for implementation direction and migration gates. This changes neither the product requirements nor the Python/OpenCascade geometry authority.
 
 ---
 
@@ -190,7 +190,7 @@ Architecture must not prevent these features.
 
 ## 6.1 Desktop shell and GUI
 
-**Target:** native Rust UI using Rune, pinned to the revision in [docs/rune-migration.md](docs/rune-migration.md). Rune owns the desktop window and UI rendering; Rust remains a thin desktop/service adapter. The current Tauri + React + TypeScript + Vite implementation remains in service during migration and is not the target.
+**Target:** native Rust UI using Rune, pinned to the revision in [docs/rune-migration.md](docs/rune-migration.md). Rune owns the desktop window and UI rendering; Rust remains a thin desktop/service adapter. The former Tauri + React + TypeScript + Vite implementation is retired.
 
 Do NOT implement the geometry engine in Rust or the UI. Python/OpenCascade remains the geometry authority. The Rune migration must retain the existing typed, authenticated local-service boundary.
 
