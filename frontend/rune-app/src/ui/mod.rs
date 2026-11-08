@@ -4,6 +4,7 @@
 mod model_tree;
 mod preview;
 mod section;
+mod section_view;
 mod shell;
 
 use rune::tok::{self, Theme, space, type_};
