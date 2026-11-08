@@ -22,6 +22,7 @@ pub const MESSAGES_HEIGHT: f32 = 150.0;
 pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     let t = tok::theme(s.shell.theme.is_dark(cx.system_dark()));
     let accent = cx.accent();
+    s.preview.scale.set(cx.env().scale);
     col()
         .key("root")
         .w_full()

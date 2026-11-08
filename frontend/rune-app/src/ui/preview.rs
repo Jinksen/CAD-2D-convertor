@@ -329,6 +329,7 @@ mod tests {
     fn hidden_bodies_are_not_picked() {
         let mut rt = runtime();
         rt.state.model.toggle_hidden("a");
+        rt.invalidate();
         rt.frame(1.0 / 60.0);
         let (x, y) = rt.find("preview3d").expect("viewport");
         rt.pointer_down(x, y);

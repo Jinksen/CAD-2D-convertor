@@ -6,7 +6,7 @@ use rune::{
 };
 
 use super::{MESSAGES_HEIGHT, button, heading, label_value, rule, severity_color, severity_label, toggle};
-use crate::api::dto::{SectionResponse, Severity};
+use crate::api::dto::Severity;
 use crate::format::{DecimalMarker, LengthUnit, MAX_DECIMALS, NumberFormat};
 use crate::state::preview::ViewportMode;
 use crate::state::section::PlaneKind;
@@ -57,24 +57,13 @@ fn save_project_dialog(s: &mut AppState, tx: &mut Tx, save_as: bool) {
     }
 }
 
-/// A computed, current section whose wires are all closed and classified, with no errors.
 fn exportable(s: &AppState) -> bool {
-    let Some(section): Option<&SectionResponse> = s.section.last.as_ref() else {
-        return false;
-    };
-    s.section.stats.is_some_and(|st| st.errors == 0)
-        && !section.components.is_empty()
-        && section.components.iter().all(|c| {
-            !c.wires.is_empty() && c.wires.iter().all(|w| w.closed && w.role.is_some())
-        })
+    s.section.export_blocker().is_none()
 }
 
 fn export_dialog(s: &mut AppState, tx: &mut Tx) {
-    if !exportable(s) {
-        s.shell.log(
-            Severity::Warning,
-            "Compute a section whose regions are all closed before exporting.",
-        );
+    if let Some(reason) = s.section.export_blocker() {
+        s.shell.log(Severity::Warning, reason);
         return;
     }
     let options = dialog("Save CAD2Maxwell DXF bundle", Some("section.zip"))

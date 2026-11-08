@@ -348,8 +348,10 @@ pub(crate) mod tests {
     use super::*;
     use crate::render3d::StandardView;
 
+    pub(crate) type Mesh = (Vec<f32>, Vec<f32>, Vec<u32>, Vec<u32>);
+
     /// Unit cube [0,s]^3: 8 shared vertices, 12 triangles, 12 edges.
-    pub(crate) fn cube(s: f32, at: [f32; 3]) -> (Vec<f32>, Vec<f32>, Vec<u32>, Vec<u32>) {
+    pub(crate) fn cube(s: f32, at: [f32; 3]) -> Mesh {
         let mut pos = vec![];
         for i in 0..8u32 {
             pos.extend([at[0] + s * (i & 1) as f32, at[1] + s * (i >> 1 & 1) as f32, at[2] + s * (i >> 2 & 1) as f32]);
@@ -361,7 +363,7 @@ pub(crate) mod tests {
         (pos, normals, idx, edges)
     }
 
-    fn scene<'a>(cubes: &'a [(Vec<f32>, Vec<f32>, Vec<u32>, Vec<u32>)]) -> Scene<'a> {
+    fn scene<'a>(cubes: &'a [Mesh]) -> Scene<'a> {
         Scene {
             bodies: cubes
                 .iter()
@@ -429,7 +431,7 @@ pub(crate) mod tests {
     }
 
     /// UV sphere shell with `n` x `n` quads (2 n^2 triangles) around `at`.
-    fn sphere(n: usize, r: f32, at: [f32; 3]) -> (Vec<f32>, Vec<f32>, Vec<u32>, Vec<u32>) {
+    fn sphere(n: usize, r: f32, at: [f32; 3]) -> Mesh {
         let (mut pos, mut nor, mut idx, mut edges) = (vec![], vec![], vec![], vec![]);
         for i in 0..=n {
             let th = std::f32::consts::PI * i as f32 / n as f32;

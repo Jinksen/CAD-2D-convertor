@@ -173,9 +173,11 @@ fn export_is_blocked_until_the_current_section_is_complete_and_says_why() {
 
 #[test]
 fn editing_the_plane_after_a_section_marks_it_stale() {
-    let mut s = SectionState::default();
-    s.last = Some(complete_section());
-    s.stats = Some(SectionStats::default());
+    let mut s = SectionState {
+        last: Some(complete_section()),
+        stats: Some(SectionStats::default()),
+        ..Default::default()
+    };
     s.set_offset(3.0, 0);
     assert!(s.stats.is_none() && s.last.is_some());
 }
