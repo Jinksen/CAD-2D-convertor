@@ -15,7 +15,7 @@ export function Progress({ label, since, onCancel }: ProgressProps) {
     return () => { clearInterval(timer); };
   }, []);
   return <p className="message">
-    <span className="message-severity">running</span>{label}… {Math.max(0, Math.floor((now - since) / 1000))} s
+    <span className="message-severity">Running</span>{label}… {Math.max(0, Math.floor((now - since) / 1000))} s
     <button type="button" className="message-link" onClick={onCancel}>Cancel</button>
   </p>;
 }

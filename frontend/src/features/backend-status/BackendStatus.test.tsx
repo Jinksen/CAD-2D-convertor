@@ -26,4 +26,13 @@ describe("BackendStatus", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Bodies: 2");
     expect(screen.getByRole("status")).toHaveTextContent("Source: inch");
   });
+
+  it("counts section errors and warnings in sentence case, or reports that checks passed", () => {
+    const health = { state: "online", service: "cad2maxwell-backend", apiVersion: "v1" } as const;
+    const { rerender } = render(<BackendStatus health={health} sectionStats={{ regions: 3, errors: 2, warnings: 1 }} />);
+    expect(screen.getByText("2 errors")).toHaveClass("error");
+    expect(screen.getByText("1 warning")).toHaveClass("warning");
+    rerender(<BackendStatus health={health} sectionStats={{ regions: 3, errors: 0, warnings: 0 }} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Checks passed");
+  });
 });

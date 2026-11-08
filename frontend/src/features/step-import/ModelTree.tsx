@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 
 import { useWorkspaceStore } from "../../app/workspaceStore";
+import { EyeIcon, EyeOffIcon } from "../../lib/icons";
 import type { SectionPlaneKind } from "../section/plane";
 import { rgb } from "./color";
 import type { ImportComponent, ImportSummary } from "./contracts";
@@ -68,13 +69,13 @@ export function ModelTree({ imported, node, selectedComponentId, activePlane, on
     </button>
     <button type="button" className="tree-eye" aria-pressed={!hidden} title={hidden ? "Show body (V)" : "Hide body (V)"}
       aria-label={hidden ? "Show body" : "Hide body"}
-      onClick={() => { toggleHidden(item.id); }}>{hidden ? "◌" : "◉"}</button></li>;
+      onClick={() => { toggleHidden(item.id); }}>{hidden ? <EyeOffIcon /> : <EyeIcon />}</button></li>;
   }
 
   const groups = groupByParent(visibleBodies);
   const flattenGroups = imported !== null && groupByParent(imported.components).length === 1;
   return <nav className="pane model-builder" aria-label="Model builder">
-    <div className="pane-title">Model Builder</div>
+    <div className="pane-title">Model builder</div>
     {imported && <div className="tree-filter">
       <input ref={filterField} type="search" value={query} placeholder="Filter bodies"
         aria-label="Filter bodies" title="Filter bodies (Ctrl+F)"
@@ -88,7 +89,7 @@ export function ModelTree({ imported, node, selectedComponentId, activePlane, on
     <div className="tree-global">
       <button type="button" className="tree-node" aria-pressed={node === "format"} onClick={() => { onNode("format"); }}>
         <svg className="tree-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          strokeWidth="1.6" strokeLinecap="round" aria-hidden="true"><path d="M3 17h18M6 17v-4M10 17v-2M14 17v-4M18 17v-2" /></svg>
+          strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="M3 17h18M6 17v-4M10 17v-2M14 17v-4M18 17v-2" /></svg>
         Preferences
       </button>
     </div>
@@ -96,7 +97,7 @@ export function ModelTree({ imported, node, selectedComponentId, activePlane, on
       <button type="button" className="tree-node" aria-pressed={!node && !selectedComponentId}
         onClick={() => { onSelectBody(null); }}>
         <svg className="tree-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          strokeWidth="1.6" aria-hidden="true"><path d="M6 3h9l4 4v14H6z" /></svg>
+          strokeWidth="1.5" aria-hidden="true"><path d="M6 3h9l4 4v14H6z" /></svg>
         {imported.path.split(/[\\/]/).pop()}
       </button>
       <details open>
@@ -113,7 +114,7 @@ export function ModelTree({ imported, node, selectedComponentId, activePlane, on
       <button type="button" className="tree-node" aria-pressed={node === "section"}
         onClick={() => { onNode("section"); }}>
         <svg className="tree-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true"><path d="M3 15 12 10l9 5-9 5z" /></svg>
+          strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true"><path d="M3 15 12 10l9 5-9 5z" /></svg>
         Section {activePlane === "custom" ? "(custom plane)" : activePlane}
       </button>
     </div> : <div className="empty-panel"><strong>No model loaded</strong><span>Open a STEP file to inspect its bodies.</span></div>}

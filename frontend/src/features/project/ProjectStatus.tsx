@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
 import { useWorkspaceStore } from "../../app/workspaceStore";
+import { CloseIcon, ErrorIcon, WarningIcon } from "../../lib/icons";
 import { useGlobalShortcuts } from "../step-import/useGlobalShortcuts";
 import { saveProject, useProjectStore } from "./projectActions";
 
@@ -28,8 +29,8 @@ export function ProjectStatus() {
   if (!text) return null;
   const level = error ? "error" : warning ? "warning" : "info";
   return <div role={level === "info" ? "status" : "alert"} className={`project-status ${level}`}>
-    {level === "error" ? "✕ " : level === "warning" ? "⚠ " : ""}{text}
+    {level === "error" ? <ErrorIcon /> : level === "warning" ? <WarningIcon /> : null}<span>{text}</span>
     {level !== "info" && <button type="button" aria-label="Dismiss"
-      onClick={() => { useProjectStore.setState({ error: null, warning: null }); }}>×</button>}
+      onClick={() => { useProjectStore.setState({ error: null, warning: null }); }}><CloseIcon /></button>}
   </div>;
 }
