@@ -1,7 +1,10 @@
+import { useRef, useState } from "react";
+
 import { useWorkspaceStore } from "../../app/workspaceStore";
 import type { SectionPlaneKind } from "../section/plane";
 import { rgb } from "./color";
 import type { ImportComponent, ImportSummary } from "./contracts";
+import { bodyMatchesFilter } from "./treeFilter";
 import { useGlobalShortcuts } from "./useGlobalShortcuts";
 
 /** The node shown in the Settings pane; null shows the selected body, else the model. */
@@ -30,14 +33,28 @@ export function ModelTree({ imported, node, selectedComponentId, activePlane, on
   const hiddenIds = useWorkspaceStore((state) => state.hiddenIds);
   const toggleHidden = useWorkspaceStore((state) => state.toggleHidden);
   const toggleIsolate = useWorkspaceStore((state) => state.toggleIsolate);
-  // V hides or shows the selected body, I isolates it (again: show all).
+  const filterField = useRef<HTMLInputElement>(null);
+  const importId = imported?.import_id ?? null;
+  const [filter, setFilter] = useState({ importId, query: "" });
+  // Reset during render when a different STEP session is loaded, not in an effect.
+  if (filter.importId !== importId) setFilter({ importId, query: "" });
+  const query = filter.importId === importId ? filter.query : "";
+  const setQuery = (next: string) => { setFilter({ importId, query: next }); };
+  // V hides or shows the selected body, I isolates it (again: show all). Ctrl+F focuses the filter.
   useGlobalShortcuts((key, ctrl) => {
+    if (ctrl && key === "f" && imported) {
+      filterField.current?.focus();
+      filterField.current?.select();
+      return true;
+    }
     if (ctrl || !selectedComponentId || (key !== "v" && key !== "i")) return false;
     (key === "v" ? toggleHidden : toggleIsolate)(selectedComponentId);
     return true;
   });
   const displayNames = imported?.components.map((item) => item.display_name) ?? [];
   const duplicateNames = new Set(displayNames.filter((name, index) => displayNames.indexOf(name) !== index));
+  const visibleBodies = imported?.components.filter((item) => bodyMatchesFilter(item, query)) ?? [];
+  const filtering = query.trim().length > 0;
 
   function bodyButton(item: ImportComponent) {
     const duplicate = duplicateNames.has(item.display_name);
@@ -54,9 +71,20 @@ export function ModelTree({ imported, node, selectedComponentId, activePlane, on
       onClick={() => { toggleHidden(item.id); }}>{hidden ? "◌" : "◉"}</button></li>;
   }
 
-  const groups = imported ? groupByParent(imported.components) : [];
+  const groups = groupByParent(visibleBodies);
+  const flattenGroups = imported !== null && groupByParent(imported.components).length === 1;
   return <nav className="pane model-builder" aria-label="Model builder">
     <div className="pane-title">Model Builder</div>
+    {imported && <div className="tree-filter">
+      <input ref={filterField} type="search" value={query} placeholder="Filter bodies"
+        aria-label="Filter bodies" title="Filter bodies (Ctrl+F)"
+        onChange={(event) => { setQuery(event.target.value); }}
+        onKeyDown={(event) => {
+          if (event.key !== "Escape") return;
+          if (query.length > 0) setQuery("");
+          else filterField.current?.blur();
+        }} />
+    </div>}
     <div className="tree-global">
       <button type="button" className="tree-node" aria-pressed={node === "format"} onClick={() => { onNode("format"); }}>
         <svg className="tree-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -72,12 +100,15 @@ export function ModelTree({ imported, node, selectedComponentId, activePlane, on
         {imported.path.split(/[\\/]/).pop()}
       </button>
       <details open>
-        <summary className="tree-group">Bodies ({imported.component_count})</summary>
-        {groups.length === 1 ? <ul className="tree-list">{groups[0][1].map(bodyButton)}</ul> :
-          groups.map(([parent, bodies]) => <details open key={parent} className="tree-subgroup">
-            <summary className="tree-group">{parent.split(" / ").pop() || "Root"} ({bodies.length})</summary>
-            <ul className="tree-list">{bodies.map(bodyButton)}</ul>
-          </details>)}
+        <summary className="tree-group">
+          Bodies ({filtering ? `${String(visibleBodies.length)} of ${String(imported.component_count)}` : imported.component_count})
+        </summary>
+        {visibleBodies.length === 0 ? <p className="tree-empty" role="status">No bodies match this filter.</p> :
+          flattenGroups ? <ul className="tree-list">{visibleBodies.map(bodyButton)}</ul> :
+            groups.map(([parent, bodies]) => <details open key={parent} className="tree-subgroup">
+              <summary className="tree-group">{parent.split(" / ").pop() || "Root"} ({bodies.length})</summary>
+              <ul className="tree-list">{bodies.map(bodyButton)}</ul>
+            </details>)}
       </details>
       <button type="button" className="tree-node" aria-pressed={node === "section"}
         onClick={() => { onNode("section"); }}>

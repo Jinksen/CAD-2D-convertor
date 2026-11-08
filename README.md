@@ -84,8 +84,9 @@ The app writes its service log to `%LOCALAPPDATA%\com.cad2maxwell.desktop\logs\b
 | Ctrl+Enter | Compute section | | V | Show / hide selected body |
 | Ctrl+E | Export DXF | | I | Isolate selected body |
 | Ctrl+Z / Ctrl+Y | Undo / redo plane edits | | Ctrl+L | Focus Messages |
-| 1 / 2 / 3 | Plane XY / XZ / YZ | | Esc | Clear selection |
-| Ctrl+1 / Ctrl+2 | 2D section / 3D preview | | Wheel · drag | Zoom at cursor · pan |
+| Ctrl+F | Filter bodies in Model Builder | | Esc | Clear selection |
+| 1 / 2 / 3 | Plane XY / XZ / YZ | | Ctrl+1 / Ctrl+2 | 2D section / 3D preview |
+| Wheel · drag | Zoom at cursor · pan | | | |
 
 ## Export checks
 
