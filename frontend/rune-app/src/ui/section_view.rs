@@ -408,7 +408,7 @@ pub fn canvas(s: &AppState, t: &Theme, k: &Kit) -> El {
             button(k, "zoom-in", "+", true).on_press(|s: &mut AppState| s.section.zoom(0.8, None)),
         )
         .child(
-            button(k, "zoom-out", "-", true)
+            button(k, "zoom-out", "−", true)
                 .on_press(|s: &mut AppState| s.section.zoom(1.25, None)),
         )
         .child(note(status));

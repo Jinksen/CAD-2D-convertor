@@ -199,8 +199,11 @@ impl AppState {
         }
         let stats = SectionStats::of(&section);
         let text = format!(
-            "Section {sent:?}: {} closed outer regions, {} errors, {} warnings.",
-            stats.regions, stats.errors, stats.warnings
+            "Section {}: {} closed outer regions, {} errors, {} warnings.",
+            describe_plane(sent, &self.shell.number_format),
+            stats.regions,
+            stats.errors,
+            stats.warnings
         );
         self.shell.log(
             if stats.errors > 0 {
@@ -266,6 +269,20 @@ impl AppState {
     }
 }
 
+/// "XY at z = 37.500 mm" or "custom, normal (0, 0, 1)", in the user's number format.
+fn describe_plane(
+    plane: &crate::api::dto::SectionPlane,
+    fmt: &crate::format::NumberFormat,
+) -> String {
+    use crate::api::dto::SectionPlane::{Custom, XY, XZ, YZ};
+    match plane {
+        XY { offset_mm } => format!("XY at z = {}", fmt.length(*offset_mm)),
+        XZ { offset_mm } => format!("XZ at y = {}", fmt.length(*offset_mm)),
+        YZ { offset_mm } => format!("YZ at x = {}", fmt.length(*offset_mm)),
+        Custom { normal_xyz, .. } => format!("custom, normal {}", fmt.direction(normal_xyz)),
+    }
+}
+
 impl AppState {
     /// Opens a `.c2mproj`: re-imports its STEP file, then restores plane, hidden bodies and
     /// number format. Component IDs derive from the file hash, so unknown IDs are dropped.
@@ -279,7 +296,10 @@ impl AppState {
                 return;
             }
         };
-        let step = project.step.path.clone();
+        let resolved = project.step.resolve(&path);
+        let moved = resolved.as_path() != Path::new(&project.step.path);
+        let step = resolved.to_string_lossy().into_owned();
+        let opened = step.clone();
         self.start(
             "Opening project",
             move |client| client.import_step(&step),
@@ -295,7 +315,16 @@ impl AppState {
                     custom_normal: project.plane.normal_xyz,
                 });
                 state.model.hidden = hidden;
+                state.model.restore_groups(project.groups);
+                state.model.collapsed = project.collapsed_folders.into_iter().collect();
                 state.shell.set_format(project.number_format);
+                if moved {
+                    let text = format!(
+                        "{} was not found; opened {} next to the project instead.",
+                        project.step.path, opened
+                    );
+                    state.shell.log(Severity::Info, text);
+                }
                 if changed {
                     let text = format!(
                         "The STEP file changed since the project was saved (SHA-256 mismatch for {}). Results may differ from the saved session.",

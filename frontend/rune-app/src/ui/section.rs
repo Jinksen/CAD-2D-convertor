@@ -190,7 +190,7 @@ pub fn settings(s: &AppState, t: &Theme, k: &Kit) -> El {
                 k,
                 "section-compute",
                 if computing {
-                    "Computing..."
+                    "Computing…"
                 } else {
                     "Compute section"
                 },
