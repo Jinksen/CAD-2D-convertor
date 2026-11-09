@@ -19,10 +19,17 @@ def test_demo_motor_imports_with_names_and_colours() -> None:
 
     names = [body.source_name for body in model.bodies]
     assert len(names) == 15
-    assert names[:2] == ["Stator", "Rotor"] and "Shaft" in names
+    assert names[0] == "Stator" and "Rotor" in names and "Shaft" in names
     assert sum(name.startswith("Magnet_") for name in names) == 8
     assert sum(name.startswith("Coil_") for name in names) == 4
     assert all(body.source_color is not None for body in model.bodies)
+
+
+def test_demo_motor_bodies_sit_in_two_named_sub_assemblies() -> None:
+    paths = {body.source_name: body.hierarchy_path for body in read_step(DEMO).bodies}
+
+    assert paths["Coil_1"] == ("Demo_Motor", "Stator_Assembly", "Coil_1")
+    assert paths["Magnet_8"] == ("Demo_Motor", "Rotor_Assembly", "Magnet_8")
 
 
 def test_demo_motor_mid_height_section_has_closed_regions_and_no_errors() -> None:

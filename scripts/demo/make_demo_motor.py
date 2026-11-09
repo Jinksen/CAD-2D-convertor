@@ -1,4 +1,5 @@
-"""Write a synthetic, license-free motor assembly as STEP (named, coloured bodies, mm).
+"""Write a synthetic, license-free motor assembly as STEP (named, coloured bodies in two
+sub-assemblies, mm).
 
 Run with the backend environment:  uv run --project backend python scripts/demo/make_demo_motor.py [OUTPUT]
 Output is deterministic: no random input, and the STEP header timestamp/path are normalised.
@@ -20,11 +21,12 @@ from OCP.Quantity import Quantity_Color, Quantity_TypeOfColor
 from OCP.STEPCAFControl import STEPCAFControl_Writer
 from OCP.TCollection import TCollection_ExtendedString
 from OCP.TDataStd import TDataStd_Name
+from OCP.TDF import TDF_Label
 from OCP.TDocStd import TDocStd_Document
 from OCP.TopLoc import TopLoc_Location
 from OCP.TopoDS import TopoDS_Compound, TopoDS_Shape
 from OCP.XCAFApp import XCAFApp_Application
-from OCP.XCAFDoc import XCAFDoc_ColorType, XCAFDoc_DocumentTool
+from OCP.XCAFDoc import XCAFDoc_ColorType, XCAFDoc_DocumentTool, XCAFDoc_ShapeTool
 
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[2] / "docs" / "demo" / "demo-motor.step"
 SLOTS = 12
@@ -57,16 +59,40 @@ def _rotor() -> TopoDS_Shape:
         BRepPrimAPI_MakeCylinder(30, STACK_MM).Shape(), BRepPrimAPI_MakeCylinder(10, STACK_MM).Shape()).Shape()
 
 
-def _bodies() -> list[tuple[str, TopoDS_Shape, tuple[float, float, float]]]:
-    bodies = [("Stator", _stator(), (0.62, 0.64, 0.68)), ("Rotor", _rotor(), (0.45, 0.47, 0.52))]
-    for index in range(MAGNETS):
-        colour = (0.80, 0.15, 0.12) if index % 2 == 0 else (0.15, 0.30, 0.75)  # alternating N / S
-        bodies.append((f"Magnet_{index + 1}", _rotated(_box(30, 34, 6, 5, STACK_MM - 5), index * 360 / MAGNETS), colour))
-    bodies.append(("Shaft", BRepPrimAPI_MakeCylinder(10, STACK_MM + 30).Shape(), (0.85, 0.85, 0.87)))
+Body = tuple[str, TopoDS_Shape, tuple[float, float, float]]
+
+
+def _stator_assembly() -> list[Body]:
+    bodies: list[Body] = [("Stator", _stator(), (0.62, 0.64, 0.68))]
     for index, slot in enumerate(COIL_SLOTS):
         coil = _rotated(_box(38, 46, 2, -5, STACK_MM + 5), slot * 360 / SLOTS)
         bodies.append((f"Coil_{index + 1}", coil, (0.80, 0.50, 0.20)))
     return bodies
+
+
+def _rotor_assembly() -> list[Body]:
+    bodies: list[Body] = [("Rotor", _rotor(), (0.45, 0.47, 0.52))]
+    for index in range(MAGNETS):
+        colour = (0.80, 0.15, 0.12) if index % 2 == 0 else (0.15, 0.30, 0.75)  # alternating N / S
+        bodies.append((f"Magnet_{index + 1}", _rotated(_box(30, 34, 6, 5, STACK_MM - 5), index * 360 / MAGNETS), colour))
+    bodies.append(("Shaft", BRepPrimAPI_MakeCylinder(10, STACK_MM + 30).Shape(), (0.85, 0.85, 0.87)))
+    return bodies
+
+
+def _assemblies() -> list[tuple[str, list[Body]]]:
+    return [("Stator_Assembly", _stator_assembly()), ("Rotor_Assembly", _rotor_assembly())]
+
+
+def _named(label: object, name: str) -> None:
+    TDataStd_Name.Set_s(label, TCollection_ExtendedString(name))  # type: ignore[arg-type]
+
+
+def _new_assembly(shapes: XCAFDoc_ShapeTool, name: str) -> TDF_Label:
+    compound = TopoDS_Compound()
+    BRep_Builder().MakeCompound(compound)
+    label = shapes.AddShape(compound, True)
+    _named(label, name)
+    return label
 
 
 def build(path: Path) -> Path:
@@ -75,17 +101,16 @@ def build(path: Path) -> Path:
     XCAFDoc_DocumentTool.SetLengthUnit_s(document, 0.001)
     shapes = XCAFDoc_DocumentTool.ShapeTool_s(document.Main())
     colours = XCAFDoc_DocumentTool.ColorTool_s(document.Main())
-    compound = TopoDS_Compound()
-    BRep_Builder().MakeCompound(compound)
-    assembly = shapes.AddShape(compound, True)
-    TDataStd_Name.Set_s(assembly, TCollection_ExtendedString("Demo_Motor"))  # type: ignore[arg-type]
-    for name, shape, (red, green, blue) in _bodies():
-        product = shapes.AddShape(shape, False)
-        TDataStd_Name.Set_s(product, TCollection_ExtendedString(name))  # type: ignore[arg-type]
-        colours.SetColor(product, Quantity_Color(red, green, blue, Quantity_TypeOfColor.Quantity_TOC_sRGB),
-                         XCAFDoc_ColorType.XCAFDoc_ColorSurf)
-        occurrence = shapes.AddComponent(assembly, product, TopLoc_Location())
-        TDataStd_Name.Set_s(occurrence, TCollection_ExtendedString(name))  # type: ignore[arg-type]
+    motor = _new_assembly(shapes, "Demo_Motor")
+    for assembly_name, bodies in _assemblies():
+        assembly = _new_assembly(shapes, assembly_name)
+        for name, shape, (red, green, blue) in bodies:
+            product = shapes.AddShape(shape, False)
+            _named(product, name)
+            colours.SetColor(product, Quantity_Color(red, green, blue, Quantity_TypeOfColor.Quantity_TOC_sRGB),
+                             XCAFDoc_ColorType.XCAFDoc_ColorSurf)
+            _named(shapes.AddComponent(assembly, product, TopLoc_Location()), name)
+        _named(shapes.AddComponent(motor, assembly, TopLoc_Location()), assembly_name)
     shapes.UpdateAssemblies()
     writer = STEPCAFControl_Writer()
     writer.SetNameMode(True)
