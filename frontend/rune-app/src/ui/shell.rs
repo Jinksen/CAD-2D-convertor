@@ -119,7 +119,7 @@ pub fn toolbar(s: &AppState, t: &Theme, k: &Kit) -> El {
         .child(text("CAD2Maxwell").font(type_::TITLE).color(t.text))
         .child(
             group("Model").child(
-                button(k, "open-step", "Open STEP...", idle)
+                button(k, "open-step", "Open STEP…", idle)
                     .shortcut_hint("Ctrl+O")
                     .on_press_tx(open_step_dialog),
             ),
@@ -134,7 +134,7 @@ pub fn toolbar(s: &AppState, t: &Theme, k: &Kit) -> El {
                         }),
                 )
                 .child(
-                    button(k, "open-project", "Open project...", idle)
+                    button(k, "open-project", "Open project…", idle)
                         .on_press_tx(open_project_dialog),
                 ),
         )
@@ -148,7 +148,7 @@ pub fn toolbar(s: &AppState, t: &Theme, k: &Kit) -> El {
         )
         .child(
             group("Export").child(
-                button(k, "export-dxf", "Export DXF...", idle && exportable(s))
+                button(k, "export-dxf", "Export DXF…", idle && exportable(s))
                     .shortcut_hint("Ctrl+E")
                     .on_press_tx(export_dialog),
             ),
@@ -210,7 +210,7 @@ fn stepper(
                 .w(96.0),
         )
         .child(
-            button(k, &format!("{key}-dec"), "-", value > 0)
+            button(k, &format!("{key}-dec"), "−", value > 0)
                 .label(format!("Fewer {label}"))
                 .on_press(edit_format(move |f| set(f, value.saturating_sub(1)))),
         )
@@ -391,7 +391,7 @@ pub fn messages(s: &AppState, t: &Theme, k: &Kit) -> El {
                 text(severity_label(m.severity))
                     .font(type_::LABEL)
                     .color(severity_color(m.severity, t))
-                    .w(44.0),
+                    .w(52.0),
             )
             .child(text(&m.text).font(type_::BODY).color(t.text).grow(1.0));
         match focus {
@@ -409,7 +409,7 @@ pub fn messages(s: &AppState, t: &Theme, k: &Kit) -> El {
             row()
                 .key("progress")
                 .role("status")
-                .label(format!("{busy}..."))
+                .label(format!("{busy}…"))
                 .w_full()
                 .gap(space::S2)
                 .px(space::S2)
@@ -560,6 +560,7 @@ pub fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
         return true;
     }
     let selected = s.model.selected.clone();
+    let group = s.model.selected_group.clone();
     match &ev.key {
         Key::Text(k) if has_model && matches!(k.as_str(), "1" | "2" | "3") => {
             let kind =
@@ -572,6 +573,12 @@ pub fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         Key::Text(k) if selected.is_some() && k.eq_ignore_ascii_case("i") => {
             s.model.toggle_isolate(&selected.unwrap_or_default())
+        }
+        Key::Text(k) if group.is_some() && k.eq_ignore_ascii_case("v") => {
+            s.model.toggle_group_hidden(&group.unwrap_or_default())
+        }
+        Key::Text(k) if group.is_some() && k.eq_ignore_ascii_case("i") => {
+            s.model.toggle_group_isolate(&group.unwrap_or_default())
         }
         _ => return false,
     }

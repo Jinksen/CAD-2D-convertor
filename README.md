@@ -14,7 +14,7 @@ Every 2D region traces back to its source body.
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%20x64-0078d4)
 
-<img src="docs/images/section-2d.png" alt="Exact XY section of the demo motor: stator, rotor, magnets and coils as filled regions" width="900">
+<img src="docs/images/section-2d.png" alt="Exact XY section of the demo motor next to the Model Builder with stator and rotor assembly folders and a North poles group" width="900">
 
 </div>
 
@@ -33,8 +33,9 @@ section. What lands in Maxwell is what you modelled.
 | **Traceability** | Source names, colours and assembly paths are kept. A JSON manifest maps every 2D region to its body; export names are ASCII-safe and deterministic. |
 | **Validation** | Defects block export, small features are flagged, nothing is repaired silently (see [Export checks](#export-checks)). Click a diagnostic to jump to the body. |
 | **Any plane** | XY / XZ / YZ with an offset, or a custom tilted plane aligned to a selected sheet in one click. Plane edits have undo/redo; the shown section is marked stale until you compute again. |
+| **Organization** | The Model Builder nests bodies in collapsible folders that follow the STEP assemblies. Your own groups (for example *Magnets* or *Phase A coils*) can be shown, hidden or isolated together. |
 | **Engineering UI** | Model Builder tree, property pane, 2D viewport with zoom-at-cursor and pan, 3D preview with feature edges and standard views, visibility and isolate, light and dark themes, ISO 80000-1 number formatting. |
-| **Projects** | Save the session as a `.c2mproj` (STEP path + hash, plane, preferences, visibility; never geometry) and reopen it later. |
+| **Projects** | Save the session as a `.c2mproj` (STEP path and hash, plane, preferences, visibility, groups; never geometry) and reopen it later. A STEP inside the project folder is also found after the folder is moved. |
 | **Local only** | Runs fully offline. The geometry service listens on `127.0.0.1` with a per-session token; no telemetry. |
 
 <table>
@@ -88,8 +89,8 @@ The app writes its service log to `%LOCALAPPDATA%\com.cad2maxwell.desktop\logs\b
 | Ctrl+1 / Ctrl+2 | 2D section / 3D preview |
 | 1 / 2 / 3 | Plane XY / XZ / YZ |
 | F / Shift+F | Fit selection / fit all |
-| V | Show or hide the selected body |
-| I | Isolate the selected body |
+| V | Show or hide the selected body or group |
+| I | Isolate the selected body or group |
 | Esc | Clear selection |
 | Wheel, drag | 2D: zoom at cursor, pan. 3D: zoom, orbit with the left button, pan with the others |
 | Arrows, + / − | Pan and zoom the 2D view |
@@ -139,7 +140,8 @@ Rune native UI ──► Rust service adapter ──► local FastAPI service �
 The UI only ever sees typed DTOs; exact shapes stay in the Python process. Sessions are bounded,
 section results are cached per plane, and bodies whose bounding box misses the plane are skipped.
 More in [architecture](docs/architecture.md), [geometry](docs/geometry.md),
-[DXF export](docs/dxf-export.md) and [UX](docs/ux.md).
+[DXF export](docs/dxf-export.md) and [UX](docs/ux.md). Planned project and format work is in
+[projects and formats](docs/projects-and-formats.md).
 [`CAD2Maxwell_PROJECT_SPEC.md`](CAD2Maxwell_PROJECT_SPEC.md) is the product source of truth.
 
 ## Known limitations
@@ -147,7 +149,7 @@ More in [architecture](docs/architecture.md), [geometry](docs/geometry.md),
 - Exports are marked `draft_unvalidated` until the [Maxwell import checklist](docs/maxwell-import-checklist.md) has been run on real models.
 - **Align to selected body** needs a body with planar faces, such as a sheet.
 - The 3D preview is coarsened above 50,000 triangles; sectioning always uses the exact geometry.
-- Port 8000 must be free, so one instance runs at a time.
+- Development scripts (`dev.ps1`, `run.ps1`) use port 8000; installed builds pick a free port, so several windows can run at once.
 - Windows x64 only; builds are not code-signed yet.
 
 ## Development

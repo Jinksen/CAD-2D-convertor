@@ -1,6 +1,7 @@
 //! COMSOL-like layout: toolbar on top, model tree left, viewport centre, settings right,
 //! messages below, status bar at the bottom. Each region lives in its own module.
 
+mod groups;
 mod model_tree;
 mod preview;
 mod section;
@@ -155,9 +156,9 @@ pub fn severity_color(severity: Severity, t: &Theme) -> Color {
 
 pub fn severity_label(severity: Severity) -> &'static str {
     match severity {
-        Severity::Error => "ERROR",
-        Severity::Warning => "WARN",
-        Severity::Info => "INFO",
+        Severity::Error => "Error",
+        Severity::Warning => "Warning",
+        Severity::Info => "Info",
     }
 }
 

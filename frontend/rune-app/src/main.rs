@@ -25,7 +25,10 @@ const PREFS_ID: &str = "com.cad2maxwell.desktop";
 
 fn main() {
     let backend = backend::start();
-    let client = Client::from_env(backend.token.clone());
+    let client = match &backend.url {
+        Some(url) => Client::new(url, backend.token.clone()),
+        None => Client::from_env(backend.token.clone()),
+    };
     let spec = AppSpec {
         min_size: Some((960.0, 600.0)),
         on_key: Some(ui::on_key),

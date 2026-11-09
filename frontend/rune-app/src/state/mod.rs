@@ -5,6 +5,7 @@ pub mod model;
 pub mod preview;
 pub mod section;
 pub mod shell;
+pub mod tree;
 
 use std::sync::OnceLock;
 use std::time::Instant;

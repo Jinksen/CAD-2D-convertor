@@ -37,6 +37,15 @@ For each task:
 
 Avoid giant rewrites.
 
+## Branches and pull requests
+
+One spec or one user request = one branch = one PR.
+
+- When a task has a written spec (a `docs/` plan, an issue, or a request with several parts), do all of it on one branch and open one PR when the whole spec is done and `scripts/test.ps1` passes.
+- Do not split a spec into phase-by-phase, stacked or follow-up PRs. Keep commits small and coherent inside the branch instead.
+- Use at most one worktree per spec.
+- Work that comes up mid-task and belongs to the same request goes into the same PR; unrelated work waits for its own spec.
+
 ## Working inside PyCharm (MCP)
 
 When the `pycharm` MCP server is connected, prefer its IDE-aware tools over plain shell/text tools:
@@ -77,14 +86,6 @@ Notes:
 - pyright/mypy
 - pytest
 - central tolerance configuration
-
-## TypeScript
-
-- strict mode
-- no `any` without documented reason
-- feature-oriented folders
-- Zustand for local workspace state
-- keep rendering and backend contracts separated
 
 ## Rust
 

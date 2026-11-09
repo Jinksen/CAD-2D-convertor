@@ -35,7 +35,7 @@ Authenticated local Python API
 OpenCascade exact geometry
 ```
 
-For the rewrite, use exactly one dedicated worktree and branch. Keep all migration commits there, open one PR only after the complete app is functional and all migration gates pass, and merge only that completed PR. Do not create phase-by-phase or stacked PRs/worktrees.
+One spec or one user request = one branch = one PR (see "Branches and pull requests" in [AGENTS.md](AGENTS.md)). Open the PR only when the whole spec is done and `scripts/test.ps1` passes. Do not create phase-by-phase or stacked PRs/worktrees.
 
 ## Implementation behavior
 

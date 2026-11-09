@@ -72,19 +72,42 @@ fn dump(rt: &Runtime<AppState>) -> String {
 }
 
 #[test]
-fn filter_narrows_bodies_reports_the_count_and_groups_by_assembly() {
+fn filter_narrows_bodies_reports_the_count_and_nests_by_assembly() {
     let mut rt = runtime_with(motor());
     assert!(dump(&rt).contains("Bodies (2)"));
-    assert!(dump(&rt).contains("Housing (1)") && dump(&rt).contains("Motor (1)"));
+    // The shared root "Motor" is skipped; "Housing" is a collapsible folder.
+    assert!(dump(&rt).contains("Housing, 1 body, expanded"));
+    assert!(rt.find("folder-Motor").is_none());
+    click(&mut rt, "folder-Motor / Housing");
+    assert!(rt.find("body-body-2").is_none() && rt.find("body-body-1").is_some());
     click(&mut rt, "tree-filter");
     press(&mut rt, text_key("stat"), Mods::default());
     assert_eq!(rt.state.model.filter.text, "stat");
     assert!(rt.find("body-body-2").is_some() && rt.find("body-body-1").is_none());
-    let d = dump(&rt);
-    assert!(d.contains("Bodies (1 of 2)") && d.contains("Housing (1)"));
-    assert!(!d.contains("Motor (1)"));
+    assert!(dump(&rt).contains("Bodies (1 of 2)"));
     press(&mut rt, text_key("x"), Mods::default());
     assert!(dump(&rt).contains("No bodies match this filter."));
+}
+
+#[test]
+fn a_group_made_from_the_selected_body_shows_in_the_tree_and_hides_with_v() {
+    let mut rt = runtime_with(motor());
+    click(&mut rt, "body-body-1");
+    click(&mut rt, "new-group-name");
+    press(&mut rt, text_key("Magnets"), Mods::default());
+    click(&mut rt, "new-group");
+    assert_eq!(rt.state.model.selected_group.as_deref(), Some("Magnets"));
+    let d = dump(&rt);
+    assert!(d.contains("Groups (1)") && d.contains("Group: Magnets"));
+    assert!(d.contains("Group Magnets, 1 body"));
+    click(&mut rt, "body-body-2");
+    click(&mut rt, "member-Magnets");
+    assert_eq!(rt.state.model.groups[0].component_ids, ["body-1", "body-2"]);
+    click(&mut rt, "group-Magnets");
+    press(&mut rt, text_key("v"), Mods::default());
+    assert!(rt.state.model.group_hidden("Magnets"));
+    click(&mut rt, "delete-group");
+    assert!(rt.state.model.groups.is_empty() && rt.find("groups-heading").is_none());
 }
 
 #[test]

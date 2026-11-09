@@ -14,7 +14,7 @@ INFINITE = 0xFFFFFFFF
 
 
 def exit_with_parent(pid: int) -> None:
-    """Stop when the desktop window process ends, even if it crashed, so port 8000 is freed."""
+    """Stop when the desktop window process ends, even if it crashed, so its port is freed."""
     kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
     handle = kernel32.OpenProcess(SYNCHRONIZE, False, pid)
     if not handle:

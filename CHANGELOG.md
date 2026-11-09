@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Model Builder nests bodies in collapsible folders that follow the STEP assembly structure.
+- User groups: create, rename, hide, isolate and delete named sets of bodies. V and I act on the selected group. Groups are display organization only; export is unchanged.
+- Projects save groups and collapsed folders as optional fields (0.2 still opens them), store the STEP path relative to the project folder when possible, and are written atomically.
+- Installed builds start the geometry service on a free port, so several windows can run at once.
+- Messages describe the section plane in the display notation ("XY at z = 37.500 mm") and use sentence-case severity labels.
+- The demo motor is split into `Stator_Assembly` and `Rotor_Assembly`; README screenshots show the Rune app.
+
 ## 0.2.0
 
 - The desktop app is now a native Rust UI built on the Rune framework. It replaces the React/Vite/Tauri app; no WebView2 runtime is needed.

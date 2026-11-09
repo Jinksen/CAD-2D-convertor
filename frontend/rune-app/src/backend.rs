@@ -4,19 +4,20 @@
 //! service themselves and pass its token in `CAD2MAXWELL_SESSION_TOKEN`; then nothing is spawned.
 
 use std::fs::{self, File};
-use std::net::{SocketAddr, TcpStream};
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 pub const BACKEND_EXE: &str = "backend/cad2maxwell-backend.exe";
-const PORT: u16 = 8000;
 
-/// Token of the service this window talks to, and the child process when we started it.
+/// Token and URL of the service this window talks to, and the child process when we started it.
+/// `url: None` means the client falls back to `CAD2MAXWELL_BACKEND_URL` or port 8000 (dev scripts).
 #[derive(Default)]
 pub struct Backend {
     pub token: Option<String>,
+    pub url: Option<String>,
     child: Arc<Mutex<Option<Child>>>,
 }
 
@@ -26,15 +27,15 @@ fn new_token() -> Result<String, String> {
     Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
-fn port_in_use() -> bool {
-    TcpStream::connect_timeout(
-        &SocketAddr::from(([127, 0, 0, 1], PORT)),
-        Duration::from_millis(300),
-    )
-    .is_ok()
+/// A loopback port the OS reports free, so several windows can run side by side.
+fn free_port() -> Result<u16, String> {
+    TcpListener::bind(("127.0.0.1", 0))
+        .and_then(|listener| listener.local_addr())
+        .map(|addr| addr.port())
+        .map_err(|error| format!("No free local port for the geometry service: {error}"))
 }
 
-fn spawn(executable: &Path, token: &str, log_dir: &Path) -> Result<Child, String> {
+fn spawn(executable: &Path, token: &str, port: u16, log_dir: &Path) -> Result<Child, String> {
     fs::create_dir_all(log_dir)
         .map_err(|error| format!("Cannot create the log folder: {error}"))?;
     let log = File::create(log_dir.join("backend.log"))
@@ -43,6 +44,7 @@ fn spawn(executable: &Path, token: &str, log_dir: &Path) -> Result<Child, String
     let mut command = Command::new(executable);
     command
         .env("CAD2MAXWELL_SESSION_TOKEN", token)
+        .env("CAD2MAXWELL_PORT", port.to_string())
         .env("CAD2MAXWELL_PARENT_PID", std::process::id().to_string())
         .current_dir(executable.parent().unwrap_or(Path::new(".")))
         .stdin(Stdio::null())
@@ -95,21 +97,18 @@ pub fn start() -> Backend {
     let Some(executable) = bundled_executable() else {
         return Backend::default();
     };
-    if port_in_use() {
-        report(
-            "Port 8000 is already in use, so the geometry service cannot start.\n\nClose the other CAD2Maxwell window (or the program using port 8000) and start CAD2Maxwell again.",
-        );
-        return Backend::default();
-    }
     let log_dir = log_dir();
-    match new_token()
-        .and_then(|token| spawn(&executable, &token, &log_dir).map(|child| (token, child)))
-    {
-        Ok((token, child)) => {
+    let started = new_token().and_then(|token| {
+        let port = free_port()?;
+        spawn(&executable, &token, port, &log_dir).map(|child| (token, port, child))
+    });
+    match started {
+        Ok((token, port, child)) => {
             let child = Arc::new(Mutex::new(Some(child)));
             watch(Arc::clone(&child), log_dir);
             Backend {
                 token: Some(token),
+                url: Some(format!("http://127.0.0.1:{port}")),
                 child,
             }
         }
@@ -159,7 +158,14 @@ pub fn stop(backend: &Backend) {
 
 #[cfg(test)]
 mod tests {
-    use super::new_token;
+    use super::{free_port, new_token};
+
+    #[test]
+    fn free_port_is_bindable() {
+        let port = free_port().unwrap();
+        assert_ne!(port, 0);
+        std::net::TcpListener::bind(("127.0.0.1", port)).unwrap();
+    }
 
     #[test]
     fn tokens_are_long_unique_hex() {

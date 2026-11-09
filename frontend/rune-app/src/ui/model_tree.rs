@@ -6,6 +6,7 @@ use rune::tok::{Theme, space, type_};
 use rune::{Color, El, Key, col, el, row, text};
 use rune_kit::{Kit, TextInput};
 
+use super::groups::{self, folder_rows, group_rows, indent, new_group_form};
 use super::shell::open_step_dialog;
 use super::{TREE_WIDTH, button, heading, label_value, rule, scroller, selected};
 use crate::api::dto::{ImportComponent, Severity};
@@ -22,7 +23,14 @@ fn swatch(color: Option<[u8; 3]>, t: &Theme) -> El {
         .a11y_hidden()
 }
 
-fn body_row(s: &AppState, t: &Theme, k: &Kit, body: &ImportComponent, duplicate: bool) -> El {
+pub(super) fn body_row(
+    s: &AppState,
+    t: &Theme,
+    k: &Kit,
+    body: &ImportComponent,
+    duplicate: bool,
+    depth: usize,
+) -> El {
     let on_row = s.model.selected.as_deref() == Some(body.id.as_str()) && !s.shell.show_prefs;
     let hidden = s.model.hidden.contains(&body.id);
     let (select_id, eye_id) = (body.id.clone(), body.id.clone());
@@ -52,7 +60,8 @@ fn body_row(s: &AppState, t: &Theme, k: &Kit, body: &ImportComponent, duplicate:
         .focusable(true)
         .w_full()
         .gap(space::S2)
-        .px(space::S2)
+        .pl(indent(depth))
+        .pr(space::S2)
         .py(3.0)
         .items_center()
         .fill(if on_row {
@@ -143,8 +152,8 @@ pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
                 .padding(space::S2),
         );
     };
-    let visible = s.model.visible_groups();
-    let shown: usize = visible.iter().map(|(_, bodies)| bodies.len()).sum();
+    let visible = s.model.visible_tree();
+    let shown = visible.count();
     let count = if s.model.filter.text.trim().is_empty() {
         imported.component_count.to_string()
     } else {
@@ -155,24 +164,9 @@ pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
         .iter()
         .map(|c| c.display_name.as_str())
         .collect();
-    let flat = s.model.is_flat();
-    let mut rows = col().w_full();
-    for (parent, bodies) in &visible {
-        if !flat {
-            let title = parent.rsplit(" / ").next().filter(|p| !p.is_empty());
-            rows = rows.child(
-                text(format!("{} ({})", title.unwrap_or("Root"), bodies.len()))
-                    .font(type_::SECTION)
-                    .color(t.text_secondary)
-                    .px(space::S2)
-                    .py(space::S1),
-            );
-        }
-        for b in bodies {
-            let duplicate = names.iter().filter(|n| **n == b.display_name).count() > 1;
-            rows = rows.child(body_row(s, t, k, b, duplicate));
-        }
-    }
+    let dup = |name: &str| names.iter().filter(|n| **n == name).count() > 1;
+    let rows = folder_rows(s, t, k, &visible, 0, &dup, col().w_full());
+    let rows = group_rows(s, t, k, &dup, rows);
     let file = imported.path.rsplit(['\\', '/']).next().unwrap_or("");
     let model_on = s.model.selected.is_none() && !s.shell.show_prefs;
     let mut panel = panel
@@ -189,7 +183,9 @@ pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
                 .key("bodies-heading")
                 .font(type_::SECTION)
                 .color(t.text_secondary)
-                .px(space::S2),
+                .px(space::S2)
+                .pt(space::S2)
+                .pb(space::S1),
         )
         .child(rule(t));
     panel = if shown == 0 {
@@ -223,6 +219,9 @@ pub fn properties(s: &AppState, t: &Theme, k: &Kit) -> El {
     let Some(imported) = &s.model.imported else {
         return panel.child(heading(t, "Model")).child(step_form(s, k));
     };
+    if let Some(name) = &s.model.selected_group {
+        return groups::properties(s, t, k, name);
+    }
     let body = imported
         .components
         .iter()
@@ -239,7 +238,7 @@ pub fn properties(s: &AppState, t: &Theme, k: &Kit) -> El {
             .child(
                 fields
                     .child(label_value(t, "Path", &imported.path))
-                    .child(label_value(t, "SHA-256", format!("{sha}...")))
+                    .child(label_value(t, "SHA-256", format!("{sha}…")))
                     .child(label_value(
                         t,
                         "Source units",
@@ -253,10 +252,18 @@ pub fn properties(s: &AppState, t: &Theme, k: &Kit) -> El {
                         "Bodies",
                         imported.component_count.to_string(),
                     ))
-                    .child(label_value(t, "Size", fmt.length_product(&size))),
+                    .child(label_value(t, "Size", fmt.length_product(&size)))
+                    .child(
+                        text("Groups")
+                            .font(type_::SECTION)
+                            .color(t.text_secondary)
+                            .pt(space::S2),
+                    )
+                    .child(new_group_form(s, k)),
             );
     };
     let (id, hide_id) = (b.id.clone(), b.id.clone());
+    let groups = groups::membership(s, t, k, &b.id);
     let hidden = s.model.hidden.contains(&b.id);
     let size: Vec<f64> = (0..3)
         .map(|i| b.bounds_mm.max_xyz[i] - b.bounds_mm.min_xyz[i])
@@ -306,7 +313,8 @@ pub fn properties(s: &AppState, t: &Theme, k: &Kit) -> El {
                             button(k, "isolate-body", "Isolate (I)", true)
                                 .on_press(move |s: &mut AppState| s.model.toggle_isolate(&id)),
                         ),
-                ),
+                )
+                .child(groups),
         )
 }
 
@@ -340,6 +348,6 @@ fn step_form(s: &AppState, k: &Kit) -> El {
                         }
                     },
                 ))
-                .child(button(k, "browse-step", "Browse...", idle).on_press_tx(open_step_dialog)),
+                .child(button(k, "browse-step", "Browse…", idle).on_press_tx(open_step_dialog)),
         )
 }
