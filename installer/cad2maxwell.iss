@@ -16,7 +16,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir={#OutputDir}
 OutputBaseFilename=CAD2Maxwell_{#AppVersion}_x64-setup
 SetupIconFile={#IconFile}
-UninstallDisplayIcon={app}\CAD2Maxwell.exe
+UninstallDisplayIcon={app}\icon.ico
 LicenseFile={#LicenseFile}
 Compression=lzma2
 SolidCompression=yes
@@ -25,8 +25,8 @@ SolidCompression=yes
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#AppName}"; Filename: "{app}\CAD2Maxwell.exe"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\CAD2Maxwell.exe"; Tasks: desktopicon
+Name: "{autoprograms}\{#AppName}"; Filename: "{app}\CAD2Maxwell.exe"; IconFilename: "{app}\icon.ico"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\CAD2Maxwell.exe"; IconFilename: "{app}\icon.ico"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked

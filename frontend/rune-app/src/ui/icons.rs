@@ -2,6 +2,12 @@
 
 use rune::Icon;
 
+/// The CAD2Maxwell mark (`docs/images/logo.svg`): the outline takes the text colour, the cut face stays teal.
+pub static LOGO: Icon = Icon {
+    name: "c2m-logo",
+    view: 256.0,
+    body: r##"<g fill="none" stroke="currentColor" stroke-width="12" stroke-linejoin="round" stroke-linecap="round"><polygon points="128,34 207.67,80 207.67,172 128,218 48.33,172 48.33,80"/><line x1="128" y1="172" x2="128" y2="218"/></g><polygon points="128,80 207.67,126 128,172 48.33,126" fill="#0E7C86" stroke="#0E7C86" stroke-width="12" stroke-linejoin="round"/>"##,
+};
 pub static ASSEMBLY: Icon = Icon {
     name: "c2m-assembly",
     view: 16.0,

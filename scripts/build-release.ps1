@@ -43,6 +43,7 @@ Copy-Item -LiteralPath (Join-Path $root 'frontend/rune-app/target/release/cad2ma
 Copy-Item -LiteralPath $backendDist -Destination (Join-Path $portable 'backend') -Recurse
 Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $portable
 Copy-Item -LiteralPath (Join-Path $root 'docs/demo/demo-motor.step') -Destination $portable
+Copy-Item -LiteralPath (Join-Path $root 'frontend/rune-app/assets/icon.ico') -Destination $portable
 
 # 4. Per-user installer with Inno Setup (preinstalled on GitHub windows-latest; otherwise install Inno Setup 6).
 $iscc = Get-InnoSetupCompiler

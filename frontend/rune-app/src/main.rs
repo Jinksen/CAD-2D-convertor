@@ -33,6 +33,10 @@ fn main() {
         Some(url) => Client::new(url, backend.token.clone()),
         None => Client::from_env(backend.token.clone()),
     };
+    // Window, taskbar and Alt+Tab icon; a failure only leaves the default icon.
+    if let Err(error) = rune::set_app_icon(include_bytes!("../assets/icon-256.png").to_vec()) {
+        eprintln!("{error}");
+    }
     let spec = AppSpec {
         min_size: Some((960.0, 600.0)),
         on_key: Some(ui::on_key),

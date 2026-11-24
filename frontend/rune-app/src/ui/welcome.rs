@@ -60,7 +60,13 @@ pub fn welcome(s: &AppState, t: &Theme, k: &Kit) -> El {
                 .w(520.0)
                 .max_w(520.0)
                 .gap(space::S2)
-                .child(text("CAD2Maxwell").font(type_::TITLE).color(t.text))
+                .child(
+                    rune::row()
+                        .gap(space::S2)
+                        .items_center()
+                        .child(rune::icon(&super::icons::LOGO, 40.0).color(t.text))
+                        .child(text("CAD2Maxwell").font(type_::TITLE).color(t.text)),
+                )
                 .child(note(
                     "Exact 2D sections of CAD models for ANSYS Maxwell 2D.",
                 ))
