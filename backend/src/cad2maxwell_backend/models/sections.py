@@ -126,3 +126,25 @@ class ComponentPlaneResponse(FiniteModel):
     normal_xyz: Point3
     offset_mm: float
     planar_area_mm2: float
+
+
+class RegionMetric(FiniteModel):
+    """Exact (OpenCascade) metrics of one region: an outer wire minus the holes inside it.
+
+    Wire indices refer to the component's `wires` list in the section response.
+    """
+
+    component_id: str
+    region_index: int
+    outer_wire: int
+    hole_wires: list[int]
+    area_mm2: float
+    perimeter_mm: float
+    centroid: Point2
+    hole_count: int
+    interior_point: Point2
+
+
+class RegionsResponse(FiniteModel):
+    section_id: str
+    regions: list[RegionMetric]

@@ -16,6 +16,10 @@ The manifest records source SHA-256, original names, hierarchy, color, section p
 
 Manifest `schema_version` is now 2. New keys: `layer_mode`, `color_mode`, `groups` (name, layer_name, material, material_note, members) and per component `layer`, `groups`, `primary_group`, `material_tag`. Default requests produce the same DXF as before.
 
+## Region metrics
+
+`GET /api/v1/sections/{section_id}/regions` returns one entry per region (an outer wire minus the holes inside it): `area_mm2`, `perimeter_mm` (outer plus hole boundaries), `centroid`, `hole_count`, an `interior_point` guaranteed to lie in the material, and the wire indices in the section response. Values come from OpenCascade `BRepGProp` on the exact faces, not from polylines. They are display and table data only; geometry export never reads them.
+
 ## Validation tolerances
 
 `POST /api/v1/section` accepts an optional `tolerance` object with `small_region_mm2` (1e-8 to 1), `sliver_ratio` (1e-6 to 0.05) and `join_mm` (1e-6 to 1e-3). Omitted fields keep the defaults; values outside these bounds are rejected with 422. The overrides take part in the section cache key and a non-default policy is returned in the section response and recorded in the manifest as `tolerance`. Default requests produce byte-identical output.

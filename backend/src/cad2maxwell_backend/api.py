@@ -25,6 +25,7 @@ from cad2maxwell_backend.models.imports import (
 from cad2maxwell_backend.models.preview import PreviewMeshResponse
 from cad2maxwell_backend.models.sections import (
     ComponentPlaneResponse,
+    RegionsResponse,
     SectionRequest,
     SectionResponse,
 )
@@ -36,6 +37,7 @@ from cad2maxwell_backend.services.section_service import (
     SectionService,
     UnknownComponent,
     UnknownImport,
+    UnknownSection,
 )
 from cad2maxwell_backend.services.section_sessions import SectionSessions
 
@@ -182,6 +184,15 @@ def create_app(import_service: ImportService | None = None) -> FastAPI:
                 code="internal_section_error", message="The section could not be completed.",
             ))
             return JSONResponse(status_code=500, content=payload.model_dump())
+
+    @app.get("/api/v1/sections/{section_id}/regions", response_model=RegionsResponse)
+    def section_regions(section_id: str) -> RegionsResponse | JSONResponse:
+        try:
+            return section_service.regions(section_id)
+        except UnknownSection:
+            return _error(404, "unknown_section", "Compute the section again.")
+        except SectionError as exc:
+            return _error(422, "region_metrics_failed", str(exc))
 
     @app.post("/api/v1/export/dxf")
     def download_dxf(request: ExportRequest) -> Response:

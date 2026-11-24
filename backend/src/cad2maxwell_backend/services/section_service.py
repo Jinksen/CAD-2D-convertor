@@ -3,6 +3,7 @@ from dataclasses import replace
 from cad2maxwell_backend.formatting import format_quantity
 from cad2maxwell_backend.geometry.bounds import misses_plane
 from cad2maxwell_backend.geometry.dominant_plane import NoPlanarFaceError, dominant_plane
+from cad2maxwell_backend.geometry.region_metrics import region_metrics
 from cad2maxwell_backend.geometry.section import SectionError, plane_frame, section_shape
 from cad2maxwell_backend.geometry.section_classification import classify_wires
 from cad2maxwell_backend.geometry.section_edges import check_section_edges
@@ -11,6 +12,7 @@ from cad2maxwell_backend.geometry.section_validation import find_region_overlaps
 from cad2maxwell_backend.geometry.tolerance import DEFAULT_TOLERANCE, TolerancePolicy
 from cad2maxwell_backend.models.sections import (
     ComponentPlaneResponse,
+    RegionsResponse,
     SectionComponent,
     SectionDiagnostic,
     SectionPlane,
@@ -25,6 +27,10 @@ from cad2maxwell_backend.services.section_sessions import SectionSessions
 
 class UnknownImport(ValueError):
     """The process-local import session is no longer available."""
+
+
+class UnknownSection(ValueError):
+    """The section session is no longer available."""
 
 
 class UnknownComponent(ValueError):
@@ -69,6 +75,16 @@ class SectionService:
                     offset_mm=plane.offset_mm, planar_area_mm2=plane.planar_area_mm2,
                 )
         raise UnknownComponent
+
+    def regions(self, section_id: str) -> RegionsResponse:
+        exact = self.sections.get(section_id)
+        response = self.sections.get_response(section_id)
+        if exact is None or response is None:
+            raise UnknownSection
+        metrics = [metric for component in response.components
+                   for metric in region_metrics(component.component_id,
+                                                exact[component.component_id], response.plane)]
+        return RegionsResponse(section_id=section_id, regions=metrics)
 
     def create(self, request: SectionRequest) -> SectionResponse:
         record = self._imports.get_record(request.import_id)
@@ -154,4 +170,5 @@ class SectionService:
 
 __all__ = [
     "NoPlanarFaceError", "SectionError", "SectionService", "UnknownComponent", "UnknownImport",
+    "UnknownSection",
 ]
