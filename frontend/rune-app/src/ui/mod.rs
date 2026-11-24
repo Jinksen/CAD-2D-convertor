@@ -62,13 +62,12 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                         .child(scroller(
                             &k,
                             "properties-scroll",
-                            col().w_full().children(if s.shell.show_prefs {
-                                vec![shell::preferences(s, &t, &k)]
+                            col().w_full().child(if s.shell.show_prefs {
+                                shell::preferences(s, &t, &k)
+                            } else if s.model.section_selected && s.model.imported.is_some() {
+                                section::settings(s, &t, &k)
                             } else {
-                                vec![
-                                    section::settings(s, &t, &k),
-                                    model_tree::properties(s, &t, &k),
-                                ]
+                                model_tree::properties(s, &t, &k)
                             }),
                         )),
                 ),

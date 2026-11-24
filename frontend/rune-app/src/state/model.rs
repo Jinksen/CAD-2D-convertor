@@ -27,6 +27,8 @@ pub struct ModelState {
     pub groups: Vec<BodyGroup>,
     /// Name of the group shown in the property pane; exclusive with `selected`.
     pub selected_group: Option<String>,
+    /// The Section node is the tree selection; `selected` keeps the last body for "align".
+    pub section_selected: bool,
     /// Collapsed assembly folders (`Folder::key`) and groups (`group_key`).
     pub collapsed: BTreeSet<String>,
     /// Name fields of "New group" and of the selected group's rename.
@@ -53,6 +55,7 @@ impl ModelState {
     pub fn set_imported(&mut self, imported: ImportSummary) {
         *self = ModelState {
             imported: Some(imported),
+            section_selected: true,
             ..ModelState::default()
         };
     }
@@ -65,6 +68,13 @@ impl ModelState {
         self.selected = id;
         self.related = None;
         self.selected_group = None;
+        self.section_selected = false;
+    }
+
+    pub fn select_section(&mut self) {
+        self.selected_group = None;
+        self.related = None;
+        self.section_selected = true;
     }
 
     pub fn select_group(&mut self, name: &str) {

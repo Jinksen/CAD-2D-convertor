@@ -13,7 +13,7 @@ const OFFSET_STEP_MM: f64 = 1.0;
 const AXES: [&str; 3] = ["x", "y", "z"];
 
 /// The axis a principal plane is offset along, as an ISO quantity symbol.
-fn plane_axis(kind: PlaneKind) -> &'static str {
+pub(super) fn plane_axis(kind: PlaneKind) -> &'static str {
     match kind {
         PlaneKind::XY => "z",
         PlaneKind::XZ => "y",

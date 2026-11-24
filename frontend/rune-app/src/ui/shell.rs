@@ -167,6 +167,11 @@ pub fn toolbar(s: &AppState, t: &Theme, k: &Kit) -> El {
                 ),
         )
         .child(spacer())
+        .child(
+            button(k, "open-settings", "Settings", true)
+                .checked(s.shell.show_prefs)
+                .on_press(|s: &mut AppState| s.shell.show_prefs = !s.shell.show_prefs),
+        )
         .child(choice(
             k,
             "toggle-view",

@@ -17,3 +17,7 @@ The workspace is bounded to the window height. Long component lists and diagnost
 The compiled trial opens a native Save dialog for the draft DXF ZIP. Successful saves report the chosen path and explain that the archive must be extracted for Maxwell. Cancellation leaves the section available; write failures appear as actionable errors. Moving or recomputing the plane clears the previous export notice.
 
 Numbers and quantities follow ISO 80000-1, as described in [number-format.md](number-format.md). The Model Builder always shows **Units and Number Format**. It sets the display length unit, decimal places, decimal marker, digit grouping and trailing zeros. Section offsets and normals are typed in that notation, and the unit is shown beside the field. Geometry and DXF export stay in millimetres.
+
+## Model tree
+
+The tree follows the Inventor browser / COMSOL Model Builder pattern: the model file is the root; under it sit the Section node (`XY, z = 37.500 mm`), Bodies (assembly folders) and Groups. Selecting the Section node shows the section settings in the right pane; selecting the model, a body or a group shows that context's properties. Preferences are not a tree node; the Settings button in the toolbar opens them.

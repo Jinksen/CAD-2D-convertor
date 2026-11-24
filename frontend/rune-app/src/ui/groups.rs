@@ -118,7 +118,7 @@ pub fn group_rows(
             .key("groups-heading")
             .font(type_::SECTION)
             .color(t.text_secondary)
-            .px(space::S2)
+            .pl(indent(1))
             .pt(space::S3)
             .pb(space::S1),
     );
@@ -140,7 +140,7 @@ pub fn group_rows(
                 .focusable(true)
                 .w_full()
                 .gap(space::S2)
-                .pl(indent(0))
+                .pl(indent(1))
                 .pr(space::S2)
                 .py(3.0)
                 .items_center()
@@ -189,7 +189,7 @@ pub fn group_rows(
         );
         if open {
             for b in members {
-                rows = rows.child(body_row(s, t, k, b, dup(&b.display_name), 1));
+                rows = rows.child(body_row(s, t, k, b, dup(&b.display_name), 2));
             }
         }
     }

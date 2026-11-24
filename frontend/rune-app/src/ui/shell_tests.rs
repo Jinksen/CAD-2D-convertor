@@ -93,6 +93,7 @@ fn filter_narrows_bodies_reports_the_count_and_nests_by_assembly() {
 fn a_group_made_from_the_selected_body_shows_in_the_tree_and_hides_with_v() {
     let mut rt = runtime_with(motor());
     click(&mut rt, "body-body-1");
+    rt.frame(0.2); // the pane swaps from Section to Body; let layout settle
     click(&mut rt, "new-group-name");
     press(&mut rt, text_key("Magnets"), Mods::default());
     click(&mut rt, "new-group");
@@ -211,14 +212,14 @@ fn plane_keys_do_nothing_without_a_model_and_never_while_typing() {
 fn preferences_change_the_displayed_units_and_restore_defaults() {
     let mut rt = runtime_with(motor());
     click(&mut rt, "body-body-1");
-    click(&mut rt, "node-prefs");
+    click(&mut rt, "open-settings");
     click(&mut rt, "unit/segment3");
     assert_eq!(rt.state.shell.number_format.length_unit, LengthUnit::In);
     click(&mut rt, "length-decimals-dec");
     assert_eq!(rt.state.shell.number_format.length_decimals, 2);
     click(&mut rt, "restore-format");
     assert_eq!(rt.state.shell.number_format, Default::default());
-    click(&mut rt, "node-prefs");
+    click(&mut rt, "open-settings");
     assert!(!rt.state.shell.show_prefs);
 }
 
@@ -267,7 +268,7 @@ fn every_interactive_control_has_a_role_and_a_name() {
         ("button", "Export DXF"),
         ("button", "Undo"),
         ("button", "Redo"),
-        ("button", "Preferences"),
+        ("button", "Settings"),
         ("button", "Rotor"),
         ("region", "Model builder"),
         ("region", "Messages"),
@@ -277,7 +278,7 @@ fn every_interactive_control_has_a_role_and_a_name() {
         assert!(named(role, name), "no {role} named {name:?}");
     }
     assert!(nodes.iter().any(|n| n["name"] == "Filter bodies"));
-    click(&mut rt, "node-prefs");
+    click(&mut rt, "open-settings");
     let tree = rt.accessibility_json();
     let mut nodes = vec![];
     walk(&tree, &mut nodes);
@@ -312,4 +313,24 @@ fn confirmations_raise_a_toast_beside_the_log_and_close_it() {
     click(&mut rt, "close");
     assert!(rt.state.shell.toast.is_none());
     assert_eq!(rt.state.shell.messages.len(), 1, "the log keeps the record");
+}
+
+#[test]
+fn the_section_node_sits_under_the_model_and_shows_plane_and_offset() {
+    let mut rt = runtime_with(motor());
+    assert!(rt.find("node-prefs").is_none(), "Preferences left the tree");
+    let y = |key: &str| rt.find(key).expect(key).1;
+    assert!(y("node-model") < y("node-section") && y("node-section") < y("bodies-heading"));
+    // Bounds are 0..30 in z, so the default XY offset is the 15 mm midpoint.
+    assert!(dump(&rt).contains("XY, z = 15.000\u{a0}mm"));
+    assert!(
+        rt.find("section-offset").is_some(),
+        "section is selected after import"
+    );
+    click(&mut rt, "node-model");
+    assert!(rt.find("section-offset").is_none());
+    click(&mut rt, "node-section");
+    assert!(rt.state.model.section_selected && rt.find("section-offset").is_some());
+    press(&mut rt, text_key("2"), Mods::default());
+    assert!(dump(&rt).contains("XZ, y = 10.000\u{a0}mm"));
 }

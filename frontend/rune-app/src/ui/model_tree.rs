@@ -31,7 +31,9 @@ pub(super) fn body_row(
     duplicate: bool,
     depth: usize,
 ) -> El {
-    let on_row = s.model.selected.as_deref() == Some(body.id.as_str()) && !s.shell.show_prefs;
+    let on_row = s.model.selected.as_deref() == Some(body.id.as_str())
+        && !s.model.section_selected
+        && !s.shell.show_prefs;
     let hidden = s.model.hidden.contains(&body.id);
     let (select_id, eye_id) = (body.id.clone(), body.id.clone());
     let name_color = if hidden { t.text_secondary } else { t.text };
@@ -88,7 +90,7 @@ pub(super) fn body_row(
         )
 }
 
-/// A top-level tree node (Preferences, file, Section).
+/// A top-level tree node (model file, Section).
 fn node(t: &Theme, k: &Kit, key: &str, label: &str, on: bool) -> El {
     row()
         .key(key)
@@ -102,6 +104,24 @@ fn node(t: &Theme, k: &Kit, key: &str, label: &str, on: bool) -> El {
         .fill(if on { selected(k) } else { Color::TRANSPARENT })
         .hover(t.hover)
         .child(text(label).font(type_::BODY).color(t.text).truncate())
+}
+
+/// "XY, z = 37.500 mm": the section plane and offset as the Section node shows them.
+fn section_label(s: &AppState) -> String {
+    let Some(imported) = &s.model.imported else {
+        return "Section".into();
+    };
+    let sec = &s.section;
+    let offset = sec.effective_offset(&imported.bounds_mm);
+    let plane = match sec.plane {
+        crate::state::section::PlaneKind::Custom => "Custom",
+        kind => crate::project::kind_name(kind),
+    };
+    format!(
+        "{plane}, {} = {}",
+        super::section::plane_axis(sec.plane),
+        s.shell.number_format.length(offset)
+    )
 }
 
 fn filter_field(s: &AppState, k: &Kit) -> El {
@@ -142,10 +162,8 @@ pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
         .min_h(0.0)
         .border(1.0, t.separator)
         .child(heading(t, "Model Builder"));
-    let prefs = node(t, k, "node-prefs", "Preferences", s.shell.show_prefs)
-        .on_press(|s: &mut AppState| s.shell.show_prefs = !s.shell.show_prefs);
     let Some(imported) = &s.model.imported else {
-        return panel.child(prefs).child(
+        return panel.child(
             text("No model loaded.")
                 .font(type_::BODY)
                 .color(t.text_secondary)
@@ -165,13 +183,11 @@ pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
         .map(|c| c.display_name.as_str())
         .collect();
     let dup = |name: &str| names.iter().filter(|n| **n == name).count() > 1;
-    let rows = folder_rows(s, t, k, &visible, 0, &dup, col().w_full());
-    let rows = group_rows(s, t, k, &dup, rows);
     let file = imported.path.rsplit(['\\', '/']).next().unwrap_or("");
-    let model_on = s.model.selected.is_none() && !s.shell.show_prefs;
-    let mut panel = panel
-        .child(filter_field(s, k))
-        .child(prefs)
+    let m = &s.model;
+    let model_on = m.selected.is_none() && m.selected_group.is_none() && !m.section_selected;
+    let mut rows = col()
+        .w_full()
         .child(
             node(t, k, "node-model", file, model_on).on_press(|s: &mut AppState| {
                 s.shell.show_prefs = false;
@@ -179,17 +195,30 @@ pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
             }),
         )
         .child(
+            node(
+                t,
+                k,
+                "node-section",
+                &section_label(s),
+                m.section_selected && !s.shell.show_prefs,
+            )
+            .pl(indent(1))
+            .on_press(|s: &mut AppState| {
+                s.shell.show_prefs = false;
+                s.model.select_section()
+            }),
+        )
+        .child(
             text(format!("Bodies ({count})"))
                 .key("bodies-heading")
                 .font(type_::SECTION)
                 .color(t.text_secondary)
-                .px(space::S2)
+                .pl(indent(1))
                 .pt(space::S2)
                 .pb(space::S1),
-        )
-        .child(rule(t));
-    panel = if shown == 0 {
-        panel.child(
+        );
+    rows = if shown == 0 {
+        rows.child(
             text("No bodies match this filter.")
                 .key("no-match")
                 .role("status")
@@ -198,13 +227,13 @@ pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
                 .padding(space::S2),
         )
     } else {
-        panel.child(scroller(k, "tree-scroll", rows))
+        folder_rows(s, t, k, &visible, 1, &dup, rows)
     };
-    let plane = crate::project::kind_name(s.section.plane);
-    panel.child(
-        node(t, k, "node-section", &format!("Section {plane}"), false)
-            .on_press(|s: &mut AppState| s.shell.show_prefs = false),
-    )
+    let rows = group_rows(s, t, k, &dup, rows);
+    panel
+        .child(filter_field(s, k))
+        .child(rule(t))
+        .child(scroller(k, "tree-scroll", rows))
 }
 
 fn rgb(color: [u8; 3]) -> String {
