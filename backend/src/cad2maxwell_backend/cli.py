@@ -6,9 +6,11 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from cad2maxwell_backend.batch_job import load_job
+from cad2maxwell_backend.export.archive import EXTRA_FILES, extra_texts
 from cad2maxwell_backend.export.dxf import DxfExportError, export_dxf
 from cad2maxwell_backend.geometry.model_reader import read_model
 from cad2maxwell_backend.geometry.section import SectionError
+from cad2maxwell_backend.models.exports import ExportOptions
 from cad2maxwell_backend.models.sections import SectionPlane, SectionRequest
 from cad2maxwell_backend.services.import_service import ImportService, ImportServiceError
 from cad2maxwell_backend.services.import_sessions import ImportSessions
@@ -24,22 +26,29 @@ def run_job(job_path: Path) -> int:
         output_dir = Path(job.output_dir)
         if not output_dir.is_absolute() or not output_dir.is_dir():
             raise ValueError("output_dir must be an existing absolute folder")
-        unsupported = {f for section in job.sections for f in section.formats if f != "dxf"}
-        if unsupported:
-            raise ValueError(f"export formats not available yet: {', '.join(sorted(unsupported))}")
         targets = [output_dir / f"{section.name}.dxf" for section in job.sections]
-        clashes = [t.name for t in targets if t.exists() or t.with_suffix(".json").exists()]
+        extras = [[output_dir / f"{section.name}{Path(EXTRA_FILES[f]).suffix}"
+                   for f in section.formats if f in EXTRA_FILES] for section in job.sections]
+        planned = [*targets, *(t.with_suffix(".json") for t in targets),
+                   *(path for paths in extras for path in paths)]
+        clashes = [t.name for t in planned if t.exists()]
         if clashes:
             raise ValueError(f"outputs already exist: {', '.join(clashes)}")
         import_service = ImportService(read_model, ImportSessions())
         imported = import_service.import_path(job.input)
         section_service = SectionService(import_service.sessions, SectionSessions())
-        for section, target in zip(job.sections, targets, strict=True):
+        for section, target, extra_paths in zip(job.sections, targets, extras, strict=True):
             created = section_service.create(SectionRequest(
                 import_id=imported.import_id,
                 plane=SectionPlane(kind=section.plane, offset_mm=section.offset_mm),
             ))
-            result = export_dxf(imported, created, target)
+            options = ExportOptions(formats=section.formats)
+            result = export_dxf(imported, created, target, options)
+            texts = extra_texts(imported, created, options,
+                                section_service.sections.get(created.section_id))
+            for path in extra_paths:
+                path.write_text(texts[next(n for n in texts if n.endswith(path.suffix))],
+                                encoding="utf-8")
             print(f"{section.name}: {result.dxf_path} ({result.entity_count} entities)")
     except (DxfExportError, ImportServiceError, SectionError, ValidationError, ValueError,
             OSError) as exc:

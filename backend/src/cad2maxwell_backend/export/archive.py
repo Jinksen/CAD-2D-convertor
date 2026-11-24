@@ -22,6 +22,25 @@ EXTRA_FILES = {"csv": "regions.csv", "svg": "section.svg", "femm": "section.lua"
                "gmsh": "section.geo", "pyaedt": "section_pyaedt.py"}
 
 
+def extra_texts(
+    imported: ImportResponse, section: SectionResponse, options: ExportOptions,
+    exact: Mapping[str, tuple[ExactSectionWire, ...]] | None,
+) -> dict[str, str]:
+    """Render the non-DXF formats requested in `options`, keyed by archive file name."""
+    extras = [name for name in EXTRA_FILES if name in options.formats]
+    if not extras:
+        return {}
+    plan = plan_export(imported, section, options)
+    regions = build_regions(plan, exact, section.plane)
+    writers = {
+        "csv": lambda: write_csv(regions), "svg": lambda: write_svg(regions, plan),
+        "femm": lambda: write_femm(regions, plan),
+        "gmsh": lambda: write_gmsh(regions, plan),
+        "pyaedt": lambda: write_pyaedt(regions, plan),
+    }
+    return {EXTRA_FILES[name]: writers[name]() for name in extras}
+
+
 def export_archive(
     imported: ImportResponse, section: SectionResponse, options: ExportOptions | None = None,
     exact: Mapping[str, tuple[ExactSectionWire, ...]] | None = None,
@@ -31,20 +50,9 @@ def export_archive(
     `exact` (the section session wires) is required for the region-based formats.
     """
     options = options or ExportOptions()
-    extras = [name for name in EXTRA_FILES if name in options.formats]
     with TemporaryDirectory(prefix="cad2maxwell-export-") as directory:
         result = export_dxf(imported, section, Path(directory) / "section.dxf", options)
-        texts: dict[str, str] = {}
-        if extras:
-            plan = plan_export(imported, section, options)
-            regions = build_regions(plan, exact, section.plane)
-            writers = {
-                "csv": lambda: write_csv(regions), "svg": lambda: write_svg(regions, plan),
-                "femm": lambda: write_femm(regions, plan),
-                "gmsh": lambda: write_gmsh(regions, plan),
-                "pyaedt": lambda: write_pyaedt(regions, plan),
-            }
-            texts = {EXTRA_FILES[name]: writers[name]() for name in extras}
+        texts = extra_texts(imported, section, options, exact)
         output = io.BytesIO()
         with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:
             archive.write(result.dxf_path, "section.dxf")

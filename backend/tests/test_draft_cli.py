@@ -68,3 +68,34 @@ def test_job_schema_errors_are_reported_without_writing(
 def test_job_mixed_with_single_run_args_is_rejected(tmp_path: Path) -> None:
     with pytest.raises(SystemExit):
         main(["--job", "x.json", "--plane", "XY"])
+
+
+def test_job_writes_requested_extra_formats_next_to_dxf(tmp_path: Path) -> None:
+    job = _job(tmp_path, named_colored_box(tmp_path / "coil.step"))
+    import json
+
+    data = json.loads(job.read_text())
+    data["sections"][0]["formats"] = ["dxf", "csv", "svg", "femm", "gmsh", "pyaedt"]
+    job.write_text(json.dumps(data))
+
+    assert main(["--job", str(job)]) == 0
+    names = {p.name for p in (tmp_path / "out").iterdir()}
+    assert {"mid.dxf", "mid.json", "mid.csv", "mid.svg", "mid.lua", "mid.geo", "mid.py",
+            "end.dxf"} <= names
+    assert "mid.csv" in names and "end.csv" not in names
+
+
+def test_job_extra_format_clash_writes_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    import json
+
+    job = _job(tmp_path, named_colored_box(tmp_path / "coil.step"))
+    data = json.loads(job.read_text())
+    data["sections"][1]["formats"] = ["dxf", "svg"]
+    job.write_text(json.dumps(data))
+    (tmp_path / "out" / "end.svg").write_text("x")
+
+    assert main(["--job", str(job)]) == 2
+    assert "end.svg" in capsys.readouterr().err
+    assert [p.name for p in (tmp_path / "out").iterdir()] == ["end.svg"]

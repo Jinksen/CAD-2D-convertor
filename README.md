@@ -132,7 +132,7 @@ The output path must be absolute and unused; the command writes `section.dxf` an
 
 ### Batch job
 
-`--job job.json` writes one export per section into an existing absolute output folder. Names are ASCII (`A-Z a-z 0-9 _ -`), the job is validated before anything runs, and nothing is written if any target already exists. Only `dxf` is available in `formats` for now.
+`--job job.json` writes one export per section into an existing absolute output folder. Names are ASCII (`A-Z a-z 0-9 _ -`), the job is validated before anything runs, and nothing is written if any target already exists. `formats` accepts `dxf` (default), `csv`, `svg`, `femm`, `gmsh` and `pyaedt`; each is written as `<name>.<ext>` (`.csv`, `.svg`, `.lua`, `.geo`, `.py`) next to `<name>.dxf` and `<name>.json`. If any of these files exists, nothing is written.
 
 ```json
 {"input": "C:\Projects\Motor\assembly.step", "output_dir": "C:\Projects\Motor\sweep",
