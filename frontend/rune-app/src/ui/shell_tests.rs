@@ -234,6 +234,8 @@ fn clicking_a_diagnostic_focuses_its_body_and_shows_the_2d_view() {
         related_component_id: Some("body-1".into()),
     });
     let mut rt = runtime_with(state);
+    assert!(rt.find("message-0").is_none(), "collapsed until opened");
+    click(&mut rt, "status-warnings");
     click(&mut rt, "message-0");
     assert_eq!(rt.state.model.selected.as_deref(), Some("body-2"));
     assert_eq!(rt.state.model.related.as_deref(), Some("body-1"));

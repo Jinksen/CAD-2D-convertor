@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::dto::{Health, Severity};
 pub use crate::format::NumberFormat;
+use crate::state::layout::Layout;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -81,6 +82,12 @@ pub struct ShellState {
     pub step_path: TextEdit,
     /// A short-lived confirmation shown as a toast: title, detail, when it was raised.
     pub toast: Option<(&'static str, String, std::time::Instant)>,
+    /// Panel sizes and collapsed state, remembered on this machine.
+    pub layout: Layout,
+    /// The messages panel is expanded; opens on a warning or error.
+    pub messages_open: bool,
+    /// Messages list filter; `None` shows every severity.
+    pub severity_filter: Option<Severity>,
     /// Remembers theme and number format on this machine; `None` in tests.
     prefs: Option<Prefs>,
 }
@@ -91,13 +98,25 @@ impl ShellState {
         ShellState {
             theme: prefs.get("theme").unwrap_or_default(),
             number_format: prefs.get("number_format").unwrap_or_default(),
+            layout: prefs
+                .get::<Layout>("layout")
+                .unwrap_or_default()
+                .sanitized(),
             prefs: Some(prefs),
             ..ShellState::default()
         }
     }
 
+    /// Adds a message; the first warning or error opens the panel.
+    pub fn push(&mut self, message: Message) {
+        if message.severity != Severity::Info {
+            self.messages_open = true;
+        }
+        self.messages.push(message);
+    }
+
     pub fn log(&mut self, severity: Severity, text: impl Into<String>) {
-        self.messages.push(Message {
+        self.push(Message {
             severity,
             text: text.into(),
             component_id: None,
@@ -132,6 +151,21 @@ impl ShellState {
     pub fn set_format(&mut self, format: NumberFormat) {
         self.number_format = format;
         self.remember();
+    }
+
+    pub fn remember_layout(&mut self) {
+        let layout = self.layout;
+        let Some(prefs) = &mut self.prefs else { return };
+        if let Err(error) = prefs.set("layout", &layout) {
+            self.log(Severity::Warning, error.to_string());
+        }
+    }
+
+    pub fn count(&self, severity: Severity) -> usize {
+        self.messages
+            .iter()
+            .filter(|m| m.severity == severity)
+            .count()
     }
 
     fn remember(&mut self) {

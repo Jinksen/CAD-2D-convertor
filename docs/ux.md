@@ -44,3 +44,7 @@ Groups, each with a caption: File (Open STEP, Open project, Save), Section (plan
 ## Properties pane
 
 The right pane shows exactly one titled context, chosen by the tree selection: `Section XY`, `Body Rotor`, `Group North poles` or `Model motor.step`. Section statistics sit under the Section context and in the status bar. Long values wrap and group members are listed one per line instead of being truncated.
+
+## Messages panel
+
+The panel is collapsed when it only holds info messages and opens on the next warning or error. It has a severity filter (All, Errors, Warnings, Info), and the status bar shows error and warning counts that open it filtered to that severity. Drag its top edge to resize it (double-click resets); the height is remembered in the preferences file.

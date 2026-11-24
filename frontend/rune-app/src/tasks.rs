@@ -147,7 +147,7 @@ impl AppState {
         );
         self.shell.log(Severity::Info, text);
         for d in &summary.diagnostics {
-            self.shell.messages.push(Message {
+            self.shell.push(Message {
                 severity: d.severity,
                 text: d.message.clone(),
                 component_id: d.component_id.clone(),
@@ -214,7 +214,7 @@ impl AppState {
             text,
         );
         for d in &section.diagnostics {
-            self.shell.messages.push(Message {
+            self.shell.push(Message {
                 severity: d.severity,
                 text: d.message.clone(),
                 component_id: d.component_id.clone(),

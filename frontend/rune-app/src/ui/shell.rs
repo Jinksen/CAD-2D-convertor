@@ -1,18 +1,15 @@
 //! Toolbar, preferences, messages pane, status bar and global keyboard shortcuts.
 
 use rune::tok::{Theme, space, type_};
-use rune::{El, FileDialogOptions, Key, KeyEvent, Tx, col, row, spacer, text};
+use rune::{El, FileDialogOptions, Key, KeyEvent, Tx, col, row, text};
 use rune_kit::{Checkbox, Kit, Toast, ToastRegion};
 
-use super::{
-    MESSAGES_HEIGHT, button, choice, heading, label_value, rule, scroller, severity_color,
-    severity_label,
-};
+use super::{button, choice, heading, label_value, rule};
 use crate::api::dto::Severity;
 use crate::format::{DecimalMarker, LengthUnit, MAX_DECIMALS, NumberFormat};
 use crate::state::preview::ViewportMode;
 use crate::state::section::PlaneKind;
-use crate::state::shell::{BackendStatus, Theme as ThemeChoice};
+use crate::state::shell::Theme as ThemeChoice;
 use crate::state::{AppState, now_ms};
 
 const TOAST_TTL: std::time::Duration = std::time::Duration::from_secs(5);
@@ -279,86 +276,6 @@ pub fn preferences(s: &AppState, t: &Theme, k: &Kit) -> El {
         )
 }
 
-pub fn messages(s: &AppState, t: &Theme, k: &Kit) -> El {
-    let rows = s.shell.messages.iter().enumerate().rev().map(|(index, m)| {
-        let focus = m
-            .component_id
-            .clone()
-            .map(|id| (id, m.related_component_id.clone()));
-        let line = row()
-            .key(format!("message-{index}"))
-            .w_full()
-            .gap(space::S2)
-            .px(space::S2)
-            .py(2.0)
-            .hover(t.hover)
-            .child(
-                text(severity_label(m.severity))
-                    .font(type_::LABEL)
-                    .color(severity_color(m.severity, t))
-                    .w(52.0),
-            )
-            .child(text(&m.text).font(type_::BODY).color(t.text).grow(1.0));
-        match focus {
-            Some((id, related)) => line
-                .role("button")
-                .label(format!("{} {}", severity_label(m.severity), m.text))
-                .focusable(true)
-                .on_press(move |s: &mut AppState| s.focus_component(&id, related.clone())),
-            None => line,
-        }
-    });
-    let mut list = col().w_full();
-    if let Some(busy) = &s.shell.busy {
-        list = list.child(
-            row()
-                .key("progress")
-                .role("status")
-                .label(format!("{busy}…"))
-                .w_full()
-                .gap(space::S2)
-                .px(space::S2)
-                .py(2.0)
-                .child(
-                    text("RUN")
-                        .font(type_::LABEL)
-                        .color(t.text_secondary)
-                        .w(44.0),
-                )
-                .child(
-                    text(format!("{busy}... {} s", s.shell.elapsed_secs()))
-                        .font(type_::BODY)
-                        .color(t.text),
-                ),
-        );
-        if s.shell.cancellable() {
-            list = list.child(
-                button(k, "cancel-operation", "Cancel", true).on_press(AppState::cancel_operation),
-            );
-        }
-    }
-    if s.shell.messages.is_empty() && s.shell.busy.is_none() {
-        list = list.child(
-            text("No messages.")
-                .font(type_::BODY)
-                .color(t.text_secondary)
-                .px(space::S2),
-        );
-    }
-    col()
-        .key("messages")
-        .role("region")
-        .label("Messages")
-        .w_full()
-        .h(MESSAGES_HEIGHT)
-        .border(1.0, t.separator)
-        .child(heading(
-            t,
-            &format!("Messages ({})", s.shell.messages.len()),
-        ))
-        .child(scroller(k, "messages-scroll", list.children(rows)))
-}
-
 /// The newest confirmation (save, export) as a toast; Messages stays the record.
 pub fn toasts(s: &AppState, k: &Kit) -> Vec<El> {
     let Some((title, detail, _)) = &s.shell.toast else {
@@ -368,66 +285,6 @@ pub fn toasts(s: &AppState, k: &Kit) -> Vec<El> {
         .description(detail.clone())
         .on_close(|s: &mut AppState| s.shell.toast = None);
     vec![ToastRegion::new().toast(toast.build(k)).build(k)]
-}
-
-pub fn status_bar(s: &AppState, t: &Theme) -> El {
-    let backend = match &s.shell.backend {
-        BackendStatus::Connecting => "Geometry service: connecting".to_string(),
-        BackendStatus::Online {
-            service,
-            api_version,
-        } => format!("Geometry service: {service} {api_version}"),
-        BackendStatus::Offline(reason) => format!("Geometry service: offline ({reason})"),
-    };
-    let backend_color = if matches!(s.shell.backend, BackendStatus::Offline(_)) {
-        super::severity_color(Severity::Error, t)
-    } else {
-        t.text_secondary
-    };
-    let model = s
-        .model
-        .imported
-        .as_ref()
-        .map_or("No model".to_string(), |i| {
-            let unit = i.source_unit.as_deref().unwrap_or("unknown units");
-            format!("{} bodies, source {unit}", i.component_count)
-        });
-    row()
-        .key("status")
-        .role("status")
-        .label("Status")
-        .w_full()
-        .gap(space::S3)
-        .px(space::S2)
-        .py(space::S1)
-        .child(text(backend).font(type_::LABEL).color(backend_color))
-        .child(text(model).font(type_::LABEL).color(t.text_secondary))
-        .child(
-            text(format!(
-                "Units: {}",
-                s.shell.number_format.length_unit.symbol()
-            ))
-            .font(type_::LABEL)
-            .color(t.text_secondary),
-        )
-        .child(spacer())
-        .child(
-            text(s.shell.busy.as_deref().map_or_else(String::new, |b| {
-                format!("{b}... {} s", s.shell.elapsed_secs())
-            }))
-            .font(type_::LABEL)
-            .color(t.text),
-        )
-        .child(
-            text(s.section.stats.map_or_else(String::new, |st| {
-                format!(
-                    "Regions {}  Errors {}  Warnings {}",
-                    st.regions, st.errors, st.warnings
-                )
-            }))
-            .font(type_::LABEL)
-            .color(t.text_secondary),
-        )
 }
 
 /// Window-level shortcuts of the React app. Keys typed into a focused field never get here.

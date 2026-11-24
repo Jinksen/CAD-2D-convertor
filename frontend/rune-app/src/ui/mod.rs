@@ -3,12 +3,14 @@
 
 mod groups;
 mod icons;
+mod messages;
 mod model_tree;
 mod preview;
 mod ribbon;
 mod section;
 mod section_view;
 mod shell;
+mod splitter;
 mod tree_menu;
 mod tree_row;
 
@@ -23,7 +25,6 @@ use crate::state::AppState;
 
 pub const TREE_WIDTH: f32 = 260.0;
 pub const SETTINGS_WIDTH: f32 = 320.0;
-pub const MESSAGES_HEIGHT: f32 = 150.0;
 
 /// Kit tokens derived from the app's neutral theme, with small radii.
 pub(crate) fn kit(t: &Theme, accent: Color) -> Kit {
@@ -76,8 +77,8 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                         )),
                 ),
         )
-        .child(shell::messages(s, &t, &k))
-        .child(shell::status_bar(s, &t))
+        .child(messages::messages(s, &t, &k))
+        .child(messages::status_bar(s, &t))
         .on_drop_files(|s: &mut AppState, files, _| match files.first() {
             Some(path)
                 if path
@@ -262,6 +263,8 @@ mod tests {
     }
 }
 
+#[cfg(test)]
+mod messages_tests;
 #[cfg(test)]
 mod ribbon_tests;
 #[cfg(test)]
