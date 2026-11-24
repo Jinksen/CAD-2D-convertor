@@ -1,7 +1,7 @@
 # Number and quantity notation
 
 Displayed values follow ISO 80000-1 and the SI Brochure. The implementation is in
-`frontend/src/lib/formatting.ts` (UI) and `backend/src/cad2maxwell_backend/formatting.py`
+`frontend/rune-app/src/format.rs` (UI) and `backend/src/cad2maxwell_backend/formatting.py`
 (diagnostic messages).
 
 | Rule | Example |

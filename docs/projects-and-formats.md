@@ -53,6 +53,21 @@ The core constraint applies to every format: exact B-Rep in, analytic curves out
 | Motor-CAD DXF | Check first | Motor-CAD imports DXF. Verify which layer and closure rules it needs before adding a preset. |
 | ACIS `.sat` | Not possible | No free writer in Open CASCADE. DXF covers Maxwell 2D import. |
 
+### More formats (2026-11)
+
+| Format | Direction | Issue |
+|--------|-----------|-------|
+| IGES | Import | [#65](https://github.com/Jinksen/CAD-2D-convertor/issues/65) |
+| OCCT BREP | Import | [#66](https://github.com/Jinksen/CAD-2D-convertor/issues/66) |
+| SVG | Export | [#67](https://github.com/Jinksen/CAD-2D-convertor/issues/67) |
+| Region table CSV | Export | [#68](https://github.com/Jinksen/CAD-2D-convertor/issues/68) |
+| FEMM `.lua` | Export (adapter), free 2D magnetics without ANSYS | [#69](https://github.com/Jinksen/CAD-2D-convertor/issues/69) |
+| Gmsh `.geo` | Export (adapter), for Gmsh, Elmer and GetDP | [#70](https://github.com/Jinksen/CAD-2D-convertor/issues/70) |
+| PyAEDT script | Export (adapter) | [#71](https://github.com/Jinksen/CAD-2D-convertor/issues/71) |
+| Motor-CAD DXF, 2D STEP faces, DXF R12, PNG/PDF report | Spikes | [#72](https://github.com/Jinksen/CAD-2D-convertor/issues/72) |
+
+DXF layer and colour modes and groups in the manifest are [#63](https://github.com/Jinksen/CAD-2D-convertor/issues/63).
+
 ### Suggested order
 
 1. Groups in the manifest and as DXF layers, since they make the groups added in 0.3 useful in Maxwell.
