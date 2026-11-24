@@ -15,6 +15,18 @@ pub enum Tool {
     Radius,
 }
 
+impl Tool {
+    pub const ALL: [Tool; 3] = [Tool::Select, Tool::Distance, Tool::Radius];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Tool::Select => "Select",
+            Tool::Distance => "Distance",
+            Tool::Radius => "Radius",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Reading {
     Distance { from: P, to: P },
