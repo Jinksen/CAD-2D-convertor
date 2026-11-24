@@ -140,8 +140,10 @@ Rune native UI ──► Rust service adapter ──► local FastAPI service �
 The UI only ever sees typed DTOs; exact shapes stay in the Python process. Sessions are bounded,
 section results are cached per plane, and bodies whose bounding box misses the plane are skipped.
 More in [architecture](docs/architecture.md), [geometry](docs/geometry.md),
-[DXF export](docs/dxf-export.md) and [UX](docs/ux.md). Planned project and format work is in
-[projects and formats](docs/projects-and-formats.md).
+[DXF export](docs/dxf-export.md), [UX](docs/ux.md) and [settings](docs/settings.md); all pages are
+listed in the [documentation index](docs/README.md). Planned project and format work is in
+[projects and formats](docs/projects-and-formats.md) and the
+[UI, settings and formats spec](docs/superpowers/specs/2026-11-24-ui-settings-formats.md).
 [`CAD2Maxwell_PROJECT_SPEC.md`](CAD2Maxwell_PROJECT_SPEC.md) is the product source of truth.
 
 ## Known limitations
