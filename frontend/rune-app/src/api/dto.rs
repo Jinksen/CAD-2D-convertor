@@ -297,6 +297,15 @@ pub struct RegionsResponse {
     pub regions: Vec<RegionMetric>,
 }
 
+/// Rotational symmetry hint of a section; `order` 1 means none was found.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Symmetry {
+    pub order: u32,
+    pub sector_angle_deg: f64,
+    pub center: Point2,
+    pub confidence: f64,
+}
+
 /// Preview mesh as sent: buffers are base64 little-endian typed arrays.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PreviewMeshWire {

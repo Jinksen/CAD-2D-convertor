@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use dto::{
     ComponentPlane, ExportOptions, Health, ImportSummary, PreviewMesh, PreviewMeshWire,
-    RegionsResponse, SectionPlane, SectionResponse, Tolerance,
+    RegionsResponse, SectionPlane, SectionResponse, Symmetry, Tolerance,
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -244,6 +244,34 @@ impl Client {
             return Err("The geometry service returned an invalid region response.".into());
         }
         Ok(regions)
+    }
+
+    /// Rotational symmetry of a computed section (a hint, never applied automatically).
+    pub fn symmetry(&self, section_id: &str) -> Result<Symmetry, String> {
+        let path = format!("sections/{}/symmetry", segment(section_id));
+        let reply = self.call(&path, None, "application/json")?;
+        Self::decode(
+            &reply,
+            "The symmetry could not be determined.",
+            "The geometry service returned an invalid symmetry response.",
+        )
+    }
+
+    /// The explicit 1/N sector of a computed section, as a new section of the same import.
+    pub fn sector(&self, section: &SectionResponse, order: u32) -> Result<SectionResponse, String> {
+        let invalid = "The geometry service returned an invalid sector response.";
+        let path = format!("sections/{}/sector", segment(&section.section_id));
+        let reply = self.call(&path, Some(json!({ "order": order })), "application/json")?;
+        let sector: SectionResponse =
+            Self::decode(&reply, "The sector could not be created.", invalid)?;
+        if sector.import_id != section.import_id
+            || sector.plane != section.plane
+            || sector.section_id == section.section_id
+            || sector.validate().is_err()
+        {
+            return Err(invalid.into());
+        }
+        Ok(sector)
     }
 
     /// The DXF bundle (ZIP bytes) of a computed section.

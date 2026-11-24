@@ -6,6 +6,7 @@ mod archive;
 mod backend;
 mod export;
 mod format;
+mod machine;
 mod project;
 mod recovery;
 mod render3d;

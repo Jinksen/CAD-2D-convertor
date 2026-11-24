@@ -67,6 +67,10 @@ A project holds one or more named sections, for example "Mid stack z = 25 mm" an
 
 While a project has a path and unsaved changes, `<name>.c2mproj.autosave` is written beside it every three minutes (`AUTOSAVE_INTERVAL`) and when the window closes. A successful save deletes it. Opening a project whose autosave is newer asks: **Restore autosave** (the restored session counts as unsaved until saved) or **Open saved project**. A session without a project path is never autosaved.
 
+## Symmetry and sectors
+
+**Detect symmetry** in the Section pane asks the service for the rotational symmetry of the shown section and lists order, sector angle and confidence (order 1 means none found). **Create 1/N sector** appears only for order 2 or more and is the only thing that cuts: it adds the returned sector as a new named section ("Sector 1 of N") and shows it. The sector carries no overlap validation; the pane says so. Detection is a hint from region areas and centroids and never acts on its own.
+
 ## Properties pane
 
 The right pane shows exactly one titled context, chosen by the tree selection: `Section XY`, `Body Rotor`, `Group North poles` or `Model motor.step`. Section statistics sit under the Section context and in the status bar. Long values wrap and group members are listed one per line instead of being truncated.

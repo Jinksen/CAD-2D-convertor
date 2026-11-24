@@ -58,7 +58,7 @@ fn is_model(path: &Path) -> bool {
 
 impl AppState {
     /// Starts a service call labelled `what` unless one is already running.
-    fn start<T: Send + 'static>(
+    pub(crate) fn start<T: Send + 'static>(
         &mut self,
         what: &str,
         work: impl FnOnce(&Client) -> Result<T, String> + Send + 'static,

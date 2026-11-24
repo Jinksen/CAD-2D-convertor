@@ -187,6 +187,60 @@ fn named_sections(s: &AppState, t: &Theme, k: &Kit) -> El {
     out
 }
 
+/// Symmetry hint and the explicit 1/N sector action.
+fn symmetry(s: &AppState, t: &Theme, k: &Kit) -> El {
+    let busy = s.shell.busy.is_some();
+    let computed = s.section.last.is_some() && s.section.stats.is_some();
+    let shown = s.section.last.as_ref().map(|l| l.section_id.as_str());
+    let found = s
+        .section
+        .symmetry
+        .as_ref()
+        .filter(|(id, _)| Some(id.as_str()) == shown)
+        .map(|(_, f)| f);
+    let mut out = col().key("symmetry").w_full().gap(space::S1).child(
+        button(k, "detect-symmetry", "Detect symmetry", computed && !busy)
+            .on_press(AppState::detect_symmetry),
+    );
+    match found {
+        Some(f) if f.order > 1 => {
+            out = out
+                .child(label_value(t, "Order", f.order.to_string()))
+                .child(label_value(
+                    t,
+                    "Sector angle",
+                    format!("{:.2} deg", f.sector_angle_deg),
+                ))
+                .child(label_value(
+                    t,
+                    "Confidence",
+                    format!("{:.0} %", f.confidence * 100.0),
+                ))
+                .child(
+                    button(
+                        k,
+                        "create-sector",
+                        &format!("Create 1/{} sector", f.order),
+                        !busy,
+                    )
+                    .on_press(AppState::create_sector),
+                )
+                .child(note(
+                    t,
+                    "The sector is cut from the exact section and added as a new named section. It carries no overlap validation: check the cut regions yourself before exporting.",
+                ));
+        }
+        Some(_) => out = out.child(note(t, "No rotational symmetry found.")),
+        None => {
+            out = out.child(note(
+                t,
+                "Detection is a hint from region areas and centroids; nothing is cut until you press Create.",
+            ))
+        }
+    }
+    out
+}
+
 pub fn settings(s: &AppState, t: &Theme, k: &Kit) -> El {
     let fmt = s.shell.number_format;
     s.section.fmt.set(fmt);
@@ -308,7 +362,8 @@ pub fn settings(s: &AppState, t: &Theme, k: &Kit) -> El {
 
     form = form
         .child(tolerances(s, t, k))
-        .child(named_sections(s, t, k));
+        .child(named_sections(s, t, k))
+        .child(symmetry(s, t, k));
 
     // Run status and result.
     let mut result = col().w_full().padding(space::S2).gap(space::S1);
@@ -431,5 +486,37 @@ mod tests {
         let json = rt.accessibility_json().to_string();
         assert!(json.contains("Advanced tolerances (modified)"));
         assert!(json.contains("Small region *"));
+    }
+
+    #[test]
+    fn symmetry_shows_order_angle_confidence_and_an_explicit_sector_button_with_the_note() {
+        let mut s = loaded();
+        s.section.last = Some(
+            serde_json::from_str(
+                r#"{"section_id":"s1","import_id":"i1","plane":{"kind":"XY","offset_mm":1.0},
+                "components":[],"diagnostics":[]}"#,
+            )
+            .unwrap(),
+        );
+        s.section.stats = Some(Default::default());
+        let mut rt = runtime(s);
+        assert!(
+            rt.find("create-sector").is_none(),
+            "nothing before a detection"
+        );
+        rt.state.section.symmetry = Some((
+            "s1".into(),
+            crate::api::dto::Symmetry {
+                order: 12,
+                sector_angle_deg: 30.0,
+                center: [0.0, 0.0],
+                confidence: 0.98,
+            },
+        ));
+        rt.invalidate();
+        rt.frame(1.0 / 60.0);
+        let json = rt.accessibility_json().to_string();
+        assert!(json.contains("Create 1/12 sector") && json.contains("30.00 deg"));
+        assert!(json.contains("98 %") && json.contains("no overlap validation"));
     }
 }
