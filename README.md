@@ -53,7 +53,7 @@ section. What lands in Maxwell is what you modelled.
 
 1. [Download](#download) and install CAD2Maxwell (or build it from source with the [one-time setup](#one-time-setup)).
 2. Start **CAD2Maxwell** from the Start menu.
-3. **Open STEP** (Ctrl+O) and choose a `.step` / `.stp` file. Try [`docs/demo/demo-motor.step`](docs/demo/demo-motor.step).
+3. **Open STEP** (Ctrl+O) and choose a `.step` / `.stp` file. The backend also reads `.igs` / `.iges` (solid B-Reps) and `.brep`. Try [`docs/demo/demo-motor.step`](docs/demo/demo-motor.step).
 4. Pick a plane in the ribbon (keys **1 / 2 / 3** for XY / XZ / YZ) and set the offset in **Section** settings.
    For laminations that are not axis-aligned, select one sheet and click **Align to selected body**.
 5. **Compute** (Ctrl+Enter). Filled regions are closed contours; holes stay empty.

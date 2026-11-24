@@ -35,8 +35,8 @@ The core constraint applies to every format: exact B-Rep in, analytic curves out
 | Format | Verdict | Notes |
 |--------|---------|-------|
 | STEP AP203/214/242 | Supported | Names, colours and assembly structure through XCAF. |
-| IGES (`.igs`, `.iges`) | Recommended next | Open CASCADE reads it with `IGESCAFControl_Reader`, including names, colours and levels. It is the second most common neutral CAD format for older motor models. About one reader function plus tests. |
-| OCCT BREP (`.brep`) | Cheap, low value | Exact geometry but no names or colours. Useful for test fixtures and FreeCAD exports. |
+| IGES (`.igs`, `.iges`) | Supported (backend) | `IGESCAFControl_Reader`: names, colours and assembly structure through the shared XCAF traversal; units are read from the global section and converted to mm by OCCT. Only files with solid B-Reps import; surface-only IGES (trimmed faces) is rejected, never sewn silently. IGES levels are not mapped yet. |
+| OCCT BREP (`.brep`) | Supported (backend) | Solids become bodies named `<file stem>_<n>`. No names or colours; `brep_no_metadata` and `assumed_source_unit` (mm) diagnostics. |
 | Inventor `.ipt` / `.iam` | Adapter only | Through the planned Inventor COM add-in that exports STEP. It is never a dependency of the core. |
 | Parasolid, ACIS `.sat`, JT | Not possible | Open CASCADE has no free readers for them. Ask users for STEP. |
 | STL, OBJ, 3MF | Rejected | Triangle meshes. Sectioning them would be mesh slicing. |
@@ -71,7 +71,7 @@ DXF layer and colour modes and groups in the manifest are [#63](https://github.c
 ### Suggested order
 
 1. Groups in the manifest and as DXF layers, since they make the groups added in 0.3 useful in Maxwell.
-2. IGES import.
+2. ~~IGES import~~ (done in the backend; the Rune file dialog filter is separate).
 3. Unsaved-changes prompt and named sections.
 4. Region table CSV and SVG.
 5. The PyAEDT adapter, after DXF import has been verified with the [Maxwell import checklist](maxwell-import-checklist.md).

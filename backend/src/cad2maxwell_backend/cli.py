@@ -6,8 +6,8 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from cad2maxwell_backend.export.dxf import DxfExportError, export_dxf
+from cad2maxwell_backend.geometry.model_reader import read_model
 from cad2maxwell_backend.geometry.section import SectionError
-from cad2maxwell_backend.geometry.step_importer import read_step
 from cad2maxwell_backend.models.sections import SectionPlane, SectionRequest
 from cad2maxwell_backend.services.import_service import ImportService, ImportServiceError
 from cad2maxwell_backend.services.import_sessions import ImportSessions
@@ -26,7 +26,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        import_service = ImportService(read_step, ImportSessions())
+        import_service = ImportService(read_model, ImportSessions())
         imported = import_service.import_path(args.input)
         section_service = SectionService(import_service.sessions, SectionSessions())
         section = section_service.create(SectionRequest(
