@@ -31,7 +31,7 @@ In order of value:
 2. ~~**Several named sections per project.**~~ Done. For example "Mid stack z = 25 mm" and "End winding z = 48 mm". Each one stores plane, offset and the export path it was last written to. This is the most common reason to reopen a project.
 3. **Groups in the export.** Write each body's groups to the JSON manifest and offer DXF layers per group (ASCII-safe names, as for export names). In Maxwell, a layer per group is one material or excitation assignment instead of one per body. This needs a backend change and a manifest schema version bump.
 4. ~~**Recent projects.**~~ Done. A short list in the ribbon, stored in preferences, not in the project.
-5. **Recovery file.** Write `<name>.c2mproj.autosave` every few minutes and offer it on the next open if it is newer than the project.
+5. ~~**Recovery file.**~~ Done (see [ux.md](ux.md)). Write `<name>.c2mproj.autosave` every few minutes and offer it on the next open if it is newer than the project.
 6. **Published schema.** A JSON Schema for `.c2mproj` in `docs/`, with the rule already in use: new fields are optional, and the version only increases when an older app would misread the file.
 
 Not planned: storing geometry or section results in the project. The project stays a small, readable reference to the STEP file plus settings, and the STEP hash detects changes.

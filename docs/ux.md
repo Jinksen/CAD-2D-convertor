@@ -63,6 +63,10 @@ With no model open the viewport shows a welcome block: Open model, Open project,
 
 A project holds one or more named sections, for example "Mid stack z = 25 mm" and "End winding z = 48 mm". Each keeps its plane, offset, advanced tolerances and the path it was last exported to. With two or more, they are listed under the Section node and a click switches to one (the computed result is cleared; compute again). The Section pane adds a section from the current plane, renames and deletes the active one; names are unique (case-insensitive) and the last section cannot be deleted.
 
+## Autosave
+
+While a project has a path and unsaved changes, `<name>.c2mproj.autosave` is written beside it every three minutes (`AUTOSAVE_INTERVAL`) and when the window closes. A successful save deletes it. Opening a project whose autosave is newer asks: **Restore autosave** (the restored session counts as unsaved until saved) or **Open saved project**. A session without a project path is never autosaved.
+
 ## Properties pane
 
 The right pane shows exactly one titled context, chosen by the tree selection: `Section XY`, `Body Rotor`, `Group North poles` or `Model motor.step`. Section statistics sit under the Section context and in the status bar. Long values wrap and group members are listed one per line instead of being truncated.

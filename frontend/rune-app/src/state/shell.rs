@@ -87,6 +87,9 @@ pub struct ShellState {
     /// Recent projects, newest first; kept in the prefs file.
     pub recent: Recent,
     pub recent_open: bool,
+    /// A newer autosave exists for the project being opened.
+    pub recovery: Option<crate::recovery::Recovery>,
+    pub last_autosave: Option<std::time::Instant>,
     /// The window title last handed to the window system.
     pub title: String,
     /// Bound to the default export folder field of the settings dialog.

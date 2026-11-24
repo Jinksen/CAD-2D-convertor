@@ -9,6 +9,8 @@ use crate::state::preview::ViewportMode;
 use crate::state::section::PlaneKind;
 use crate::state::{AppState, now_ms};
 
+/// How often the autosave interval is checked while a project is open.
+const AUTOSAVE_CHECK: std::time::Duration = std::time::Duration::from_secs(30);
 const TOAST_TTL: std::time::Duration = std::time::Duration::from_secs(5);
 
 fn dialog(title: &str, file_name: Option<&str>) -> FileDialogOptions {
@@ -180,6 +182,10 @@ pub fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
 
 /// While an operation runs, redraw once a second so its elapsed time counts up; toasts expire.
 pub fn poll(s: &mut AppState, _: f64, tx: &mut Tx) -> bool {
+    if s.shell.project_path.is_some() {
+        s.autosave_due(std::time::Instant::now());
+        tx.wake_after(AUTOSAVE_CHECK);
+    }
     let title = s.window_title();
     if title != s.shell.title {
         tx.set_title(title.clone());

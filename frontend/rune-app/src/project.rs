@@ -202,7 +202,10 @@ impl AppState {
                 let text = format!("Project saved to {}", path.display());
                 self.shell.notify("Project saved", text);
                 self.shell.push_recent(path.clone());
-                self.shell.project_path = Some(path);
+                if let Some(old) = self.shell.project_path.replace(path.clone()) {
+                    self.remove_autosave(&old);
+                }
+                self.remove_autosave(&path);
                 self.mark_clean();
             }
             Err(error) => self.shell.log(Severity::Error, error),

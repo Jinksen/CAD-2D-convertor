@@ -7,6 +7,7 @@ mod backend;
 mod export;
 mod format;
 mod project;
+mod recovery;
 mod render3d;
 mod session;
 mod state;
@@ -37,7 +38,10 @@ fn main() {
         poll: Some(ui::poll),
         ..AppSpec::new("CAD2Maxwell", (1440.0, 900.0), AppState::default, ui::view)
     };
-    let app = App::new(spec);
+    // The close button cannot be intercepted: keep unsaved work as an autosave instead.
+    let app = App::new(spec).on_close(|s, _| {
+        s.autosave_now();
+    });
     // `AppHandle::update` runs the closure on the UI thread and wakes the event loop.
     let handle = app.handle();
     let tasks = Tasks::new(client, move |update| {

@@ -107,6 +107,35 @@ pub fn overlay(s: &AppState, t: &Theme, k: &Kit) -> Vec<El> {
                         .on_press(|s: &mut AppState| s.shell.pending = None),
                 ),
         );
+    let recovery = col()
+        .w_full()
+        .padding(space::S3)
+        .gap(space::S2)
+        .child(
+            text("An autosave of this project is newer than the saved file, probably from a session that ended with unsaved changes. Restore it?")
+                .font(type_::BODY)
+                .color(t.text)
+                .wrap(),
+        )
+        .child(
+            row()
+                .gap(space::S1)
+                .child(
+                    button(k, "recovery-restore", "Restore autosave", true)
+                        .on_press(|s: &mut AppState| s.resolve_recovery(true)),
+                )
+                .child(
+                    button(k, "recovery-saved", "Open saved project", true)
+                        .on_press(|s: &mut AppState| s.resolve_recovery(false)),
+                ),
+        );
+    Dialog::new("recovery", "Autosave found")
+        .open(s.shell.recovery.is_some())
+        .width(480.0)
+        .fit()
+        .on_close(|s: &mut AppState| s.shell.recovery = None)
+        .child(recovery)
+        .build(k, &mut layer);
     Dialog::new("unsaved", "Unsaved changes")
         .open(s.shell.pending.is_some())
         .width(480.0)

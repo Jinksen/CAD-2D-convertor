@@ -339,10 +339,8 @@ fn section_of(
 impl AppState {
     /// Opens a `.c2mproj`: re-imports its STEP file, then restores plane, hidden bodies and
     /// number format. Component IDs derive from the file hash, so unknown IDs are dropped.
-    pub fn open_project(&mut self, path: PathBuf) {
-        let project = match crate::project::read_project(&path)
-            .and_then(|text| crate::project::parse_project(&text))
-        {
+    pub fn open_project_text(&mut self, path: PathBuf, text: String, restored: bool) {
+        let project = match crate::project::parse_project(&text) {
             Ok(project) => project,
             Err(error) => {
                 self.shell.log(Severity::Error, error);
@@ -401,6 +399,11 @@ impl AppState {
                 state.shell.push_recent(path.clone());
                 state.shell.project_path = Some(path);
                 state.mark_clean();
+                if restored {
+                    // Differs from the saved project until the user saves it.
+                    state.shell.baseline = Some(String::new());
+                    state.shell.log(Severity::Info, "Restored from the autosave.");
+                }
             },
         );
     }
