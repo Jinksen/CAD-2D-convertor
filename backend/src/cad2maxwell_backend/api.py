@@ -14,6 +14,8 @@ from cad2maxwell_backend.export.archive import export_archive
 from cad2maxwell_backend.export.dxf import DxfExportError
 from cad2maxwell_backend.geometry.model_reader import IMPORT_SUFFIXES, read_model
 from cad2maxwell_backend.geometry.preview_mesh import PreviewMeshError, generate_preview
+from cad2maxwell_backend.machine.models import SectorRequest, SymmetryResponse
+from cad2maxwell_backend.machine.service import create_sector, symmetry
 from cad2maxwell_backend.models.exports import ExportRequest
 from cad2maxwell_backend.models.health import HealthResponse
 from cad2maxwell_backend.models.imports import (
@@ -193,6 +195,25 @@ def create_app(import_service: ImportService | None = None) -> FastAPI:
             return _error(404, "unknown_section", "Compute the section again.")
         except SectionError as exc:
             return _error(422, "region_metrics_failed", str(exc))
+
+    @app.get("/api/v1/sections/{section_id}/symmetry", response_model=SymmetryResponse)
+    def section_symmetry(section_id: str) -> SymmetryResponse | JSONResponse:
+        try:
+            return symmetry(section_service, section_id)
+        except UnknownSection:
+            return _error(404, "unknown_section", "Compute the section again.")
+        except SectionError as exc:
+            return _error(422, "symmetry_failed", str(exc))
+
+    @app.post("/api/v1/sections/{section_id}/sector", response_model=SectionResponse)
+    def section_sector(section_id: str, request: SectorRequest) -> SectionResponse | JSONResponse:
+        # Never called automatically: the user asks for the 1/N sector explicitly.
+        try:
+            return create_sector(section_service, section_id, request)
+        except UnknownSection:
+            return _error(404, "unknown_section", "Compute the section again.")
+        except SectionError as exc:
+            return _error(422, "sector_failed", str(exc))
 
     @app.post("/api/v1/export/dxf")
     def download_dxf(request: ExportRequest) -> Response:
