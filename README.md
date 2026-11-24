@@ -130,6 +130,18 @@ uv run --project backend python -m cad2maxwell_backend.cli `
 
 The output path must be absolute and unused; the command writes `section.dxf` and `section.json`.
 
+### Batch job
+
+`--job job.json` writes one export per section into an existing absolute output folder. Names are ASCII (`A-Z a-z 0-9 _ -`), the job is validated before anything runs, and nothing is written if any target already exists. Only `dxf` is available in `formats` for now.
+
+```json
+{"input": "C:\Projects\Motor\assembly.step", "output_dir": "C:\Projects\Motor\sweep",
+ "sections": [{"name": "mid", "plane": "XY", "offset_mm": 25.0},
+              {"name": "end", "plane": "XY", "offset_mm": 48.0, "formats": ["dxf"]}]}
+```
+
+The input may be STEP, IGES or BREP.
+
 ## Architecture
 
 ```text
