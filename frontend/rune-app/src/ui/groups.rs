@@ -285,15 +285,22 @@ pub fn properties(s: &AppState, t: &Theme, k: &Kit, name: &str) -> El {
                 ),
         )
         .child(label_value(t, "Bodies", members.len().to_string()))
-        .child(label_value(
-            t,
-            "Members",
-            if members.is_empty() {
-                "None. Select a body and use Add to group.".to_string()
-            } else {
-                members.join(", ")
-            },
-        ))
+        .child(
+            col()
+                .key("group-members")
+                .w_full()
+                .gap(2.0)
+                .child(text("Members").font(type_::LABEL).color(t.text_secondary))
+                .children(
+                    if members.is_empty() {
+                        vec!["None. Select a body and use Add to group.".to_string()]
+                    } else {
+                        members.iter().map(|m| (*m).to_owned()).collect()
+                    }
+                    .into_iter()
+                    .map(|m| text(m).font(type_::BODY).color(t.text).wrap().pl(space::S2)),
+                ),
+        )
         .child(
             row()
                 .gap(space::S1)
@@ -318,6 +325,6 @@ pub fn properties(s: &AppState, t: &Theme, k: &Kit, name: &str) -> El {
     col()
         .key("group-properties")
         .w_full()
-        .child(heading(t, &format!("Group: {name}")))
+        .child(heading(t, &format!("Group {name}")))
         .child(fields)
 }

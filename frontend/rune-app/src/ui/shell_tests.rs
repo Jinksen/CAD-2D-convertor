@@ -99,7 +99,7 @@ fn a_group_made_from_the_selected_body_shows_in_the_tree_and_hides_with_v() {
     click(&mut rt, "new-group");
     assert_eq!(rt.state.model.selected_group.as_deref(), Some("Magnets"));
     let d = dump(&rt);
-    assert!(d.contains("Groups (1)") && d.contains("Group: Magnets"));
+    assert!(d.contains("Groups (1)") && d.contains("Group Magnets"));
     assert!(d.contains("Group Magnets, 1 body"));
     click(&mut rt, "body-body-2");
     click(&mut rt, "member-Magnets");
@@ -139,7 +139,7 @@ fn selecting_a_body_shows_its_source_name_color_and_formatted_size() {
     click(&mut rt, "body-body-1");
     let d = dump(&rt);
     for needle in [
-        "Body: Rotor",
+        "Body Rotor",
         "Source name",
         "#ff0000",
         "Motor / Rotor",

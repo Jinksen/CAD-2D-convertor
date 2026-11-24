@@ -40,3 +40,7 @@ Hovering a body row highlights the body in the 2D and 3D views, and hovering a b
 ## Ribbon
 
 Groups, each with a caption: File (Open STEP, Open project, Save), Section (plane XY/XZ/YZ/Custom, Compute section), Export (DXF), Edit (Undo, Redo) and View (2D/3D), then Settings at the right. Every button has a tooltip with its shortcut. The plane and Compute exist only in the ribbon; the Section pane keeps the offset, custom normal and align fields.
+
+## Properties pane
+
+The right pane shows exactly one titled context, chosen by the tree selection: `Section XY`, `Body Rotor`, `Group North poles` or `Model motor.step`. Section statistics sit under the Section context and in the status bar. Long values wrap and group members are listed one per line instead of being truncated.

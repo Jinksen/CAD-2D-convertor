@@ -71,7 +71,16 @@ pub fn settings(s: &AppState, t: &Theme, k: &Kit) -> El {
     let panel = col()
         .key("section-settings")
         .w_full()
-        .child(heading(t, "Section"))
+        .child(heading(
+            t,
+            &format!(
+                "Section {}",
+                match sec.plane {
+                    PlaneKind::Custom => "Custom",
+                    kind => crate::project::kind_name(kind),
+                }
+            ),
+        ))
         .child(col().w_full().padding(space::S2).gap(space::S2).child(note(
             t,
             "Exact planar cut of all bodies. Pick the plane and compute from the ribbon.",

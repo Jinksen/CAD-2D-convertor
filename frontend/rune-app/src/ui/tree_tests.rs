@@ -143,3 +143,32 @@ fn the_filter_shows_a_match_count_a_clear_button_and_expand_collapse_all() {
     click(&mut rt, "expand-all");
     assert!(rt.find("body-body-1").is_some() && rt.find("body-body-2").is_some());
 }
+
+#[test]
+fn the_properties_pane_shows_one_titled_context_for_the_tree_selection() {
+    let mut rt = with_group();
+    rt.state
+        .model
+        .add_to_group("North", &["body-1".into(), "body-2".into()]);
+    let panes = |rt: &Runtime<AppState>| {
+        ["section-settings", "body-properties", "group-properties"]
+            .iter()
+            .filter(|k| rt.find(k).is_some())
+            .count()
+    };
+    assert_eq!(panes(&rt), 1);
+    assert!(dump(&rt).contains("Section XY"));
+    click(&mut rt, "node-model");
+    assert!(dump(&rt).contains("Model m.step") && panes(&rt) == 1);
+    click(&mut rt, "body-body-1");
+    assert!(dump(&rt).contains("Body Rotor"));
+    click(&mut rt, "group-North");
+    let d = dump(&rt);
+    assert!(d.contains("Group North"));
+    assert!(
+        d.contains("Rotor") && d.contains("Stator"),
+        "members are listed"
+    );
+    click(&mut rt, "node-section");
+    assert!(dump(&rt).contains("Section XY"));
+}

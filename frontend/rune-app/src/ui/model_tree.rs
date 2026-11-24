@@ -307,7 +307,13 @@ pub fn properties(s: &AppState, t: &Theme, k: &Kit) -> El {
             .collect();
         let sha: String = imported.sha256.chars().take(12).collect();
         return panel
-            .child(heading(t, "Model"))
+            .child(heading(
+                t,
+                &format!(
+                    "Model {}",
+                    imported.path.rsplit(['\\', '/']).next().unwrap_or("")
+                ),
+            ))
             .child(step_form(s, k))
             .child(
                 fields
@@ -353,7 +359,7 @@ pub fn properties(s: &AppState, t: &Theme, k: &Kit) -> El {
         format!("{} RGB ({list}) {provenance}", rgb(c))
     });
     panel
-        .child(heading(t, &format!("Body: {}", b.display_name)))
+        .child(heading(t, &format!("Body {}", b.display_name)))
         .child(
             fields
                 .child(label_value(t, "Export name", &b.export_name))

@@ -181,8 +181,9 @@ pub fn label_value(t: &Theme, label: &str, value: impl Into<String>) -> El {
             text(value)
                 .font(type_::BODY)
                 .color(t.text)
-                .truncate()
-                .grow(1.0),
+                .wrap()
+                .grow(1.0)
+                .min_w(0.0),
         )
 }
 
