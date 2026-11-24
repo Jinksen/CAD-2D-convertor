@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::api::dto::{Health, Severity};
 pub use crate::format::NumberFormat;
 use crate::state::layout::Layout;
+use crate::state::recent::Recent;
 use crate::state::settings::{Category, Settings};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -79,6 +80,15 @@ pub struct ShellState {
     pub show_settings: bool,
     pub settings_category: Category,
     pub settings: Settings,
+    /// Project text at the last open or save; a difference means unsaved changes.
+    pub baseline: Option<String>,
+    /// What is waiting for the answer of the unsaved-changes prompt.
+    pub pending: Option<crate::session::Pending>,
+    /// Recent projects, newest first; kept in the prefs file.
+    pub recent: Recent,
+    pub recent_open: bool,
+    /// The window title last handed to the window system.
+    pub title: String,
     /// Bound to the default export folder field of the settings dialog.
     pub export_folder: TextEdit,
     /// Where the open project was saved; Ctrl+S saves there.
@@ -105,6 +115,7 @@ impl ShellState {
             .unwrap_or_default()
             .sanitized();
         ShellState {
+            recent: Recent::from_strings(prefs.get("recent").unwrap_or_default()),
             export_folder: TextEdit::new(settings.export.folder.clone().unwrap_or_default()),
             settings,
             theme: prefs.get("theme").unwrap_or_default(),
@@ -190,6 +201,25 @@ impl ShellState {
                 self.export_folder.replace_text(String::new());
             }
             Category::Service => {}
+        }
+    }
+
+    /// Puts a project at the top of the recent list and remembers the list.
+    pub fn push_recent(&mut self, path: PathBuf) {
+        self.recent.push(path);
+        self.remember_recent();
+    }
+
+    pub fn remove_recent(&mut self, path: &std::path::Path) {
+        self.recent.remove(path);
+        self.remember_recent();
+    }
+
+    fn remember_recent(&mut self) {
+        let list = self.recent.to_strings();
+        let Some(prefs) = &mut self.prefs else { return };
+        if let Err(error) = prefs.set("recent", &list) {
+            self.log(Severity::Warning, error.to_string());
         }
     }
 

@@ -459,3 +459,119 @@ fn a_group_gets_a_material_label_and_a_custom_note_that_the_export_sends() {
     assert_eq!(rt.state.model.groups[0].material, None);
     assert_eq!(rt.state.model.groups[0].material_note, None);
 }
+
+fn clean_motor() -> AppState {
+    let mut state = motor();
+    state.mark_clean();
+    state
+}
+
+fn cmd(c: char) -> (Key, Mods) {
+    (
+        Key::Command(c),
+        Mods {
+            cmd: true,
+            ..Mods::default()
+        },
+    )
+}
+
+#[test]
+fn a_dirty_session_asks_before_quitting_and_cancel_keeps_it() {
+    let mut state = clean_motor();
+    state.model.toggle_hidden("body-1");
+    let mut rt = runtime_with(state);
+    let (k, m) = cmd('q');
+    press(&mut rt, k, m);
+    assert_eq!(rt.state.shell.pending, Some(crate::session::Pending::Quit));
+    assert!(rt.state.window_title().starts_with('*'));
+    for i in 1..=30 {
+        rt.frame(f64::from(i) / 60.0 + 1.0);
+    }
+    click(&mut rt, "unsaved-cancel");
+    assert!(rt.state.shell.pending.is_none());
+    assert!(rt.state.is_dirty(), "cancel changes nothing");
+}
+
+#[test]
+fn a_clean_session_or_a_disabled_confirmation_never_asks() {
+    let mut rt = runtime_with(clean_motor());
+    let (k, m) = cmd('q');
+    press(&mut rt, k, m);
+    assert!(rt.state.shell.pending.is_none());
+    let mut state = clean_motor();
+    state.model.toggle_hidden("body-1");
+    state
+        .shell
+        .edit_settings(|s| s.general.confirm_unsaved = false);
+    let mut rt = runtime_with(state);
+    press(&mut rt, Key::Command('q'), m);
+    assert!(rt.state.shell.pending.is_none());
+}
+
+#[test]
+fn discard_runs_the_waiting_action_and_save_writes_the_project_first() {
+    let dir = std::env::temp_dir().join(format!("c2m-unsaved-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut state = clean_motor();
+    state.model.toggle_hidden("body-1");
+    state.shell.pending = Some(crate::session::Pending::OpenModel("x.dxf".into()));
+    let mut rt = runtime_with(state);
+    for i in 1..=30 {
+        rt.frame(f64::from(i) / 60.0 + 1.0);
+    }
+    click(&mut rt, "unsaved-discard");
+    assert!(rt.state.shell.pending.is_none());
+    assert!(
+        rt.state
+            .shell
+            .messages
+            .last()
+            .unwrap()
+            .text
+            .starts_with("Choose a STEP")
+    );
+
+    let mut state = clean_motor();
+    state.model.toggle_hidden("body-1");
+    state.shell.project_path = Some(dir.join("p.c2mproj"));
+    state.shell.pending = Some(crate::session::Pending::OpenModel("y.dxf".into()));
+    let mut rt = runtime_with(state);
+    for i in 1..=30 {
+        rt.frame(f64::from(i) / 60.0 + 1.0);
+    }
+    click(&mut rt, "unsaved-save");
+    assert!(dir.join("p.c2mproj").is_file());
+    assert!(!rt.state.is_dirty() && rt.state.shell.pending.is_none());
+    assert!(
+        rt.state
+            .shell
+            .messages
+            .last()
+            .unwrap()
+            .text
+            .starts_with("Choose a STEP")
+    );
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn recent_projects_flag_missing_files_and_can_be_removed() {
+    let dir = std::env::temp_dir().join(format!("c2m-recent-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let real = dir.join("real.c2mproj");
+    std::fs::write(&real, "{}").unwrap();
+    let mut state = motor();
+    state.shell.recent.push(real.clone());
+    state.shell.recent.push(dir.join("gone.c2mproj"));
+    state.shell.recent_open = true;
+    let mut rt = runtime_with(state);
+    for i in 1..=30 {
+        rt.frame(f64::from(i) / 60.0 + 1.0);
+    }
+    let json = rt.accessibility_json().to_string();
+    assert!(json.contains("Not found:") && json.contains("gone"));
+    click(&mut rt, "recent-remove-0");
+    assert_eq!(rt.state.shell.recent.paths, vec![real]);
+    std::fs::remove_dir_all(dir).unwrap();
+}

@@ -144,7 +144,11 @@ impl AppState {
         self.start(
             "Importing model",
             move |client| client.import_step(&service_path),
-            move |state, summary| state.finish_import(summary),
+            move |state, summary| {
+                state.finish_import(summary);
+                state.shell.project_path = None;
+                state.mark_clean();
+            },
         );
     }
 
@@ -367,7 +371,9 @@ impl AppState {
                 } else {
                     state.shell.log(Severity::Info, "Project opened.");
                 }
+                state.shell.push_recent(path.clone());
                 state.shell.project_path = Some(path);
+                state.mark_clean();
             },
         );
     }

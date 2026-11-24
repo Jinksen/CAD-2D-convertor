@@ -8,6 +8,7 @@ mod export;
 mod format;
 mod project;
 mod render3d;
+mod session;
 mod state;
 mod tasks;
 mod ui;

@@ -64,6 +64,12 @@ pub fn toolbar(s: &AppState, t: &Theme, k: &Kit) -> El {
             &[],
         ),
         tip(
+            button(k, "recent-projects", "Recent…", true)
+                .on_press(|s: &mut AppState| s.shell.recent_open = true),
+            "Recent projects",
+            &[],
+        ),
+        tip(
             button(k, "save-project", "Save", has_model)
                 .on_press_tx(|s: &mut AppState, tx: &mut Tx| save_project_dialog(s, tx, false)),
             "Save the project (Shift adds Save as)",

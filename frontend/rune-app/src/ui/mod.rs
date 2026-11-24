@@ -12,6 +12,7 @@ mod regions;
 mod ribbon;
 mod section;
 mod section_view;
+mod session;
 mod settings;
 mod shell;
 mod splitter;
@@ -25,6 +26,7 @@ use rune::{Color, Cx, El, ScrollSpec, col, el, oklch, row, text};
 use rune_kit::{Button, ControlSize, Kit, PaletteSeed, SegmentedControl, scroll_bar};
 
 use crate::api::dto::Severity;
+use crate::session::Pending;
 use crate::state::AppState;
 
 /// Kit tokens derived from the app's neutral theme, with small radii.
@@ -51,20 +53,21 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .child(panels::workspace(s, &t, &k))
         .child(messages::messages(s, &t, &k))
         .child(messages::status_bar(s, &t))
-        .on_drop_files(|s: &mut AppState, files, _| match files.first() {
+        .on_drop_files(|s: &mut AppState, files, tx| match files.first() {
             Some(path)
                 if path
                     .extension()
                     .is_some_and(|e| e.eq_ignore_ascii_case("c2mproj")) =>
             {
-                s.open_project(path.clone())
+                s.guard(Pending::OpenProject(path.clone()), tx)
             }
-            Some(path) => s.open_step(path.clone()),
+            Some(path) => s.guard(Pending::OpenModel(path.clone()), tx),
             None => {}
         });
     let mut overlays = shell::toasts(s, &k);
     overlays.extend(tree_menu::overlay(s, &k));
     overlays.extend(settings::overlay(s, &t, &k));
+    overlays.extend(session::overlay(s, &t, &k));
     rune_kit::root(base, overlays)
 }
 

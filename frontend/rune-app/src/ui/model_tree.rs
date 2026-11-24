@@ -420,13 +420,13 @@ fn step_form(s: &AppState, k: &Kit) -> El {
         .child(
             row()
                 .gap(space::S1)
-                .child(button(k, "import-path", "Import model", idle).on_press(
-                    |s: &mut AppState| {
+                .child(button(k, "import-path", "Import model", idle).on_press_tx(
+                    |s: &mut AppState, tx: &mut rune::Tx| {
                         let path = s.shell.step_path.text.trim().to_owned();
                         if path.is_empty() {
                             s.shell.log(Severity::Error, "Enter a model path.");
                         } else {
-                            s.open_step(PathBuf::from(path));
+                            s.guard(crate::session::Pending::OpenModel(PathBuf::from(path)), tx);
                         }
                     },
                 ))

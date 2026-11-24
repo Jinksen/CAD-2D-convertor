@@ -49,6 +49,12 @@ Export uses the Export settings (layers, colours, formats, default folder, ZIP o
 
 The Section pane has a collapsed **Advanced tolerances** block with the three validation overrides of the section request: small region (1e-8 to 1 mm2, default 1e-4), sliver ratio (1e-6 to 0.05, default 5e-4) and join distance (1e-6 to 1e-3 mm, default 1e-5). The bounds are shown under each field; Enter or Compute checks the entry, and an out-of-range or non-numeric value is rejected inline and blocks Compute until fixed. Empty means the default. A non-default value marks the block "(modified)" and the field with `*`, is saved in the project (`tolerance`) and is sent only when set. Changing it makes the shown section stale.
 
+## Unsaved changes and recent projects
+
+The window title reads `* name - CAD2Maxwell` while the session differs from the project text at the last open or save, so undoing a change clears the marker. Opening a model or project (dialog, drop, recent list) and Ctrl+Q ask first: **Save**, **Discard changes** or **Cancel**. Save writes to the project path, or asks for one, and continues only when the save succeeded. The prompt can be turned off in Settings, General. The window's own close button cannot be intercepted by the pinned Rune revision, so closing the window with unsaved changes keeps the recovery file (see below) instead of asking.
+
+**Recent...** in the File group opens the list (newest first, count from Settings, stored in the preferences file). Missing files show `Not found` with Open disabled and can be removed.
+
 ## Properties pane
 
 The right pane shows exactly one titled context, chosen by the tree selection: `Section XY`, `Body Rotor`, `Group North poles` or `Model motor.step`. Section statistics sit under the Section context and in the status bar. Long values wrap and group members are listed one per line instead of being truncated.

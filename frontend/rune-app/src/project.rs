@@ -168,7 +168,9 @@ impl AppState {
             Ok(()) => {
                 let text = format!("Project saved to {}", path.display());
                 self.shell.notify("Project saved", text);
+                self.shell.push_recent(path.clone());
                 self.shell.project_path = Some(path);
+                self.mark_clean();
             }
             Err(error) => self.shell.log(Severity::Error, error),
         }

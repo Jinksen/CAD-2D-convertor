@@ -4,6 +4,7 @@ use rune::{El, FileDialogOptions, Key, KeyEvent, Tx};
 use rune_kit::{Kit, Toast, ToastRegion};
 
 use crate::api::dto::Severity;
+use crate::session::Pending;
 use crate::state::preview::ViewportMode;
 use crate::state::section::PlaneKind;
 use crate::state::{AppState, now_ms};
@@ -20,8 +21,8 @@ fn dialog(title: &str, file_name: Option<&str>) -> FileDialogOptions {
 
 pub fn open_step_dialog(_: &mut AppState, tx: &mut Tx) {
     let options = dialog("Open model", None).filter("CAD files", &crate::tasks::MODEL_EXTENSIONS);
-    tx.open_file(options, |s: &mut AppState, result, _| match result {
-        Ok(Some(path)) => s.open_step(path),
+    tx.open_file(options, |s: &mut AppState, result, tx| match result {
+        Ok(Some(path)) => s.guard(Pending::OpenModel(path), tx),
         Ok(None) => {}
         Err(error) => s.shell.log(Severity::Error, error.to_string()),
     });
@@ -29,8 +30,8 @@ pub fn open_step_dialog(_: &mut AppState, tx: &mut Tx) {
 
 pub(super) fn open_project_dialog(_: &mut AppState, tx: &mut Tx) {
     let options = dialog("Open project", None).filter("CAD2Maxwell project", &["c2mproj"]);
-    tx.open_file(options, |s: &mut AppState, result, _| match result {
-        Ok(Some(path)) => s.open_project(path),
+    tx.open_file(options, |s: &mut AppState, result, tx| match result {
+        Ok(Some(path)) => s.guard(Pending::OpenProject(path), tx),
         Ok(None) => {}
         Err(error) => s.shell.log(Severity::Error, error.to_string()),
     });
@@ -123,6 +124,7 @@ pub fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
                 }
             }
             Key::Command(',') => s.shell.show_settings = true,
+            Key::Command('q') => s.guard(Pending::Quit, tx),
             Key::Command('s') => save_project_dialog(s, tx, ev.mods.shift),
             Key::Command('z') if !ev.mods.shift => s.section.undo(),
             Key::Command('z' | 'y') => s.section.redo(),
@@ -178,6 +180,11 @@ pub fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
 
 /// While an operation runs, redraw once a second so its elapsed time counts up; toasts expire.
 pub fn poll(s: &mut AppState, _: f64, tx: &mut Tx) -> bool {
+    let title = s.window_title();
+    if title != s.shell.title {
+        tx.set_title(title.clone());
+        s.shell.title = title;
+    }
     let mut changed = s.shell.busy.is_some() | s.ensure_regions();
     if changed {
         tx.wake_after(std::time::Duration::from_secs(1));
