@@ -1,27 +1,19 @@
 //! Model tree (imported bodies, filter, visibility) and the selected body's properties.
 
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use rune::tok::{Theme, space, type_};
-use rune::{Color, El, Key, col, el, row, text};
+use rune::{El, Key, col, row, text};
+use rune_kit::glyphs;
 use rune_kit::{Kit, TextInput};
 
-use super::groups::{self, folder_rows, group_rows, indent, new_group_form};
+use super::groups::{self, folder_rows, group_rows, new_group_form};
 use super::shell::open_step_dialog;
-use super::{TREE_WIDTH, button, heading, label_value, rule, scroller, selected};
+use super::tree_row::{Glyph, Node, row_el};
+use super::{TREE_WIDTH, button, heading, icons, label_value, rule, scroller};
 use crate::api::dto::{ImportComponent, Severity};
 use crate::state::AppState;
-
-fn swatch(color: Option<[u8; 3]>, t: &Theme) -> El {
-    let fill = color.map_or(t.control_off, |[r, g, b]| {
-        rune::color::hex(&format!("#{r:02x}{g:02x}{b:02x}")).unwrap_or(t.control_off)
-    });
-    el().size(10.0, 10.0)
-        .radius(2.0)
-        .fill(fill)
-        .border(1.0, t.separator)
-        .a11y_hidden()
-}
 
 pub(super) fn body_row(
     s: &AppState,
@@ -31,79 +23,43 @@ pub(super) fn body_row(
     duplicate: bool,
     depth: usize,
 ) -> El {
-    let on_row = s.model.selected.as_deref() == Some(body.id.as_str())
-        && !s.model.section_selected
+    let m = &s.model;
+    let on = m.selected.as_deref() == Some(body.id.as_str())
+        && !m.section_selected
         && !s.shell.show_prefs;
-    let hidden = s.model.hidden.contains(&body.id);
+    let hidden = m.hidden.contains(&body.id);
     let (select_id, eye_id) = (body.id.clone(), body.id.clone());
-    let name_color = if hidden { t.text_secondary } else { t.text };
-    let mut name = row().grow(1.0).gap(space::S1).child(
-        text(&body.display_name)
-            .font(type_::BODY)
-            .color(name_color)
-            .truncate(),
+    let mut n = Node::new(
+        format!("body-{}", body.id),
+        &body.display_name,
+        &icons::BODY,
     );
-    let label = if duplicate {
-        name = name.child(
-            text(&body.export_name)
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .truncate(),
-        );
+    n.aria = if duplicate {
         format!("{} {}", body.display_name, body.export_name)
     } else {
         body.display_name.clone()
     };
-    row()
-        .key(format!("body-{}", body.id))
-        .role("button")
-        .label(label)
-        .checked(on_row)
-        .focusable(true)
-        .w_full()
-        .gap(space::S2)
-        .pl(indent(depth))
-        .pr(space::S2)
-        .py(3.0)
-        .items_center()
-        .fill(if on_row {
-            selected(k)
-        } else {
-            Color::TRANSPARENT
-        })
-        .hover(t.hover)
-        .on_press(move |s: &mut AppState| {
-            s.shell.show_prefs = false;
-            s.model.select(Some(select_id.clone()))
-        })
-        .child(swatch(body.source_color, t))
-        .child(name)
-        .child(
-            text(if hidden { "hidden" } else { "shown" })
-                .key(format!("eye-{}", body.id))
-                .role("button")
-                .label(if hidden { "Show body" } else { "Hide body" })
-                .focusable(true)
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .on_press(move |s: &mut AppState| s.model.toggle_hidden(&eye_id)),
-        )
-}
-
-/// A top-level tree node (model file, Section).
-fn node(t: &Theme, k: &Kit, key: &str, label: &str, on: bool) -> El {
-    row()
-        .key(key)
-        .role("button")
-        .label(label)
-        .checked(on)
-        .focusable(true)
-        .w_full()
-        .px(space::S2)
-        .py(3.0)
-        .fill(if on { selected(k) } else { Color::TRANSPARENT })
-        .hover(t.hover)
-        .child(text(label).font(type_::BODY).color(t.text).truncate())
+    n.extra = duplicate.then(|| body.export_name.clone());
+    (n.depth, n.swatch, n.on, n.dim) = (depth, Some(body.source_color), on, hidden);
+    n.status = if hidden {
+        Some("hidden")
+    } else if m.isolated {
+        Some("isolated")
+    } else {
+        None
+    };
+    n.eye = Some((
+        Glyph {
+            key: format!("eye-{}", body.id),
+            label: if hidden { "Show body" } else { "Hide body" }.into(),
+            act: Rc::new(move |s: &mut AppState| s.model.toggle_hidden(&eye_id)),
+        },
+        hidden,
+    ));
+    row_el(n, t, k).on_press(move |s: &mut AppState| {
+        s.shell.show_prefs = false;
+        s.model.select(Some(select_id.clone()))
+    })
 }
 
 /// "XY, z = 37.500 mm": the section plane and offset as the Section node shows them.
@@ -186,38 +142,50 @@ pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
     let file = imported.path.rsplit(['\\', '/']).next().unwrap_or("");
     let m = &s.model;
     let model_on = m.selected.is_none() && m.selected_group.is_none() && !m.section_selected;
+    let model_open = !m.is_collapsed("model");
+    let bodies_open = !m.is_collapsed("bodies");
+    let mut file_node = Node::new("node-model", file, &glyphs::FILE);
+    (file_node.open, file_node.on) = (Some(model_open), model_on && !s.shell.show_prefs);
+    file_node.chevron_act = Some(Glyph {
+        key: "model-toggle".into(),
+        label: if model_open {
+            "Collapse model"
+        } else {
+            "Expand model"
+        }
+        .into(),
+        act: Rc::new(|s: &mut AppState| s.model.toggle_collapsed("model")),
+    });
     let mut rows = col()
         .w_full()
-        .child(
-            node(t, k, "node-model", file, model_on).on_press(|s: &mut AppState| {
-                s.shell.show_prefs = false;
-                s.model.select(None)
-            }),
-        )
-        .child(
-            node(
-                t,
-                k,
-                "node-section",
-                &section_label(s),
-                m.section_selected && !s.shell.show_prefs,
-            )
-            .pl(indent(1))
-            .on_press(|s: &mut AppState| {
-                s.shell.show_prefs = false;
-                s.model.select_section()
-            }),
-        )
-        .child(
-            text(format!("Bodies ({count})"))
-                .key("bodies-heading")
-                .font(type_::SECTION)
-                .color(t.text_secondary)
-                .pl(indent(1))
-                .pt(space::S2)
-                .pb(space::S1),
-        );
-    rows = if shown == 0 {
+        .child(row_el(file_node, t, k).on_press(|s: &mut AppState| {
+            s.shell.show_prefs = false;
+            s.model.select(None)
+        }));
+    if !model_open {
+        return panel
+            .child(filter_field(s, k))
+            .child(rule(t))
+            .child(scroller(k, "tree-scroll", rows));
+    }
+    let mut sec = Node::new("node-section", section_label(s), &icons::SECTION);
+    (sec.depth, sec.on) = (1, m.section_selected && !s.shell.show_prefs);
+    sec.aria = format!("Section {}", sec.name);
+    rows = rows.child(row_el(sec, t, k).on_press(|s: &mut AppState| {
+        s.shell.show_prefs = false;
+        s.model.select_section()
+    }));
+    let mut head = Node::new(
+        "bodies-heading",
+        format!("Bodies ({count})"),
+        &icons::ASSEMBLY,
+    );
+    (head.depth, head.open) = (1, Some(bodies_open));
+    rows = rows
+        .child(row_el(head, t, k).on_press(|s: &mut AppState| s.model.toggle_collapsed("bodies")));
+    rows = if !bodies_open {
+        rows
+    } else if shown == 0 {
         rows.child(
             text("No bodies match this filter.")
                 .key("no-match")
@@ -227,7 +195,7 @@ pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
                 .padding(space::S2),
         )
     } else {
-        folder_rows(s, t, k, &visible, 1, &dup, rows)
+        folder_rows(s, t, k, &visible, 2, &dup, rows)
     };
     let rows = group_rows(s, t, k, &dup, rows);
     panel

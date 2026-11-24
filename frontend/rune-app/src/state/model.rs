@@ -29,6 +29,8 @@ pub struct ModelState {
     pub selected_group: Option<String>,
     /// The Section node is the tree selection; `selected` keeps the last body for "align".
     pub section_selected: bool,
+    /// The hidden set came from Isolate, so visible rows are labelled "isolated".
+    pub isolated: bool,
     /// Collapsed assembly folders (`Folder::key`) and groups (`group_key`).
     pub collapsed: BTreeSet<String>,
     /// Name fields of "New group" and of the selected group's rename.
@@ -84,6 +86,7 @@ impl ModelState {
     }
 
     pub fn toggle_hidden(&mut self, id: &str) {
+        self.isolated = false;
         if !self.hidden.remove(id) {
             self.hidden.insert(id.to_owned());
         }
@@ -103,8 +106,9 @@ impl ModelState {
             .filter(|c| !ids.contains(&c.id))
             .map(|c| c.id.clone())
             .collect();
-        let isolated = !others.is_empty() && others == self.hidden;
-        self.hidden = if isolated { BTreeSet::new() } else { others };
+        let restore = !others.is_empty() && others == self.hidden;
+        self.isolated = !restore && !others.is_empty();
+        self.hidden = if restore { BTreeSet::new() } else { others };
     }
 
     pub fn toggle_collapsed(&mut self, key: &str) {
@@ -200,6 +204,7 @@ impl ModelState {
     /// Hides every member, or shows them all when the group is already hidden.
     pub fn toggle_group_hidden(&mut self, name: &str) {
         let hidden = self.group_hidden(name);
+        self.isolated = false;
         let Some(group) = self.group(name) else {
             return;
         };

@@ -334,3 +334,23 @@ fn the_section_node_sits_under_the_model_and_shows_plane_and_offset() {
     press(&mut rt, text_key("2"), Mods::default());
     assert!(dump(&rt).contains("XZ, y = 10.000\u{a0}mm"));
 }
+
+#[test]
+fn tree_rows_have_one_height_and_status_is_text_not_colour() {
+    let mut rt = runtime_with(motor());
+    let y = |rt: &Runtime<AppState>, key: &str| rt.find(key).expect(key).1;
+    let step = y(&rt, "node-section") - y(&rt, "node-model");
+    assert_eq!(step, super::tree_row::ROW_H);
+    assert_eq!(y(&rt, "bodies-heading") - y(&rt, "node-section"), step);
+    click(&mut rt, "eye-body-1");
+    assert!(dump(&rt).contains("Show body"));
+    assert!(dump(&rt).contains("hidden"), "hidden rows carry a text label");
+    click(&mut rt, "eye-body-1");
+    click(&mut rt, "body-body-2");
+    press(&mut rt, text_key("i"), Mods::default());
+    assert!(rt.state.model.isolated);
+    assert!(dump(&rt).contains("isolated"));
+    // Chevrons collapse the Bodies node.
+    click(&mut rt, "bodies-heading");
+    assert!(rt.find("body-body-2").is_none());
+}

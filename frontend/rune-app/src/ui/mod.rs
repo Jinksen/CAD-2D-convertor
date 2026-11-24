@@ -2,11 +2,13 @@
 //! messages below, status bar at the bottom. Each region lives in its own module.
 
 mod groups;
+mod icons;
 mod model_tree;
 mod preview;
 mod section;
 mod section_view;
 mod shell;
+mod tree_row;
 
 pub use shell::{on_key, poll};
 
