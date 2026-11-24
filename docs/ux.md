@@ -52,3 +52,7 @@ The panel is collapsed when it only holds info messages and opens on the next wa
 ## Side panels
 
 Drag the splitters between the model tree, the viewport and the properties pane to resize them; double-click a splitter or press the arrow keys on it (focused) to reset or nudge. Each side panel collapses to a thin strip with its heading button. Widths, collapsed state and the messages height are stored in the Rune preferences file under `layout` and restored on start.
+
+## 2D view aids
+
+Holes in a region stay empty: the display fill bridges each hole into its outer ring, so what is behind shows through (the section data and DXF are untouched). The view has a scale bar in the display unit (bottom right), a cursor readout with x and y in the display unit plus the export name of the body under the pointer (bottom left), origin axes (red x, green y), an optional grid (Grid toggle in the 2D toolbar) and a legend of visible groups with the colour of their first colored member (top right).

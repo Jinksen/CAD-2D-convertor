@@ -15,23 +15,26 @@ use rune_kit::Kit;
 
 use super::button;
 use crate::api::dto::{SectionComponent, SectionResponse, SectionWire, Severity, WireRole};
+use crate::format::NumberFormat;
 use crate::state::AppState;
 use crate::state::section::Scene;
 use crate::state::section::camera::{self, Size, ViewBox};
-use crate::state::section::geometry::{self, inside, outline_color};
+use crate::state::section::geometry::{self, outline_color};
 
 const PAN_DRAG_PX: f32 = 3.0;
 /// Pointer tolerance for picking a curve, in pixels.
 const PICK_PX: f64 = 4.0;
 /// Wires smaller than this on screen are not drawn.
 const MIN_WIRE_PX: f64 = 0.3;
-/// Ear clipping is quadratic; longer polygons are stroked but not filled.
-const MAX_FILL_POINTS: usize = 3000;
-
 type P = [f64; 2];
 
 struct Look {
     dark: bool,
+    /// Grid lines, origin axes and scale bar ink.
+    faint: Color,
+    axis_x: Color,
+    axis_y: Color,
+    ink: Color,
     selected: Color,
     related: Color,
     default: Color,
@@ -46,6 +49,10 @@ impl Look {
         let dark = t.bg.luminance() < 0.5;
         Look {
             dark,
+            faint: t.text_secondary.alpha(0.18),
+            axis_x: rgb(if dark { [230, 100, 100] } else { [190, 40, 40] }).alpha(0.7),
+            axis_y: rgb(if dark { [100, 200, 120] } else { [30, 130, 60] }).alpha(0.7),
+            ink: t.text_secondary,
             selected: rgb(if dark { [98, 160, 234] } else { [26, 95, 180] }),
             related: rgb(if dark { [255, 163, 72] } else { [179, 92, 0] }),
             default: rgb(if dark {
@@ -139,36 +146,6 @@ fn draw_wires(comp: &SectionComponent, map: &Map, shown: [f64; 4]) -> Vec<Drawn>
     out
 }
 
-/// Each outer ring of a body with the holes inside it (smallest enclosing outer wins).
-fn fill_rings(wires: &[Drawn]) -> Vec<(Vec<P>, Vec<Vec<P>>)> {
-    let ring = |w: &Drawn| -> Vec<P> {
-        w.lines[0]
-            .iter()
-            .map(|p| [f64::from(p[0]), f64::from(p[1])])
-            .collect()
-    };
-    let closed = |role: WireRole| {
-        wires
-            .iter()
-            .filter(move |w| {
-                w.closed && w.role == Some(role) && w.lines[0].len() <= MAX_FILL_POINTS
-            })
-            .map(ring)
-    };
-    let mut out: Vec<(Vec<P>, Vec<Vec<P>>)> =
-        closed(WireRole::Outer).map(|o| (o, vec![])).collect();
-    for h in closed(WireRole::Hole) {
-        let owner = out
-            .iter_mut()
-            .filter(|(o, _)| inside(o, h[0]))
-            .min_by(|a, b| fill::area(&a.0).abs().total_cmp(&fill::area(&b.0).abs()));
-        if let Some((_, holes)) = owner {
-            holes.push(h);
-        }
-    }
-    out
-}
-
 /// What the painter needs to know about the shown section and its bodies.
 pub struct Paint<'a> {
     pub section: &'a SectionResponse,
@@ -180,6 +157,8 @@ pub struct Paint<'a> {
     /// Body under the pointer in the tree or this view: display highlight only.
     pub hover: Option<&'a str>,
     pub stale: bool,
+    pub grid: bool,
+    pub fmt: NumberFormat,
 }
 
 fn build_shape(p: &Paint, view: ViewBox, size: Size, look: &Look) -> Shape {
@@ -205,7 +184,7 @@ fn build_shape(p: &Paint, view: ViewBox, size: Size, look: &Look) -> Shape {
             (look.default, look.default)
         }
     };
-    let mut shape = Shape::new();
+    let mut shape = overlay::under(Shape::new(), &map, size, look, p.grid);
     if fills_ok {
         for &i in &p.scene.paint_order {
             let comp = &s.components[i];
@@ -214,7 +193,7 @@ fn build_shape(p: &Paint, view: ViewBox, size: Size, look: &Look) -> Shape {
                 continue;
             }
             let fill_color = base(&comp.component_id).0.alpha(0.28 * dim);
-            for (pts, holes) in fill_rings(&drawn[i]) {
+            for (pts, holes) in fill::rings(&drawn[i]) {
                 let cut: Vec<&[P]> = holes.iter().map(|h| h.as_slice()).collect();
                 if let Some(poly) = fill::with_holes(&pts, &cut) {
                     let poly: Vec<[f32; 2]> =
@@ -242,7 +221,7 @@ fn build_shape(p: &Paint, view: ViewBox, size: Size, look: &Look) -> Shape {
             }
         }
     }
-    shape
+    overlay::over(shape, &map, size, look, &p.fmt)
 }
 
 /// The body under a screen point: a curve within a few pixels, else the smallest region.
@@ -302,6 +281,8 @@ fn paint<'a>(
         related: s.model.related.as_deref(),
         hover: s.model.hover.as_deref(),
         stale: s.section.stats.is_none(),
+        grid: s.section.view.grid,
+        fmt: s.shell.number_format,
     }
 }
 
@@ -461,6 +442,11 @@ pub fn canvas(s: &AppState, t: &Theme, k: &Kit) -> El {
             button(k, "zoom-out", "−", true)
                 .on_press(|s: &mut AppState| s.section.zoom(1.25, None)),
         )
+        .child(
+            button(k, "toggle-grid", "Grid", true)
+                .checked(s.section.view.grid)
+                .on_press(|s: &mut AppState| s.section.view.grid = !s.section.view.grid),
+        )
         .child(note(status));
     let surface = draw(shape)
         .key("section-canvas")
@@ -499,24 +485,35 @@ pub fn canvas(s: &AppState, t: &Theme, k: &Kit) -> El {
         })
         .on_key(|s: &mut AppState, e: &KeyEvent, _| on_key(s, e))
         .on_pointer_move_local(|s: &mut AppState, e: PointerEvent, tx: &mut Tx| {
-            let id = body_at(s, [f64::from(e.x), f64::from(e.y)]);
+            let at = [f64::from(e.x), f64::from(e.y)];
+            s.section.view.cursor = s
+                .section
+                .camera()
+                .zip(s.section.view.size)
+                .map(|(v, size)| camera::screen_to_view(v, size, at))
+                .map(|w| [w[0], -w[1]]);
+            let id = body_at(s, at);
             hover_from_view(s, id, tx);
         })
         .on_hover_change(|s: &mut AppState, over, _| {
             if !over {
+                s.section.view.cursor = None;
                 s.model.hover = None;
             }
         })
         .pointer_buttons([PointerButton::Middle])
         .on_drag(on_drag);
-    col()
+    let map = view.zip(size).map(|(v, sz)| Map::new(v, sz));
+    let area = col()
         .w_full()
         .grow(1.0)
         .min_h(0.0)
-        .child(tools)
         .child(surface)
+        .children(overlay::labels(s, t, map.as_ref(), size));
+    col().w_full().grow(1.0).min_h(0.0).child(tools).child(area)
 }
 
 mod fill;
+mod overlay;
 #[cfg(test)]
 mod tests;

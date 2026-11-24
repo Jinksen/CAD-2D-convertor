@@ -2,9 +2,43 @@
 //! zero-width bridge, giving one weakly simple polygon whose interior excludes the hole.
 //! Display tessellation only; the section data and the export are never touched.
 
+use super::Drawn;
+use crate::api::dto::WireRole;
 use crate::state::section::geometry::inside;
 
 type P = [f64; 2];
+/// Ear clipping is quadratic; longer polygons are stroked but not filled.
+const MAX_FILL_POINTS: usize = 3000;
+
+/// Each outer ring of a body with the holes inside it (smallest enclosing outer wins).
+pub fn rings(wires: &[Drawn]) -> Vec<(Vec<P>, Vec<Vec<P>>)> {
+    let ring = |w: &Drawn| -> Vec<P> {
+        w.lines[0]
+            .iter()
+            .map(|p| [f64::from(p[0]), f64::from(p[1])])
+            .collect()
+    };
+    let closed = |role: WireRole| {
+        wires
+            .iter()
+            .filter(move |w| {
+                w.closed && w.role == Some(role) && w.lines[0].len() <= MAX_FILL_POINTS
+            })
+            .map(ring)
+    };
+    let mut out: Vec<(Vec<P>, Vec<Vec<P>>)> =
+        closed(WireRole::Outer).map(|o| (o, vec![])).collect();
+    for h in closed(WireRole::Hole) {
+        let owner = out
+            .iter_mut()
+            .filter(|(o, _)| inside(o, h[0]))
+            .min_by(|a, b| area(&a.0).abs().total_cmp(&area(&b.0).abs()));
+        if let Some((_, holes)) = owner {
+            holes.push(h);
+        }
+    }
+    out
+}
 
 /// Shoelace area, positive for counter-clockwise.
 pub fn area(poly: &[P]) -> f64 {

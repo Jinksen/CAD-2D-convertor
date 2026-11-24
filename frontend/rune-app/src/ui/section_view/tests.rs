@@ -82,6 +82,14 @@ fn synthetic(curves: usize) -> SectionResponse {
     section_of(comps)
 }
 
+/// Strokes of the drawing aids: the scale bar (3) and each origin axis in view.
+fn aid_strokes(s: &AppState) -> usize {
+    let size = s.section.view.size.unwrap();
+    let shown = visible_box(&Map::new(view_of(s), size), size, 0.0);
+    3 + usize::from(shown[0] <= 0.0 && shown[2] >= 0.0)
+        + usize::from(shown[1] <= 0.0 && shown[3] >= 0.0)
+}
+
 fn state_with(section: SectionResponse) -> AppState {
     let mut s = AppState::default();
     s.section.stats = Some(SectionStats::of(&section));
@@ -143,6 +151,8 @@ fn paint_of<'a>(
         hover: None,
         related: None,
         stale: false,
+        grid: s.section.view.grid,
+        fmt: crate::format::NumberFormat::default(),
     }
 }
 
@@ -312,7 +322,7 @@ fn holes_are_bridged_out_of_the_fill_and_errors_suppress_fills_but_not_outlines(
     // Fills: the square with its hole bridged out, and the second square; strokes in both cases.
     assert_eq!(filled.matches("Fill {").count(), 2);
     assert_eq!(outlined.matches("Fill {").count(), 0);
-    assert_eq!(outlined.matches("Stroke {").count(), 3);
+    assert_eq!(outlined.matches("Stroke {").count(), 3 + aid_strokes(&s));
 }
 
 #[test]
@@ -328,7 +338,7 @@ fn off_screen_wires_are_culled() {
             s.section.view.size.unwrap(),
             &look,
         );
-        format!("{shape:?}").matches("Stroke {").count()
+        format!("{shape:?}").matches("Stroke {").count() - aid_strokes(s)
     };
     assert_eq!(count(&s), 3);
     // Zoom in on body b: body a (and its hole) are gone.
@@ -413,4 +423,91 @@ fn bench_real_sections() {
         );
         report(&format!("real-{kind:?}"), section);
     }
+}
+
+fn strokes(s: &AppState) -> usize {
+    let scene = s.section.scene().unwrap();
+    let (hidden, none) = (|_: &str| false, |_: &str| None);
+    let look = Look::of(&rune::tok::theme(false));
+    let shape = build_shape(
+        &paint_of(s, &scene, &hidden, &none),
+        view_of(s),
+        s.section.view.size.unwrap(),
+        &look,
+    );
+    format!("{shape:?}").matches("Stroke {").count()
+}
+
+#[test]
+fn the_grid_toggle_adds_lines_and_the_scale_bar_is_always_drawn() {
+    let mut s = state_with(two_bodies());
+    let off = strokes(&s);
+    s.section.view.grid = true;
+    assert!(strokes(&s) > off + 4, "grid lines under the geometry");
+    let mut rt = runtime(state_with(two_bodies()));
+    let (x, y) = rt.find("toggle-grid").expect("grid button");
+    rt.pointer_down(x, y);
+    rt.pointer_up(x, y);
+    rt.frame(1.0 / 60.0);
+    assert!(rt.state.section.view.grid);
+    assert!(rt.find("section-scale").is_some());
+}
+
+#[test]
+fn the_readout_shows_cursor_coordinates_in_the_display_unit_and_the_hovered_name() {
+    let mut s = state_with(two_bodies());
+    s.model
+        .set_imported(crate::state::model::tests::summary(&["a", "b"]));
+    s.shell.number_format.length_unit = crate::format::LengthUnit::Cm;
+    assert!(overlay::readout(&s).is_none(), "no pointer, no readout");
+    s.section.view.cursor = Some([20.0, 5.0]);
+    let text = overlay::readout(&s).unwrap();
+    assert!(
+        text.contains("2.000\u{a0}cm") && text.contains("0.500\u{a0}cm"),
+        "{text}"
+    );
+    s.model.hover = Some("b".into());
+    assert!(overlay::readout(&s).unwrap().ends_with("b_1"));
+}
+
+#[test]
+fn pointer_moves_track_the_cursor_in_section_coordinates() {
+    let mut rt = runtime(state_with(two_bodies()));
+    let (cx, cy) = rt.find("section-canvas").expect("canvas");
+    let size = rt.state.section.view.size.unwrap();
+    let origin = (cx - size.width as f32 / 2.0, cy - size.height as f32 / 2.0);
+    let at = Map::new(view_of(&rt.state), size).px([22.0, 2.0]);
+    rt.pointer_move(origin.0 + at[0], origin.1 + at[1]);
+    rt.frame(1.0 / 60.0);
+    let c = rt.state.section.view.cursor.expect("cursor");
+    assert!(
+        (c[0] - 22.0).abs() < 0.1 && (c[1] - 2.0).abs() < 0.1,
+        "{c:?}"
+    );
+    assert!(rt.find("section-readout").is_some());
+}
+
+#[test]
+fn the_legend_lists_visible_groups_with_their_color() {
+    let mut s = state_with(two_bodies());
+    s.model
+        .set_imported(crate::state::model::tests::summary(&["a", "b"]));
+    s.model.groups = vec![
+        crate::state::model::BodyGroup {
+            name: "Stator".into(),
+            component_ids: vec!["a".into()],
+        },
+        crate::state::model::BodyGroup {
+            name: "Rotor".into(),
+            component_ids: vec!["b".into()],
+        },
+    ];
+    assert_eq!(overlay::legend(&s).len(), 2);
+    assert_eq!(
+        overlay::legend(&s)[0],
+        ("Stator".to_string(), Some([255, 0, 0]))
+    );
+    s.model.toggle_group_hidden("Rotor");
+    let names: Vec<_> = overlay::legend(&s).into_iter().map(|e| e.0).collect();
+    assert_eq!(names, ["Stator"]);
 }

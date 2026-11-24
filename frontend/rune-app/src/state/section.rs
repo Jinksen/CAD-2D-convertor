@@ -108,6 +108,10 @@ pub struct View2d {
     camera: Option<(String, ViewBox)>,
     /// Camera at the start of a drag.
     pub drag_origin: Option<ViewBox>,
+    /// Optional grid in the 2D view.
+    pub grid: bool,
+    /// Pointer in section coordinates (mm, y up) while over the view.
+    pub cursor: Option<[f64; 2]>,
     scene: RefCell<Option<Rc<Scene>>>,
 }
 
