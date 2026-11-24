@@ -3,7 +3,8 @@
 
 use rune::tok::{Theme, space, type_};
 use rune::{
-    Drag, El, Key, KeyEvent, Phase, PointerButton, SurfaceFit, Tx, WheelEvent, col, row, text,
+    Drag, El, Key, KeyEvent, Phase, PointerButton, PointerEvent, SurfaceFit, Tx, WheelEvent, col,
+    row, text,
 };
 
 use rune_kit::Kit;
@@ -142,6 +143,18 @@ fn canvas(s: &AppState, t: &Theme) -> El {
                 })
                 .focusable(true)
                 .on_key(|s: &mut AppState, e: &KeyEvent, _| on_key(s, e))
+                .on_pointer_move_local(|s: &mut AppState, e: PointerEvent, tx: &mut Tx| {
+                    let (w, h) = s.preview.viewport;
+                    let id = (w > 0.0 && h > 0.0)
+                        .then(|| body_at(s, e.x / w, e.y / h))
+                        .flatten();
+                    super::section_view::hover_from_view(s, id, tx);
+                })
+                .on_hover_change(|s: &mut AppState, over, _| {
+                    if !over {
+                        s.model.hover = None;
+                    }
+                })
                 .pointer_buttons([PointerButton::Middle, PointerButton::Secondary])
                 .on_drag(drag);
         }
@@ -194,21 +207,23 @@ fn drag(s: &mut AppState, d: &mut Drag, tx: &mut Tx) {
     }
 }
 
+/// The body under the point given as a fraction of the viewport.
+fn body_at(s: &AppState, fx: f32, fy: f32) -> Option<String> {
+    let frame = s.preview.frame.borrow();
+    let (x, y) = (
+        (fx * frame.width as f32) as usize,
+        (fy * frame.height as f32) as usize,
+    );
+    let body = frame.pick(x, y)?;
+    let mesh = s.preview.mesh.as_ref()?;
+    mesh.components
+        .get(body as usize)
+        .map(|c| c.component_id.clone())
+}
+
 /// Selects the body under the point given as a fraction of the viewport.
 fn pick(s: &mut AppState, fx: f32, fy: f32) {
-    let id = {
-        let frame = s.preview.frame.borrow();
-        let (x, y) = (
-            (fx * frame.width as f32) as usize,
-            (fy * frame.height as f32) as usize,
-        );
-        let Some(body) = frame.pick(x, y) else { return };
-        let Some(mesh) = &s.preview.mesh else { return };
-        mesh.components
-            .get(body as usize)
-            .map(|c| c.component_id.clone())
-    };
-    if let Some(id) = id {
+    if let Some(id) = body_at(s, fx, fy) {
         s.model.select(Some(id));
     }
 }
@@ -241,6 +256,7 @@ fn draw(s: &AppState, t: &Theme) {
         camera: p.camera,
         hidden: s.model.hidden.clone(),
         selected: s.model.selected.clone(),
+        hover: s.model.hover.clone(),
         guide,
         background: [t.bg.r, t.bg.g, t.bg.b].map(|c| (c * 255.0).round() as u8),
     };
@@ -262,6 +278,8 @@ fn draw(s: &AppState, t: &Theme) {
             color: c.color.unwrap_or(DEFAULT_COLOR).map(f32::from),
             emissive: if key.selected.as_deref() == Some(c.component_id.as_str()) {
                 SELECTED_TINT
+            } else if key.hover.as_deref() == Some(c.component_id.as_str()) {
+                SELECTED_TINT.map(|v| v * 0.5)
             } else {
                 [0.0; 3]
             },

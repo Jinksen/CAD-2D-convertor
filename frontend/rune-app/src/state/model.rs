@@ -42,6 +42,8 @@ pub struct ModelState {
     pub renaming: bool,
     /// Group row under a body being dragged.
     pub drop_target: Option<String>,
+    /// Body under the pointer in the tree or a viewport; display highlight only.
+    pub hover: Option<String>,
     /// Collapsed assembly folders (`Folder::key`) and groups (`group_key`).
     pub collapsed: BTreeSet<String>,
     /// Name fields of "New group" and of the selected group's rename.

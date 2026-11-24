@@ -7,8 +7,8 @@
 
 use rune::tok::{Theme, space, type_};
 use rune::{
-    Color, Drag, El, Key, KeyEvent, LineCap, MagnifyEvent, Phase, PointerButton, Shape, Tx,
-    WheelEvent, canvas as draw, col, row, text,
+    Color, Drag, El, Key, KeyEvent, LineCap, MagnifyEvent, Phase, PointerButton, PointerEvent,
+    Shape, Tx, WheelEvent, canvas as draw, col, row, text,
 };
 
 use rune_kit::Kit;
@@ -149,6 +149,8 @@ pub struct Paint<'a> {
     pub color: &'a dyn Fn(&str) -> Option<[u8; 3]>,
     pub selected: Option<&'a str>,
     pub related: Option<&'a str>,
+    /// Body under the pointer in the tree or this view: display highlight only.
+    pub hover: Option<&'a str>,
     pub stale: bool,
 }
 
@@ -167,7 +169,7 @@ fn build_shape(p: &Paint, view: ViewBox, size: Size, look: &Look) -> Shape {
     let base = |id: &str| -> (Color, Color) {
         if p.selected == Some(id) {
             (look.selected, look.selected)
-        } else if p.related == Some(id) {
+        } else if p.related == Some(id) || p.hover == Some(id) {
             (look.related, look.related)
         } else if let Some(c) = (p.color)(id) {
             (rgb(c), rgb(outline_color(c, look.dark)))
@@ -199,7 +201,10 @@ fn build_shape(p: &Paint, view: ViewBox, size: Size, look: &Look) -> Shape {
         }
     }
     // Strokes: ordinary bodies first, then the related and selected ones on top.
-    let rank = |id: &str| u8::from(p.related == Some(id)) + 2 * u8::from(p.selected == Some(id));
+    let rank = |id: &str| {
+        u8::from(p.related == Some(id) || p.hover == Some(id))
+            + 2 * u8::from(p.selected == Some(id))
+    };
     let mut order: Vec<usize> = (0..s.components.len()).collect();
     order.sort_by_key(|&i| rank(&s.components[i].component_id));
     for i in order {
@@ -271,6 +276,7 @@ fn paint<'a>(
         color,
         selected: s.model.selected.as_deref(),
         related: s.model.related.as_deref(),
+        hover: s.model.hover.as_deref(),
         stale: s.section.stats.is_none(),
     }
 }
@@ -322,6 +328,26 @@ fn on_drag(s: &mut AppState, d: &mut Drag, tx: &mut Tx) {
                 click(s, [f64::from(d.x), f64::from(d.y)]);
             }
         }
+    }
+}
+
+/// The body under the pointer in the shown section.
+fn body_at(s: &AppState, at: P) -> Option<String> {
+    let (section, scene, view, size) = (
+        s.section.last.as_ref()?,
+        s.section.scene()?,
+        s.section.camera()?,
+        s.section.view.size?,
+    );
+    let hidden = |id: &str| s.model.hidden.contains(id);
+    let none = |_: &str| None;
+    pick(&paint(s, section, &scene, &hidden, &none), view, size, at)
+}
+
+/// Highlights the body in the tree too and scrolls its row into view.
+pub(super) fn hover_from_view(s: &mut AppState, id: Option<String>, tx: &mut Tx) {
+    if s.model.hover_body(id.clone()) {
+        tx.scroll_into_view(format!("body-{}", id.unwrap_or_default()));
     }
 }
 
@@ -448,6 +474,15 @@ pub fn canvas(s: &AppState, t: &Theme, k: &Kit) -> El {
             true
         })
         .on_key(|s: &mut AppState, e: &KeyEvent, _| on_key(s, e))
+        .on_pointer_move_local(|s: &mut AppState, e: PointerEvent, tx: &mut Tx| {
+            let id = body_at(s, [f64::from(e.x), f64::from(e.y)]);
+            hover_from_view(s, id, tx);
+        })
+        .on_hover_change(|s: &mut AppState, over, _| {
+            if !over {
+                s.model.hover = None;
+            }
+        })
         .pointer_buttons([PointerButton::Middle])
         .on_drag(on_drag);
     col()

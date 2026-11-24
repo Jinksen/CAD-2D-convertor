@@ -32,3 +32,7 @@ Rows share one primitive (`ui/tree_row.rs`): fixed 22 pt height, indent guide li
 - Up/Down move through the visible rows, Left collapses or goes to the parent, Right expands or goes to the first child, Enter opens the properties of the row.
 
 Rune has no element-to-element drop target, so the drag finds the group row from the pointer travel (all tree rows have the same height). Group zoom is not offered; Zoom to frames one body in both views.
+
+### Cross-highlight and filter
+
+Hovering a body row highlights the body in the 2D and 3D views, and hovering a body in either view highlights its row and scrolls it into view. Hover is display only and never changes the selection. The filter marks the matching part of each name, shows a match count and has a clear button. The tree header has Expand all and Collapse all.

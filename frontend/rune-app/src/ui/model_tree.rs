@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use rune::tok::{Theme, space, type_};
-use rune::{El, Key, col, row, text};
+use rune::{El, Key, col, icon, row, text};
 use rune_kit::glyphs;
 use rune_kit::{Kit, TextInput};
 
@@ -29,7 +29,8 @@ pub(super) fn body_row(
     let m = &s.model;
     let on = m.is_picked(&body.id) && !m.section_selected && !s.shell.show_prefs;
     let hidden = m.hidden.contains(&body.id);
-    let eye_id = body.id.clone();
+    let (eye_id, hover_id) = (body.id.clone(), body.id.clone());
+
     let (press_node, drag_node, menu_node) = (node.clone(), node.clone(), node);
     let mut n = Item::new(
         format!("body-{}", body.id),
@@ -43,6 +44,8 @@ pub(super) fn body_row(
     };
     n.extra = duplicate.then(|| body.export_name.clone());
     (n.depth, n.swatch, n.on, n.dim) = (depth, Some(body.source_color), on, hidden);
+    n.lit = m.hover.as_deref() == Some(body.id.as_str());
+    n.mark = filter_mark(&body.display_name, &m.filter.text);
     n.status = if hidden {
         Some("hidden")
     } else if m.isolated {
@@ -65,8 +68,25 @@ pub(super) fn body_row(
             s.model
                 .click_body(&press_node, mods.ctrl || mods.cmd, mods.shift)
         })
-        .on_drag(move |s: &mut AppState, d, _| super::tree_menu::drag_body(s, &drag_node, d));
+        .on_drag(move |s: &mut AppState, d, _| super::tree_menu::drag_body(s, &drag_node, d))
+        .on_hover_change(move |s: &mut AppState, over, _| {
+            if over {
+                s.model.hover = Some(hover_id.clone());
+            } else if s.model.hover.as_deref() == Some(hover_id.as_str()) {
+                s.model.hover = None;
+            }
+        });
     super::tree_menu::attach(row, menu_node)
+}
+
+/// Byte range of `name` matching the filter, when lowercasing keeps byte offsets.
+fn filter_mark(name: &str, filter: &str) -> Option<(usize, usize)> {
+    let needle = filter.trim().to_lowercase();
+    let lower = name.to_lowercase();
+    if needle.is_empty() || lower.len() != name.len() {
+        return None;
+    }
+    lower.find(&needle).map(|a| (a, a + needle.len()))
 }
 
 /// "XY, z = 37.500 mm": the section plane and offset as the Section node shows them.
@@ -87,7 +107,7 @@ fn section_label(s: &AppState) -> String {
     )
 }
 
-fn filter_field(s: &AppState, k: &Kit) -> El {
+fn filter_field(s: &AppState, k: &Kit, t: &Theme) -> El {
     let input = TextInput::new(&s.model.filter)
         .label("Filter bodies")
         .placeholder("Filter bodies (Ctrl+F)")
@@ -108,11 +128,56 @@ fn filter_field(s: &AppState, k: &Kit) -> El {
         })
         .build(k)
         .key("tree-filter");
-    row()
+    let mut r = row()
         .w_full()
         .px(space::S2)
         .py(space::S1)
-        .child(input.grow(1.0))
+        .gap(space::S1)
+        .items_center()
+        .child(input.grow(1.0));
+    if !s.model.filter.text.trim().is_empty() {
+        let n = s.model.visible_bodies().len();
+        r = r
+            .child(
+                text(if n == 1 {
+                    "1 match".to_string()
+                } else {
+                    format!("{n} matches")
+                })
+                .key("filter-count")
+                .role("status")
+                .font(type_::LABEL)
+                .color(t.text_secondary),
+            )
+            .child(
+                icon(&glyphs::CLOSE, 12.0)
+                    .key("filter-clear")
+                    .role("button")
+                    .label("Clear filter")
+                    .focusable(true)
+                    .color(t.text_secondary)
+                    .on_press(|s: &mut AppState| s.model.filter.clear()),
+            );
+    }
+    r
+}
+
+fn tree_tools(k: &Kit) -> El {
+    row()
+        .key("tree-tools")
+        .role("toolbar")
+        .label("Tree tools")
+        .w_full()
+        .px(space::S2)
+        .gap(space::S1)
+        .child(
+            button(k, "expand-all", "Expand all", true)
+                .on_press(|s: &mut AppState| s.model.expand_all()),
+        )
+        .child(
+            button(k, "collapse-all", "Collapse all", true)
+                .on_press(|s: &mut AppState| s.model.collapse_all()),
+        )
 }
 
 pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
@@ -171,7 +236,8 @@ pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
         }));
     if !model_open {
         return panel
-            .child(filter_field(s, k))
+            .child(tree_tools(k))
+            .child(filter_field(s, k, t))
             .child(rule(t))
             .child(scroller(k, "tree-scroll", rows));
     }
@@ -209,7 +275,8 @@ pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
     };
     let rows = group_rows(s, t, k, &dup, rows);
     panel
-        .child(filter_field(s, k))
+        .child(tree_tools(k))
+        .child(filter_field(s, k, t))
         .child(rule(t))
         .child(scroller(k, "tree-scroll", rows))
 }

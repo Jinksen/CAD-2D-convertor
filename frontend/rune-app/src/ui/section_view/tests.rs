@@ -140,6 +140,7 @@ fn paint_of<'a>(
         hidden,
         color: none,
         selected: None,
+        hover: None,
         related: None,
         stale: false,
     }
@@ -232,6 +233,23 @@ fn a_drag_pans_and_a_plain_click_selects_the_body_under_it() {
     rt.pointer_up(origin.0 + b[0], origin.1 + b[1]);
     rt.frame(1.0 / 60.0);
     assert_eq!(rt.state.model.selected.as_deref(), Some("b"));
+}
+
+#[test]
+fn hovering_a_body_in_the_2d_view_highlights_it_and_leaving_clears_it() {
+    let mut rt = runtime(state_with(two_bodies()));
+    let (cx, cy) = rt.find("section-canvas").expect("canvas");
+    let view = view_of(&rt.state);
+    let size = rt.state.section.view.size.unwrap();
+    let b = Map::new(view, size).px([22.0, 2.0]);
+    let origin = (cx - size.width as f32 / 2.0, cy - size.height as f32 / 2.0);
+    rt.pointer_move(origin.0 + b[0], origin.1 + b[1]);
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.state.model.hover.as_deref(), Some("b"));
+    assert!(rt.state.model.selected.is_none(), "hover never selects");
+    rt.pointer_move(1.0, 1.0);
+    rt.frame(1.0 / 60.0);
+    assert!(rt.state.model.hover.is_none());
 }
 
 #[test]

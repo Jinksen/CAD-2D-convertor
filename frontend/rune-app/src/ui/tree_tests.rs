@@ -113,3 +113,33 @@ fn arrow_keys_walk_the_tree_and_collapse_or_expand() {
     press(&mut rt, Key::Enter, Mods::default());
     assert!(rt.find("body-properties").is_some() || rt.find("section-settings").is_none());
 }
+
+#[test]
+fn hovering_a_tree_row_highlights_the_body_without_selecting_it() {
+    let mut rt = runtime_with(motor());
+    let (x, y) = rt.find("body-body-2").unwrap();
+    rt.pointer_move(x, y);
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.state.model.hover.as_deref(), Some("body-2"));
+    assert!(rt.state.model.selected.is_none());
+    rt.pointer_move(x, 2.0);
+    rt.frame(1.0 / 60.0);
+    assert!(rt.state.model.hover.is_none());
+}
+
+#[test]
+fn the_filter_shows_a_match_count_a_clear_button_and_expand_collapse_all() {
+    let mut rt = runtime_with(motor());
+    assert!(rt.find("filter-count").is_none());
+    click(&mut rt, "tree-filter");
+    press(&mut rt, text_key("t"), Mods::default());
+    assert!(dump(&rt).contains("2 matches"));
+    press(&mut rt, text_key("at"), Mods::default());
+    assert!(dump(&rt).contains("1 match"));
+    click(&mut rt, "filter-clear");
+    assert!(rt.state.model.filter.text.is_empty() && rt.find("filter-clear").is_none());
+    click(&mut rt, "collapse-all");
+    assert!(rt.find("body-body-1").is_none());
+    click(&mut rt, "expand-all");
+    assert!(rt.find("body-body-1").is_some() && rt.find("body-body-2").is_some());
+}

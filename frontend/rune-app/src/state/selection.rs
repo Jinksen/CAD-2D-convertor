@@ -251,6 +251,37 @@ impl ModelState {
         }
     }
 
+    /// Expands every node.
+    pub fn expand_all(&mut self) {
+        self.collapsed.clear();
+    }
+
+    /// Collapses every folder, group, Bodies and Groups (the model node stays open).
+    pub fn collapse_all(&mut self) {
+        fn folders(f: &Folder, out: &mut Vec<String>) {
+            for sub in &f.folders {
+                out.push(sub.key.clone());
+                folders(sub, out);
+            }
+        }
+        let mut keys = vec!["bodies".to_owned(), "groups".to_owned()];
+        if let Some(i) = &self.imported {
+            folders(
+                &super::tree::skip_shared(super::tree::build(&i.components)),
+                &mut keys,
+            );
+        }
+        keys.extend(self.groups.iter().map(|g| group_key(&g.name)));
+        self.collapsed.extend(keys);
+    }
+
+    /// Hover from a viewport; returns whether the tree should scroll to the row.
+    pub fn hover_body(&mut self, id: Option<String>) -> bool {
+        let changed = self.hover != id;
+        self.hover = id;
+        changed && self.hover.is_some()
+    }
+
     /// F2 on a group: edit its name in place.
     pub fn start_rename(&mut self, name: &str) {
         self.activate(&Node::Group(name.to_owned()));
@@ -321,6 +352,25 @@ mod tests {
         assert_eq!(m.current(), Node::Folder("Top / Sub".into()));
         m.move_cursor(-100);
         assert_eq!(m.current(), Node::Model);
+    }
+
+    #[test]
+    fn collapse_all_and_expand_all_cover_folders_and_groups() {
+        let mut m = model();
+        m.groups.push(BodyGroup {
+            name: "G".into(),
+            component_ids: vec!["a".into()],
+        });
+        m.collapse_all();
+        let kinds: Vec<Node> = m.rows().into_iter().map(|r| r.0).collect();
+        assert_eq!(
+            kinds,
+            [Node::Model, Node::Section, Node::Bodies, Node::Groups]
+        );
+        m.expand_all();
+        assert!(m.rows().len() > 6);
+        assert!(m.hover_body(Some("a".into())) && !m.hover_body(Some("a".into())));
+        assert!(!m.hover_body(None));
     }
 
     #[test]

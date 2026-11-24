@@ -35,6 +35,7 @@ pub struct RenderKey {
     pub camera: Camera,
     pub hidden: BTreeSet<String>,
     pub selected: Option<String>,
+    pub hover: Option<String>,
     pub guide: Option<PlaneGuide>,
     pub background: [u8; 3],
 }

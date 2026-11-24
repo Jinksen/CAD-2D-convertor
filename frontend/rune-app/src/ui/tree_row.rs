@@ -48,6 +48,10 @@ pub struct Item {
     pub edit: Option<El>,
     /// A dragged body is over this row.
     pub drop: bool,
+    /// The pointer is on this body in a viewport or the tree.
+    pub lit: bool,
+    /// Byte range of the name that matches the tree filter.
+    pub mark: Option<(usize, usize)>,
 }
 
 impl Item {
@@ -70,6 +74,8 @@ impl Item {
             eye: None,
             edit: None,
             drop: false,
+            lit: false,
+            mark: None,
         }
     }
 }
@@ -122,14 +128,24 @@ pub fn row_el(n: Item, t: &Theme, k: &Kit) -> El {
     };
     let editing = n.edit.is_some();
     let mut name = row().grow(1.0).min_w(0.0).gap(space::S1).child(
-        text(&n.name)
-            .font(type_::BODY)
-            .color(ink)
-            .truncate()
-            .help_when_truncated(match &n.extra {
-                Some(extra) => format!("{} ({extra})", n.name),
-                None => n.name.clone(),
-            }),
+        match n.mark {
+            Some((a, b)) => rune::rich(
+                n.name.clone(),
+                vec![
+                    rune::Span::new(a, b)
+                        .bold()
+                        .bg(k.alpha(k.c.text_accent, 0.22), 1.0),
+                ],
+            ),
+            None => text(&n.name),
+        }
+        .font(type_::BODY)
+        .color(ink)
+        .truncate()
+        .help_when_truncated(match &n.extra {
+            Some(extra) => format!("{} ({extra})", n.name),
+            None => n.name.clone(),
+        }),
     );
     if let Some(edit) = n.edit {
         name = row().grow(1.0).min_w(0.0).child(edit);
@@ -154,8 +170,10 @@ pub fn row_el(n: Item, t: &Theme, k: &Kit) -> El {
         .gap(space::S1)
         .items_center()
         .hover_group_focus()
-        .fill(if n.on {
+        .fill(if n.on || n.drop {
             selected(k)
+        } else if n.lit {
+            t.hover
         } else {
             Color::TRANSPARENT
         })
