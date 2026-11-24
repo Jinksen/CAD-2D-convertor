@@ -8,6 +8,7 @@ mod preview;
 mod section;
 mod section_view;
 mod shell;
+mod tree_menu;
 mod tree_row;
 
 pub use shell::{on_key, poll};
@@ -87,7 +88,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             Some(path) => s.open_step(path.clone()),
             None => {}
         });
-    rune_kit::root(base, shell::toasts(s, &k))
+    let mut overlays = shell::toasts(s, &k);
+    overlays.extend(tree_menu::overlay(s, &k));
+    rune_kit::root(base, overlays)
 }
 
 /// Region title bar.
@@ -259,3 +262,5 @@ mod tests {
 
 #[cfg(test)]
 mod shell_tests;
+#[cfg(test)]
+mod tree_tests;

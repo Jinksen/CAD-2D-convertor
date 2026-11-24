@@ -7,6 +7,7 @@ use rune::TextEdit;
 use serde::{Deserialize, Serialize};
 
 use crate::api::dto::{ImportComponent, ImportSummary};
+use crate::state::selection::{ContextMenu, Node};
 use crate::state::tree::{self, Folder};
 
 /// A named set of bodies, such as "Magnets" or "Stator laminations". A body can be in several.
@@ -31,6 +32,16 @@ pub struct ModelState {
     pub section_selected: bool,
     /// The hidden set came from Isolate, so visible rows are labelled "isolated".
     pub isolated: bool,
+    /// Tree row that keyboard navigation and context menus act on.
+    pub cursor: Option<Node>,
+    /// Extra picked bodies (Ctrl/Shift); empty or one entry means a plain selection.
+    pub multi: BTreeSet<String>,
+    pub anchor: Option<String>,
+    pub menu: Option<ContextMenu>,
+    /// The selected group's name is being edited in its tree row (F2).
+    pub renaming: bool,
+    /// Group row under a body being dragged.
+    pub drop_target: Option<String>,
     /// Collapsed assembly folders (`Folder::key`) and groups (`group_key`).
     pub collapsed: BTreeSet<String>,
     /// Name fields of "New group" and of the selected group's rename.
@@ -58,6 +69,7 @@ impl ModelState {
         *self = ModelState {
             imported: Some(imported),
             section_selected: true,
+            cursor: Some(Node::Section),
             ..ModelState::default()
         };
     }
@@ -67,6 +79,13 @@ impl ModelState {
     }
 
     pub fn select(&mut self, id: Option<String>) {
+        let in_group = matches!((&self.cursor, &id), (Some(Node::Member(_, m)), Some(i)) if m == i);
+        if !in_group {
+            self.cursor = Some(id.clone().map_or(Node::Model, Node::Body));
+        }
+        self.multi.clear();
+        self.anchor = None;
+        self.renaming = false;
         self.selected = id;
         self.related = None;
         self.selected_group = None;
@@ -74,6 +93,7 @@ impl ModelState {
     }
 
     pub fn select_section(&mut self) {
+        self.cursor = Some(Node::Section);
         self.selected_group = None;
         self.related = None;
         self.section_selected = true;
@@ -81,6 +101,7 @@ impl ModelState {
 
     pub fn select_group(&mut self, name: &str) {
         self.select(None);
+        self.cursor = Some(Node::Group(name.to_owned()));
         self.selected_group = Some(name.to_owned());
         self.rename_group = TextEdit::new(name);
     }
@@ -98,7 +119,7 @@ impl ModelState {
     }
 
     /// Shows only `ids`; isolating the same set again restores all bodies.
-    fn isolate(&mut self, ids: &[String]) {
+    pub fn isolate(&mut self, ids: &[String]) {
         let others: BTreeSet<String> = self
             .imported
             .iter()

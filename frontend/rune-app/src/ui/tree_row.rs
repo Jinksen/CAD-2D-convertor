@@ -24,7 +24,7 @@ pub struct Glyph {
     pub act: Action,
 }
 
-pub struct Node {
+pub struct Item {
     pub key: String,
     /// Accessible name of the row.
     pub aria: String,
@@ -44,12 +44,16 @@ pub struct Node {
     pub status: Option<&'static str>,
     /// Eye toggle; `hidden` selects the closed-eye glyph and keeps it visible.
     pub eye: Option<(Glyph, bool)>,
+    /// Replaces the name while editing it in place.
+    pub edit: Option<El>,
+    /// A dragged body is over this row.
+    pub drop: bool,
 }
 
-impl Node {
-    pub fn new(key: impl Into<String>, name: impl Into<String>, icon: &'static Icon) -> Node {
+impl Item {
+    pub fn new(key: impl Into<String>, name: impl Into<String>, icon: &'static Icon) -> Item {
         let name = name.into();
-        Node {
+        Item {
             key: key.into(),
             aria: name.clone(),
             name,
@@ -64,6 +68,8 @@ impl Node {
             dim: false,
             status: None,
             eye: None,
+            edit: None,
+            drop: false,
         }
     }
 }
@@ -103,7 +109,7 @@ fn glyph_button(g: &Glyph, i: &'static Icon, t: &Theme) -> El {
         .on_press(move |s: &mut AppState| act(s))
 }
 
-pub fn row_el(n: Node, t: &Theme, k: &Kit) -> El {
+pub fn row_el(n: Item, t: &Theme, k: &Kit) -> El {
     let ink = if n.dim { t.text_secondary } else { t.text };
     let slot = match (n.open, &n.chevron_act) {
         (Some(open), Some(g)) => {
@@ -114,6 +120,7 @@ pub fn row_el(n: Node, t: &Theme, k: &Kit) -> El {
             .a11y_hidden(),
         _ => el().size(12.0, 12.0),
     };
+    let editing = n.edit.is_some();
     let mut name = row().grow(1.0).min_w(0.0).gap(space::S1).child(
         text(&n.name)
             .font(type_::BODY)
@@ -124,7 +131,10 @@ pub fn row_el(n: Node, t: &Theme, k: &Kit) -> El {
                 None => n.name.clone(),
             }),
     );
-    if let Some(extra) = &n.extra {
+    if let Some(edit) = n.edit {
+        name = row().grow(1.0).min_w(0.0).child(edit);
+    }
+    if let (Some(extra), false) = (&n.extra, editing) {
         name = name.child(
             text(extra)
                 .font(type_::LABEL)

@@ -12,7 +12,7 @@ use crate::state::preview::ViewportMode;
 use crate::state::section::PlaneKind;
 use crate::state::shell::Message;
 
-fn runtime_with(state: AppState) -> Runtime<AppState> {
+pub(super) fn runtime_with(state: AppState) -> Runtime<AppState> {
     let mut rt = Runtime::new(
         state,
         view,
@@ -28,7 +28,7 @@ fn runtime_with(state: AppState) -> Runtime<AppState> {
 }
 
 /// Two bodies in different sub-assemblies.
-fn motor() -> AppState {
+pub(super) fn motor() -> AppState {
     let mut state = AppState::default();
     let mut s = summary(&[]);
     s.components = vec![
@@ -40,14 +40,14 @@ fn motor() -> AppState {
     state
 }
 
-fn click(rt: &mut Runtime<AppState>, key: &str) {
+pub(super) fn click(rt: &mut Runtime<AppState>, key: &str) {
     let (x, y) = rt.find(key).unwrap_or_else(|| panic!("no element {key}"));
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
 }
 
-fn press(rt: &mut Runtime<AppState>, key: Key, mods: Mods) {
+pub(super) fn press(rt: &mut Runtime<AppState>, key: Key, mods: Mods) {
     rt.key(KeyEvent { key, mods });
     rt.frame(1.0 / 60.0);
 }
@@ -63,11 +63,11 @@ fn ctrl(c: char) -> (Key, Mods) {
     )
 }
 
-fn text_key(t: &str) -> Key {
+pub(super) fn text_key(t: &str) -> Key {
     Key::Text(t.into())
 }
 
-fn dump(rt: &Runtime<AppState>) -> String {
+pub(super) fn dump(rt: &Runtime<AppState>) -> String {
     rt.accessibility_json().to_string()
 }
 
@@ -344,7 +344,10 @@ fn tree_rows_have_one_height_and_status_is_text_not_colour() {
     assert_eq!(y(&rt, "bodies-heading") - y(&rt, "node-section"), step);
     click(&mut rt, "eye-body-1");
     assert!(dump(&rt).contains("Show body"));
-    assert!(dump(&rt).contains("hidden"), "hidden rows carry a text label");
+    assert!(
+        dump(&rt).contains("hidden"),
+        "hidden rows carry a text label"
+    );
     click(&mut rt, "eye-body-1");
     click(&mut rt, "body-body-2");
     press(&mut rt, text_key("i"), Mods::default());

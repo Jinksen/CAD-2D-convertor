@@ -23,3 +23,12 @@ Numbers and quantities follow ISO 80000-1, as described in [number-format.md](nu
 The tree follows the Inventor browser / COMSOL Model Builder pattern: the model file is the root; under it sit the Section node (`XY, z = 37.500 mm`), Bodies (assembly folders) and Groups. Selecting the Section node shows the section settings in the right pane; selecting the model, a body or a group shows that context's properties. Preferences are not a tree node; the Settings button in the toolbar opens them.
 
 Rows share one primitive (`ui/tree_row.rs`): fixed 22 pt height, indent guide lines, chevron, a monochrome icon per node type (model file, assembly, body, group, section), a colour swatch for bodies, a single-line name with ellipsis and a tooltip with the full name when cut, a muted right-aligned count, and an eye toggle that shows on hover or focus and stays visible when the item is hidden. Hidden and isolated rows are dimmed and also carry the text `hidden` or `isolated`, so status never relies on colour alone.
+
+### Tree interactions
+
+- Right-click opens a context menu per node type: body (Hide/Show, Isolate, Zoom to, Add to group, Properties), group (Hide/Show, Isolate, Rename, Delete group), model and section (Properties), folders (Collapse/Expand).
+- Ctrl-click toggles and Shift-click extends a multi-selection. It applies to Hide/Show, Isolate and Add to group. The single selection that drives properties, 3D and 2D is the last clicked body.
+- F2 renames the selected group in its row (Enter commits, Escape cancels). Dragging a body row onto a group adds the picked bodies to it.
+- Up/Down move through the visible rows, Left collapses or goes to the parent, Right expands or goes to the first child, Enter opens the properties of the row.
+
+Rune has no element-to-element drop target, so the drag finds the group row from the pointer travel (all tree rows have the same height). Group zoom is not offered; Zoom to frames one body in both views.

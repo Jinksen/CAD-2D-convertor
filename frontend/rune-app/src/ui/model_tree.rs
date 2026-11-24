@@ -10,10 +10,12 @@ use rune_kit::{Kit, TextInput};
 
 use super::groups::{self, folder_rows, group_rows, new_group_form};
 use super::shell::open_step_dialog;
-use super::tree_row::{Glyph, Node, row_el};
+use super::tree_menu::attach;
+use super::tree_row::{Glyph, Item, row_el};
 use super::{TREE_WIDTH, button, heading, icons, label_value, rule, scroller};
 use crate::api::dto::{ImportComponent, Severity};
 use crate::state::AppState;
+use crate::state::selection::Node as TreeNode;
 
 pub(super) fn body_row(
     s: &AppState,
@@ -22,14 +24,14 @@ pub(super) fn body_row(
     body: &ImportComponent,
     duplicate: bool,
     depth: usize,
+    node: TreeNode,
 ) -> El {
     let m = &s.model;
-    let on = m.selected.as_deref() == Some(body.id.as_str())
-        && !m.section_selected
-        && !s.shell.show_prefs;
+    let on = m.is_picked(&body.id) && !m.section_selected && !s.shell.show_prefs;
     let hidden = m.hidden.contains(&body.id);
-    let (select_id, eye_id) = (body.id.clone(), body.id.clone());
-    let mut n = Node::new(
+    let eye_id = body.id.clone();
+    let (press_node, drag_node, menu_node) = (node.clone(), node.clone(), node);
+    let mut n = Item::new(
         format!("body-{}", body.id),
         &body.display_name,
         &icons::BODY,
@@ -56,10 +58,15 @@ pub(super) fn body_row(
         },
         hidden,
     ));
-    row_el(n, t, k).on_press(move |s: &mut AppState| {
-        s.shell.show_prefs = false;
-        s.model.select(Some(select_id.clone()))
-    })
+    let row = row_el(n, t, k)
+        .on_press_tx(move |s: &mut AppState, tx| {
+            let mods = tx.mods();
+            s.shell.show_prefs = false;
+            s.model
+                .click_body(&press_node, mods.ctrl || mods.cmd, mods.shift)
+        })
+        .on_drag(move |s: &mut AppState, d, _| super::tree_menu::drag_body(s, &drag_node, d));
+    super::tree_menu::attach(row, menu_node)
 }
 
 /// "XY, z = 37.500 mm": the section plane and offset as the Section node shows them.
@@ -144,7 +151,7 @@ pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
     let model_on = m.selected.is_none() && m.selected_group.is_none() && !m.section_selected;
     let model_open = !m.is_collapsed("model");
     let bodies_open = !m.is_collapsed("bodies");
-    let mut file_node = Node::new("node-model", file, &glyphs::FILE);
+    let mut file_node = Item::new("node-model", file, &glyphs::FILE);
     (file_node.open, file_node.on) = (Some(model_open), model_on && !s.shell.show_prefs);
     file_node.chevron_act = Some(Glyph {
         key: "model-toggle".into(),
@@ -168,14 +175,17 @@ pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
             .child(rule(t))
             .child(scroller(k, "tree-scroll", rows));
     }
-    let mut sec = Node::new("node-section", section_label(s), &icons::SECTION);
+    let mut sec = Item::new("node-section", section_label(s), &icons::SECTION);
     (sec.depth, sec.on) = (1, m.section_selected && !s.shell.show_prefs);
     sec.aria = format!("Section {}", sec.name);
-    rows = rows.child(row_el(sec, t, k).on_press(|s: &mut AppState| {
-        s.shell.show_prefs = false;
-        s.model.select_section()
-    }));
-    let mut head = Node::new(
+    rows = rows.child(attach(
+        row_el(sec, t, k).on_press(|s: &mut AppState| {
+            s.shell.show_prefs = false;
+            s.model.activate(&TreeNode::Section)
+        }),
+        TreeNode::Section,
+    ));
+    let mut head = Item::new(
         "bodies-heading",
         format!("Bodies ({count})"),
         &icons::ASSEMBLY,

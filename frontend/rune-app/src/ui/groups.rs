@@ -7,11 +7,13 @@ use rune::{El, col, row, text};
 use rune_kit::{Kit, TextInput};
 
 use super::model_tree::body_row;
-use super::tree_row::{Action, Glyph, Node, row_el};
+use super::tree_menu::attach;
+use super::tree_row::{Action, Glyph, Item, row_el};
 use super::{button, heading, icons, label_value};
 use crate::api::dto::Severity;
 use crate::state::AppState;
 use crate::state::model::group_key;
+use crate::state::selection::Node as TreeNode;
 use crate::state::tree::Folder;
 
 fn bodies(count: usize) -> String {
@@ -38,20 +40,37 @@ pub fn folder_rows(
     mut rows: El,
 ) -> El {
     for b in &folder.bodies {
-        rows = rows.child(body_row(s, t, k, b, dup(&b.display_name), depth));
+        rows = rows.child(body_row(
+            s,
+            t,
+            k,
+            b,
+            dup(&b.display_name),
+            depth,
+            TreeNode::Body(b.id.clone()),
+        ));
     }
     for sub in &folder.folders {
         let open = !s.model.is_collapsed(&sub.key);
-        let mut n = Node::new(format!("folder-{}", sub.key), &sub.name, &icons::ASSEMBLY);
+        let mut n = Item::new(format!("folder-{}", sub.key), &sub.name, &icons::ASSEMBLY);
         n.aria = format!(
             "{}, {}, {}",
             sub.name,
             bodies(sub.count()),
             if open { "expanded" } else { "collapsed" }
         );
+        let node = TreeNode::Folder(sub.key.clone());
         (n.depth, n.count, n.open) = (depth, Some(sub.count()), Some(open));
+        n.on = s.model.cursor.as_ref() == Some(&node);
         let act = toggle(&sub.key);
-        rows = rows.child(row_el(n, t, k).on_press(move |s: &mut AppState| act(s)));
+        let press = node.clone();
+        rows = rows.child(attach(
+            row_el(n, t, k).on_press(move |s: &mut AppState| {
+                s.model.cursor = Some(press.clone());
+                act(s)
+            }),
+            node,
+        ));
         if open {
             rows = folder_rows(s, t, k, sub, depth + 1, dup, rows);
         }
@@ -71,14 +90,21 @@ pub fn group_rows(
         return rows;
     }
     let all_open = !s.model.is_collapsed("groups");
-    let mut head = Node::new(
+    let mut head = Item::new(
         "groups-heading",
         format!("Groups ({})", s.model.groups.len()),
         &icons::GROUP,
     );
     (head.depth, head.open) = (1, Some(all_open));
+    head.on = s.model.cursor == Some(TreeNode::Groups);
     let act = toggle("groups");
-    rows = rows.child(row_el(head, t, k).on_press(move |s: &mut AppState| act(s)));
+    rows = rows.child(attach(
+        row_el(head, t, k).on_press(move |s: &mut AppState| {
+            s.model.cursor = Some(TreeNode::Groups);
+            act(s)
+        }),
+        TreeNode::Groups,
+    ));
     if !all_open {
         return rows;
     }
@@ -91,7 +117,7 @@ pub fn group_rows(
         let (select, hide) = (group.name.clone(), group.name.clone());
         let hidden = s.model.group_hidden(&group.name);
         let count = group.component_ids.len();
-        let mut n = Node::new(format!("group-{}", group.name), &group.name, &icons::GROUP);
+        let mut n = Item::new(format!("group-{}", group.name), &group.name, &icons::GROUP);
         n.aria = format!("Group {}, {}", group.name, bodies(count));
         (n.depth, n.count, n.open, n.on, n.dim) = (2, Some(count), Some(open), on, hidden);
         n.status = hidden.then_some("hidden");
@@ -113,17 +139,55 @@ pub fn group_rows(
             },
             hidden,
         ));
-        rows = rows.child(row_el(n, t, k).on_press(move |s: &mut AppState| {
-            s.shell.show_prefs = false;
-            s.model.select_group(&select)
-        }));
+        n.drop = s.model.drop_target.as_deref() == Some(group.name.as_str());
+        if s.model.renaming && on {
+            n.edit = Some(rename_field(s, k));
+        }
+        let menu = TreeNode::Group(group.name.clone());
+        rows = rows.child(attach(
+            row_el(n, t, k).on_press(move |s: &mut AppState| {
+                let editing_here =
+                    s.model.renaming && s.model.selected_group.as_ref() == Some(&select);
+                if editing_here {
+                    return; // a press inside the name editor must not end the edit
+                }
+                s.shell.show_prefs = false;
+                s.model.select_group(&select)
+            }),
+            menu,
+        ));
         if open {
             for b in members {
-                rows = rows.child(body_row(s, t, k, b, dup(&b.display_name), 3));
+                let node = TreeNode::Member(group.name.clone(), b.id.clone());
+                rows = rows.child(body_row(s, t, k, b, dup(&b.display_name), 3, node));
             }
         }
     }
     rows
+}
+
+/// The in-place name editor of a group row (F2): Enter commits, Escape cancels.
+fn rename_field(s: &AppState, k: &Kit) -> El {
+    TextInput::new(&s.model.rename_group)
+        .label("Rename group")
+        .width(None)
+        .height(18.0)
+        .on_edit(|s: &mut AppState| &mut s.model.rename_group)
+        .on_submit(|s: &mut AppState, _| {
+            let result = s.model.commit_rename();
+            report(s, result)
+        })
+        .on_key(|s: &mut AppState, ev, tx| {
+            if ev.key != rune::Key::Escape {
+                return false;
+            }
+            s.model.renaming = false;
+            tx.blur();
+            true
+        })
+        .build(k)
+        .key("rename-inline")
+        .grow(1.0)
 }
 
 fn report(s: &mut AppState, result: Result<(), String>) {

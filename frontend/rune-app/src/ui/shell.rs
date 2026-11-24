@@ -572,12 +572,30 @@ pub fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
                 [PlaneKind::XY, PlaneKind::XZ, PlaneKind::YZ][usize::from(k.as_bytes()[0] - b'1')];
             s.section.set_plane(kind, now_ms());
         }
+        Key::Enter if s.model.renaming => {
+            if let Err(error) = s.model.commit_rename() {
+                s.shell.log(Severity::Error, error);
+            }
+        }
+        Key::Escape if s.model.renaming => s.model.renaming = false,
         Key::Escape => s.model.select(None),
+        Key::Up if has_model => s.model.move_cursor(-1),
+        Key::Down if has_model => s.model.move_cursor(1),
+        Key::Left if has_model => s.model.collapse_or_parent(),
+        Key::Right if has_model => s.model.expand_or_child(),
+        // Enter opens the properties of the row under the cursor.
+        Key::Enter if has_model => {
+            s.shell.show_prefs = false;
+            let node = s.model.current();
+            s.model.activate(&node)
+        }
+        Key::Function(2) if group.is_some() => s.model.start_rename(&group.unwrap_or_default()),
         Key::Text(k) if selected.is_some() && k.eq_ignore_ascii_case("v") => {
-            s.model.toggle_hidden(&selected.unwrap_or_default())
+            s.model.toggle_hidden_many(&s.model.targets())
         }
         Key::Text(k) if selected.is_some() && k.eq_ignore_ascii_case("i") => {
-            s.model.toggle_isolate(&selected.unwrap_or_default())
+            let ids = s.model.targets();
+            s.model.isolate(&ids)
         }
         Key::Text(k) if group.is_some() && k.eq_ignore_ascii_case("v") => {
             s.model.toggle_group_hidden(&group.unwrap_or_default())

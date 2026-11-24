@@ -261,6 +261,14 @@ impl AppState {
         );
     }
 
+    /// Frames one body in both the 3D and the 2D view (display only).
+    pub fn zoom_to(&mut self, id: &str) {
+        if let Some(imported) = &self.model.imported {
+            self.preview.fit(Some(id), &imported.bounds_mm);
+        }
+        self.section.fit(Some(id));
+    }
+
     /// Selects a body (from the tree or a diagnostic) and shows the 2D drawing.
     pub fn focus_component(&mut self, id: &str, related: Option<String>) {
         self.model.select(Some(id.to_owned()));
