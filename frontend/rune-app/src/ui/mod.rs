@@ -18,6 +18,7 @@ mod shell;
 mod splitter;
 mod tree_menu;
 mod tree_row;
+mod welcome;
 
 pub use shell::{on_key, poll};
 

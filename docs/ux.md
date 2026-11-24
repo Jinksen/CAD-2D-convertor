@@ -55,6 +55,10 @@ The window title reads `* name - CAD2Maxwell` while the session differs from the
 
 **Recent...** in the File group opens the list (newest first, count from Settings, stored in the preferences file). Missing files show `Not found` with Open disabled and can be removed.
 
+## Welcome screen
+
+With no model open the viewport shows a welcome block: Open model, Open project, Open demo motor, the recent projects, a link to the documentation (https://jinksen.github.io/CAD-2D-convertor/) and a hint that files can be dropped on the window. The demo motor is looked up as `docs/demo/demo-motor.step` in the folders above the executable or the working directory, or as `demo/demo-motor.step` next to the executable; if it is not found the button is disabled and the text says where it looked.
+
 ## Properties pane
 
 The right pane shows exactly one titled context, chosen by the tree selection: `Section XY`, `Body Rotor`, `Group North poles` or `Model motor.step`. Section statistics sit under the Section context and in the status bar. Long values wrap and group members are listed one per line instead of being truncated.

@@ -26,7 +26,9 @@ const CLICK_SLOP: f32 = 4.0;
 
 pub fn viewport(s: &AppState, t: &Theme, k: &Kit) -> El {
     let three_d = s.preview.mode == ViewportMode::ThreeD;
-    let body = if three_d {
+    let body = if s.model.imported.is_none() && s.shell.busy.is_none() {
+        super::welcome::welcome(s, t, k)
+    } else if three_d {
         canvas(s, t)
     } else {
         super::section_view::canvas(s, t, k)

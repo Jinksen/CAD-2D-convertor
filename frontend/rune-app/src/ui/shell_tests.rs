@@ -575,3 +575,24 @@ fn recent_projects_flag_missing_files_and_can_be_removed() {
     assert_eq!(rt.state.shell.recent.paths, vec![real]);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn the_welcome_screen_shows_without_a_model_and_its_docs_link_is_requested() {
+    let mut rt = runtime_with(AppState::default());
+    for key in [
+        "welcome",
+        "welcome-open-model",
+        "welcome-open-project",
+        "welcome-demo",
+        "welcome-docs",
+        "recent-list",
+    ] {
+        assert!(rt.find(key).is_some(), "{key}");
+    }
+    click(&mut rt, "welcome-docs");
+    let urls = rt.take_url_requests();
+    assert_eq!(urls.len(), 1);
+    assert!(urls[0].contains("jinksen.github.io/CAD-2D-convertor"));
+    let rt = runtime_with(motor());
+    assert!(rt.find("welcome").is_none());
+}
