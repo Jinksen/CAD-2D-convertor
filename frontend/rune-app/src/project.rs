@@ -47,6 +47,9 @@ pub struct ProjectFile {
     pub groups: Vec<BodyGroup>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub collapsed_folders: Vec<String>,
+    /// Validation tolerance overrides; absent means the service defaults.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tolerance: Option<crate::api::dto::Tolerance>,
 }
 
 /// `step` relative to `dir` with forward slashes, if `step` lies inside `dir`.
@@ -144,6 +147,7 @@ impl AppState {
             hidden_component_ids: Some(self.model.hidden.iter().cloned().collect()),
             groups: self.model.groups.clone(),
             collapsed_folders: self.model.collapsed.iter().cloned().collect(),
+            tolerance: self.section.tolerance.request(),
         })
     }
 
@@ -256,6 +260,10 @@ mod tests {
             material_note: Some("N42SH".into()),
         }];
         saved.model.collapsed = ["Motor".to_string()].into();
+        saved.section.tolerance.restore(crate::api::dto::Tolerance {
+            join_mm: Some(2e-5),
+            ..Default::default()
+        });
         saved.save_project(dir.join("p"));
         let path = saved.shell.project_path.clone().expect("saved path");
         assert_eq!(path.extension().unwrap(), "c2mproj");
@@ -303,6 +311,8 @@ mod tests {
             Some("N42SH")
         );
         assert!(state.model.collapsed.contains("Motor"));
+        assert_eq!(state.section.tolerance.value.join_mm, Some(2e-5));
+        assert_eq!(state.section.tolerance.text[2].text, "0.00002");
         let last = state.shell.messages.last().unwrap();
         assert_eq!(
             (last.severity, last.text.as_str()),

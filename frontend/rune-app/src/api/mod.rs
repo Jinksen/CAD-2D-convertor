@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use dto::{
     ComponentPlane, ExportOptions, Health, ImportSummary, PreviewMesh, PreviewMeshWire,
-    RegionsResponse, SectionPlane, SectionResponse,
+    RegionsResponse, SectionPlane, SectionResponse, Tolerance,
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -192,13 +192,14 @@ impl Client {
         &self,
         import_id: &str,
         plane: &SectionPlane,
+        tolerance: Option<&Tolerance>,
     ) -> Result<SectionResponse, String> {
         let invalid = "The geometry service returned an invalid section response.";
-        let reply = self.call(
-            "section",
-            Some(json!({ "import_id": import_id, "plane": plane })),
-            "application/json",
-        )?;
+        let mut body = json!({ "import_id": import_id, "plane": plane });
+        if let Some(tolerance) = tolerance {
+            body["tolerance"] = json!(tolerance);
+        }
+        let reply = self.call("section", Some(body), "application/json")?;
         let section: SectionResponse =
             Self::decode(&reply, "The exact section could not be completed.", invalid)?;
         if section.import_id != import_id || section.plane != *plane || section.validate().is_err()
@@ -364,7 +365,7 @@ mod tests {
     fn section_round_trips_plane_and_decodes_curves() {
         let fake = serve(vec![(200, "application/json", SECTION.as_bytes().to_vec())]);
         let plane = SectionPlane::XY { offset_mm: 15.0 };
-        let section = client(&fake.url).section("i1", &plane).unwrap();
+        let section = client(&fake.url).section("i1", &plane, None).unwrap();
         assert_eq!(section.components[0].wires[0].curves.len(), 2);
         assert!(
             fake.requests.lock().unwrap()[0].contains(r#""plane":{"kind":"XY","offset_mm":15.0}"#)
@@ -375,7 +376,7 @@ mod tests {
     fn section_for_another_plane_is_rejected() {
         let fake = serve(vec![(200, "application/json", SECTION.as_bytes().to_vec())]);
         let err = client(&fake.url)
-            .section("i1", &SectionPlane::XY { offset_mm: 1.0 })
+            .section("i1", &SectionPlane::XY { offset_mm: 1.0 }, None)
             .unwrap_err();
         assert_eq!(
             err,
@@ -549,7 +550,7 @@ mod tests {
         let _ = c.preview("imp 1/\u{fc}!'()*~");
         let _ = c.component_plane("imp-1", "body 1");
         let _ = c.export_dxf("imp-1", "sec-1", &ExportOptions::default());
-        let _ = c.section("imp-1", &state.request(&bounds).unwrap());
+        let _ = c.section("imp-1", &state.request(&bounds).unwrap(), None);
 
         let (head, body) = sent(&fake, 0);
         assert!(
@@ -683,7 +684,7 @@ mod tests {
         let summary = c.import_step(&step).unwrap();
         let mut state = crate::state::section::SectionState::default();
         let plane = state.request(&summary.bounds_mm).unwrap();
-        let section = c.section(&summary.import_id, &plane).unwrap();
+        let section = c.section(&summary.import_id, &plane, None).unwrap();
         state.last = Some(section.clone());
         let zip = c
             .export_dxf(
@@ -732,7 +733,7 @@ mod tests {
             let mut state = SectionState::default();
             state.plane = kind;
             let plane = state.request(&summary.bounds_mm).unwrap();
-            let section = c.section(&summary.import_id, &plane).unwrap();
+            let section = c.section(&summary.import_id, &plane, None).unwrap();
             let zip = c
                 .export_dxf(
                     &summary.import_id,

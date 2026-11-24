@@ -12,6 +12,7 @@ pub mod camera;
 pub mod geometry;
 pub mod measure;
 pub mod regions;
+pub mod tolerance;
 
 use camera::{Size, ViewBox};
 
@@ -133,6 +134,8 @@ pub struct SectionState {
     pub view: View2d,
     /// Exact region metrics per section id.
     pub regions: regions::RegionCache,
+    /// Validation tolerance overrides sent with the section request.
+    pub tolerance: tolerance::ToleranceState,
     /// Text of the plane fields: offset, then the custom normal components.
     pub offset_text: TextEdit,
     pub normal_text: [TextEdit; 3],
@@ -155,6 +158,7 @@ impl Default for SectionState {
             stats: None,
             view: View2d::default(),
             regions: regions::RegionCache::default(),
+            tolerance: tolerance::ToleranceState::default(),
             offset_text: TextEdit::default(),
             normal_text: Default::default(),
             field_error: None,
@@ -335,6 +339,9 @@ impl SectionState {
             self.stats = None;
         }
         self.field_error = error;
+        if self.tolerance.commit_all() {
+            self.stats = None;
+        }
     }
 
     /// Exact basis (normal, x, y) of the current plane.

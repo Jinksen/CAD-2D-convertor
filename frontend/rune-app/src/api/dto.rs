@@ -228,6 +228,18 @@ impl SectionResponse {
     }
 }
 
+/// Optional validation-tolerance overrides of a section request; absent fields use the
+/// service defaults.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub struct Tolerance {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub small_region_mm2: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sliver_ratio: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub join_mm: Option<f64>,
+}
+
 /// One export group as the service takes it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ExportGroup {

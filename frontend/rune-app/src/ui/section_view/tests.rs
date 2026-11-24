@@ -420,7 +420,7 @@ fn bench_real_sections() {
         state.offset_mm = None;
         let plane = state.request(&summary.bounds_mm).unwrap();
         let t0 = Instant::now();
-        let section = client.section(&summary.import_id, &plane).unwrap();
+        let section = client.section(&summary.import_id, &plane, None).unwrap();
         println!(
             "BENCH service section {kind:?} took {:.0} ms",
             t0.elapsed().as_secs_f64() * 1e3

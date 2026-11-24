@@ -175,6 +175,11 @@ impl AppState {
     pub fn compute_section(&mut self) {
         // Typed plane fields that were not submitted yet count as the plane to cut.
         self.section.commit_fields(crate::state::now_ms());
+        if let Some(error) = self.section.tolerance.error.iter().flatten().next() {
+            let text = format!("Fix the advanced tolerances first: {error}");
+            self.shell.log(Severity::Error, text);
+            return;
+        }
         let Some(imported) = &self.model.imported else {
             self.shell.log(
                 Severity::Warning,
@@ -191,9 +196,10 @@ impl AppState {
         };
         let import_id = imported.import_id.clone();
         let sent = plane.clone();
+        let tolerance = self.section.tolerance.request();
         self.start(
             "Computing exact section",
-            move |client| client.section(&import_id, &plane),
+            move |client| client.section(&import_id, &plane, tolerance.as_ref()),
             move |state, section| state.finish_section(section, &sent),
         );
     }
@@ -337,6 +343,10 @@ impl AppState {
                     offset_mm: project.plane.offset_mm,
                     custom_normal: project.plane.normal_xyz,
                 });
+                state
+                    .section
+                    .tolerance
+                    .restore(project.tolerance.unwrap_or_default());
                 state.model.hidden = hidden;
                 state.model.restore_groups(project.groups);
                 state.model.collapsed = project.collapsed_folders.into_iter().collect();
@@ -662,5 +672,34 @@ EOF"
         assert!(request.contains(r#""layer_mode":"group""#), "{request}");
         assert!(request.contains(r#""formats":["dxf","svg"]"#), "{request}");
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn tolerances_are_sent_only_when_set_and_a_rejected_entry_blocks_compute() {
+        let fake = serve(vec![
+            (200, "application/json", IMPORT.as_bytes().to_vec()),
+            (200, "application/json", SECTION.as_bytes().to_vec()),
+        ]);
+        let (mut state, rx) = harness(&fake.url);
+        state.open_step(PathBuf::from("C:/m.step"));
+        settle(&mut state, &rx);
+        state.section.tolerance.text[1].replace_text("0.9");
+        state.compute_section();
+        assert!(
+            state.shell.busy.is_none(),
+            "invalid tolerance blocks the run"
+        );
+        assert_eq!(
+            state.shell.messages.last().unwrap().severity,
+            Severity::Error
+        );
+        state.section.tolerance.text[1].replace_text("0.01");
+        state.compute_section();
+        settle(&mut state, &rx);
+        let request = fake.requests.lock().unwrap()[1].clone();
+        assert!(
+            request.contains(r#""tolerance":{"sliver_ratio":0.01}"#),
+            "{request}"
+        );
     }
 }

@@ -6,7 +6,7 @@ use rune_kit::{Kit, TextInput};
 
 use super::{button, heading, label_value, severity_color};
 use crate::api::dto::Severity;
-use crate::state::section::PlaneKind;
+use crate::state::section::{PlaneKind, tolerance};
 use crate::state::{AppState, now_ms};
 
 const OFFSET_STEP_MM: f64 = 1.0;
@@ -62,6 +62,63 @@ fn field(
                 .key(key)
                 .grow(1.0),
         )
+}
+
+/// "Advanced tolerances": the three validation overrides, collapsed by default. Bounds are
+/// shown, an invalid entry is rejected inline and a non-default value is marked.
+fn tolerances(s: &AppState, t: &Theme, k: &Kit) -> El {
+    let tol = &s.section.tolerance;
+    let open = tol.open;
+    let title = format!(
+        "Advanced tolerances{}",
+        if tol.is_default() { "" } else { " (modified)" }
+    );
+    let mut out = col()
+        .key("advanced-tolerances")
+        .w_full()
+        .gap(space::S1)
+        .child(
+            button(k, "toggle-tolerances", &title, true)
+                .checked(open)
+                .on_press(|s: &mut AppState| s.section.tolerance.open = !s.section.tolerance.open),
+        );
+    if !open {
+        return out;
+    }
+    for (i, f) in tolerance::FIELDS.iter().enumerate() {
+        let range = format!(
+            "Default {}, range {} to {} {}",
+            tolerance::show(f.default),
+            tolerance::show(f.min),
+            tolerance::show(f.max),
+            f.unit
+        );
+        let label = format!("{}{}", f.label, if tol.is_set(i) { " *" } else { "" });
+        out = out
+            .child(field(
+                t,
+                k,
+                f.key,
+                &label,
+                &tol.text[i],
+                &tolerance::show(f.default),
+                edit_access(move |s: &mut AppState| &mut s.section.tolerance.text[i]),
+            ))
+            .child(note(t, range));
+        if let Some(error) = &tol.error[i] {
+            out = out.child(
+                text(error.clone())
+                    .font(type_::LABEL)
+                    .color(severity_color(Severity::Error, t))
+                    .wrap()
+                    .w_full(),
+            );
+        }
+    }
+    out.child(note(
+        t,
+        "Empty fields use the defaults. * marks a value that differs from them; it is saved in the project and applies at the next Compute.",
+    ))
 }
 
 pub fn settings(s: &AppState, t: &Theme, k: &Kit) -> El {
@@ -183,6 +240,8 @@ pub fn settings(s: &AppState, t: &Theme, k: &Kit) -> El {
         ),
     ));
 
+    form = form.child(tolerances(s, t, k));
+
     // Run status and result.
     let mut result = col().w_full().padding(space::S2).gap(space::S1);
     result = match (&sec.last, sec.stats) {
@@ -282,5 +341,27 @@ mod tests {
         assert_eq!(rt.state.section.offset_text.text, "16.000");
         rt.state.section.set_plane(PlaneKind::XZ, 1_000_000);
         assert_eq!(rt.state.section.offset_text.text, "");
+    }
+
+    #[test]
+    fn advanced_tolerances_are_collapsed_validated_inline_and_marked_when_modified() {
+        let mut rt = runtime(loaded());
+        assert!(rt.find("tol-join").is_none(), "collapsed by default");
+        press(&mut rt, "toggle-tolerances");
+        assert!(rt.find("tol-join").is_some());
+        rt.state.section.tolerance.text[2].replace_text("0.5");
+        rt.state.section.commit_fields(0);
+        rt.invalidate();
+        rt.frame(1.0 / 60.0);
+        let json = rt.accessibility_json().to_string();
+        assert!(json.contains("Join distance must be between"), "{json}");
+        assert!(rt.state.section.tolerance.is_default());
+        rt.state.section.tolerance.text[0].replace_text("1e-3");
+        rt.state.section.commit_fields(0);
+        rt.invalidate();
+        rt.frame(1.0 / 60.0);
+        let json = rt.accessibility_json().to_string();
+        assert!(json.contains("Advanced tolerances (modified)"));
+        assert!(json.contains("Small region *"));
     }
 }

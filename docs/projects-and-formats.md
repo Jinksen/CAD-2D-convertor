@@ -19,6 +19,7 @@ All fields after `plane` are optional, so older files load and older apps ignore
 
 | Field | Content |
 |-------|---------|
+| `tolerance` | optional `small_region_mm2`, `sliver_ratio`, `join_mm` overrides; absent means the service defaults |
 | `groups[]` | `name`, `component_ids`, optional `material` (one of the export's fixed labels) and `material_note` (custom only, 80 characters) |
 
 ## Next: project file

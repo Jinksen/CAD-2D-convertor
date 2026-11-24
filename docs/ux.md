@@ -45,6 +45,10 @@ Groups, each with a caption: File (Open STEP, Open project, Save), Section (plan
 
 Export uses the Export settings (layers, colours, formats, default folder, ZIP or folder). The group pane has a **Material label** choice (None, Air, Copper, Aluminum, Electrical steel, Structural steel, Permanent magnet, Insulation, Custom) and a note for Custom. The label is the user's own bookkeeping, stored in the project and sent with the export; it is not a Maxwell library material. Groups without members are not sent.
 
+## Advanced tolerances
+
+The Section pane has a collapsed **Advanced tolerances** block with the three validation overrides of the section request: small region (1e-8 to 1 mm2, default 1e-4), sliver ratio (1e-6 to 0.05, default 5e-4) and join distance (1e-6 to 1e-3 mm, default 1e-5). The bounds are shown under each field; Enter or Compute checks the entry, and an out-of-range or non-numeric value is rejected inline and blocks Compute until fixed. Empty means the default. A non-default value marks the block "(modified)" and the field with `*`, is saved in the project (`tolerance`) and is sent only when set. Changing it makes the shown section stale.
+
 ## Properties pane
 
 The right pane shows exactly one titled context, chosen by the tree selection: `Section XY`, `Body Rotor`, `Group North poles` or `Model motor.step`. Section statistics sit under the Section context and in the status bar. Long values wrap and group members are listed one per line instead of being truncated.
