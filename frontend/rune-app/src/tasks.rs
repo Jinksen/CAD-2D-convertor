@@ -739,3 +739,50 @@ EOF"
         );
     }
 }
+
+#[cfg(test)]
+mod retry_tests {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    use super::*;
+    use crate::api::fake::serve;
+
+    #[test]
+    fn a_failed_region_fetch_is_fetched_again_after_retry() {
+        let ok = br#"{"section_id":"s1","regions":[{"component_id":"c1","region_index":0,"outer_wire":0,
+            "hole_wires":[],"area_mm2":12.0,"perimeter_mm":14.0,"centroid":[1,2],"hole_count":0,"interior_point":[1,2]}]}"#;
+        let fake = serve(vec![
+            (
+                500,
+                "application/json",
+                br#"{"error":{"code":"x","message":"boom"}}"#.to_vec(),
+            ),
+            (200, "application/json", ok.to_vec()),
+        ]);
+        let (tx, rx) = mpsc::channel();
+        let tx = std::sync::Mutex::new(tx);
+        let tasks = Tasks::new(Client::new(&fake.url, None), move |u: Update| {
+            tx.lock().unwrap().send(u).unwrap()
+        });
+        let mut state = AppState {
+            tasks: Some(tasks),
+            ..AppState::default()
+        };
+        state.section.last = Some(
+            serde_json::from_str(
+                r#"{"section_id":"s1","import_id":"i1","plane":{"kind":"XY","offset_mm":1.0},
+                "components":[],"diagnostics":[]}"#,
+            )
+            .unwrap(),
+        );
+        state.model.selected = Some("c1".into());
+        assert!(state.ensure_regions());
+        rx.recv_timeout(Duration::from_secs(5)).unwrap()(&mut state);
+        assert!(!state.ensure_regions(), "a failure stays cached");
+        assert!(state.section.regions.retry("s1"));
+        assert!(state.ensure_regions());
+        rx.recv_timeout(Duration::from_secs(5)).unwrap()(&mut state);
+        assert_eq!(state.section.regions.of_body("s1", "c1").len(), 1);
+    }
+}

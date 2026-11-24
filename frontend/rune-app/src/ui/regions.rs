@@ -10,7 +10,7 @@ use crate::state::AppState;
 use crate::state::section::regions::Load;
 
 /// The pane for `body`, or None when the shown section has no such body.
-pub fn rows(s: &AppState, t: &Theme, body: &str) -> Option<El> {
+pub fn rows(s: &AppState, t: &Theme, k: &rune_kit::Kit, body: &str) -> Option<El> {
     let section = s.section.last.as_ref()?;
     section.components.iter().find(|c| c.component_id == body)?;
     let note = |key: &str, msg: String, color| {
@@ -32,11 +32,21 @@ pub fn rows(s: &AppState, t: &Theme, body: &str) -> Option<El> {
             "Computing exact region metrics\u{2026}".into(),
             t.text_secondary,
         )),
-        Some(Load::Failed(message)) => c.child(note(
-            "regions-error",
-            format!("Region metrics failed: {message}"),
-            severity_color(Severity::Error, t),
-        )),
+        Some(Load::Failed(message)) => c
+            .child(note(
+                "regions-error",
+                format!("Region metrics failed: {message}"),
+                severity_color(Severity::Error, t),
+            ))
+            .child(super::button(k, "regions-retry", "Retry", true).on_press(
+                |s: &mut AppState| {
+                    if let Some(id) = s.section.last.as_ref().map(|l| l.section_id.clone())
+                        && s.section.regions.retry(&id)
+                    {
+                        s.ensure_regions();
+                    }
+                },
+            )),
         Some(Load::Ready(_)) => {
             let regions = s.section.regions.of_body(&section.section_id, body);
             if regions.is_empty() {
@@ -145,13 +155,15 @@ mod tests {
             .finish("s1", Err("OCC failed".into()));
         refresh(&mut rt);
         assert!(rt.find("regions-error").is_some());
+        assert!(rt.find("regions-retry").is_some(), "a failure offers Retry");
     }
 
     #[test]
     fn a_body_outside_the_shown_section_has_no_pane() {
         let rt = runtime();
         let t = rune::tok::theme(false);
-        assert!(super::rows(&rt.state, &t, "zzz").is_none());
-        assert!(super::rows(&rt.state, &t, "a").is_some());
+        let k = crate::ui::kit(&t, t.text);
+        assert!(super::rows(&rt.state, &t, &k, "zzz").is_none());
+        assert!(super::rows(&rt.state, &t, &k, "a").is_some());
     }
 }

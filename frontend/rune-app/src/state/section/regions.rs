@@ -31,6 +31,15 @@ impl RegionCache {
         true
     }
 
+    /// Forgets a failed fetch so the next `begin` requests it again; true when it was failed.
+    pub fn retry(&mut self, section_id: &str) -> bool {
+        let failed = matches!(self.by_section.get(section_id), Some(Load::Failed(_)));
+        if failed {
+            self.by_section.remove(section_id);
+        }
+        failed
+    }
+
     pub fn finish(&mut self, section_id: &str, result: Result<Vec<RegionMetric>, String>) {
         let load = result.map_or_else(Load::Failed, Load::Ready);
         self.by_section.insert(section_id.to_owned(), load);
@@ -74,6 +83,19 @@ mod tests {
         assert_eq!(c.of_body("s1", "a").len(), 2);
         assert!(c.of_body("s2", "a").is_empty());
         assert!(c.begin("s2"), "another section is another request");
+    }
+
+    #[test]
+    fn only_a_failed_fetch_can_be_retried() {
+        let mut c = RegionCache::default();
+        assert!(!c.retry("s1"));
+        c.begin("s1");
+        assert!(!c.retry("s1"), "still loading");
+        c.finish("s1", Err("boom".into()));
+        assert!(c.retry("s1"));
+        assert!(c.begin("s1"), "requested again");
+        c.finish("s1", Ok(vec![]));
+        assert!(!c.retry("s1"), "a loaded result is kept");
     }
 
     #[test]

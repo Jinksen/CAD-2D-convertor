@@ -412,7 +412,7 @@ pub fn properties(s: &AppState, t: &Theme, k: &Kit) -> El {
                         ),
                 )
                 .child(groups)
-                .children(super::regions::rows(s, t, &b.id)),
+                .children(super::regions::rows(s, t, k, &b.id)),
         )
 }
 
