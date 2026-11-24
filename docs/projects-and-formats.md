@@ -64,7 +64,7 @@ The core constraint applies to every format: exact B-Rep in, analytic curves out
 | FEMM `.lua` | Export (adapter), free 2D magnetics without ANSYS | [#69](https://github.com/Jinksen/CAD-2D-convertor/issues/69) |
 | Gmsh `.geo` | Export (adapter), for Gmsh, Elmer and GetDP | [#70](https://github.com/Jinksen/CAD-2D-convertor/issues/70) |
 | PyAEDT script | Export (adapter) | [#71](https://github.com/Jinksen/CAD-2D-convertor/issues/71) |
-| Motor-CAD DXF, 2D STEP faces, DXF R12, PNG/PDF report | Spikes | [#72](https://github.com/Jinksen/CAD-2D-convertor/issues/72) |
+| Motor-CAD DXF, 2D STEP faces, DXF R12, PNG/PDF report | Spikes done, see [format-spikes](research/format-spikes.md) | [#72](https://github.com/Jinksen/CAD-2D-convertor/issues/72) |
 
 DXF layer and colour modes and groups in the manifest are [#63](https://github.com/Jinksen/CAD-2D-convertor/issues/63).
 
