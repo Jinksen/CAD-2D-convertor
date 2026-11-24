@@ -18,7 +18,7 @@ fn the_ribbon_has_the_five_captioned_groups_in_order() {
         assert!(x(pair[0]) < x(pair[1]), "{} before {}", pair[0], pair[1]);
     }
     for (key, name) in [
-        ("open-step", "Open a STEP file"),
+        ("open-step", "Open a CAD file (STEP, IGES, BREP)"),
         ("run-section", "Compute the exact section"),
         ("export-dxf", "Export the section as a DXF bundle"),
         ("undo-plane", "Undo the last plane change"),

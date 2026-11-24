@@ -54,8 +54,8 @@ pub fn toolbar(s: &AppState, t: &Theme, k: &Kit) -> El {
     let computing = s.shell.busy.as_deref() == Some("Computing exact section");
     let file = vec![
         tip(
-            button(k, "open-step", "Open STEP…", idle).on_press_tx(open_step_dialog),
-            "Open a STEP file",
+            button(k, "open-step", "Open model…", idle).on_press_tx(open_step_dialog),
+            "Open a CAD file (STEP, IGES, BREP)",
             &["Ctrl", "O"],
         ),
         tip(

@@ -262,7 +262,7 @@ fn every_interactive_control_has_a_role_and_a_name() {
     };
     for (role, name) in [
         ("toolbar", "Toolbar"),
-        ("button", "Open STEP"),
+        ("button", "Open model"),
         ("button", "Save"),
         ("button", "Open project"),
         ("radio-button", "XY"),

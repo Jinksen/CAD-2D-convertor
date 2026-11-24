@@ -151,7 +151,7 @@ impl AppState {
     pub fn save_project(&mut self, mut path: PathBuf) {
         let Some(mut project) = self.project_file() else {
             self.shell
-                .log(Severity::Error, "Open a STEP file before saving a project.");
+                .log(Severity::Error, "Open a model before saving a project.");
             return;
         };
         if path.extension().is_none() {

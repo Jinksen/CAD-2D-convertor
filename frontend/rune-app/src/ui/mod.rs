@@ -201,13 +201,16 @@ mod tests {
     }
 
     #[test]
-    fn dropping_a_step_file_starts_an_import_and_other_files_are_refused() {
+    fn dropping_a_cad_file_starts_an_import_and_other_files_are_refused() {
         let mut runtime = runtime();
         let at = runtime.find("viewport");
         runtime.drop_files(vec!["part.dxf".into()], at);
         runtime.frame(1.0 / 60.0);
         let last = runtime.state.shell.messages.last().expect("a message");
-        assert_eq!(last.text, "Choose a STEP or STP file.");
+        assert_eq!(
+            last.text,
+            "Choose a STEP, IGES or BREP file (.step .stp .igs .iges .brep)."
+        );
     }
 
     #[test]

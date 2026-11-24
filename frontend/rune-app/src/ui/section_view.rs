@@ -398,7 +398,7 @@ pub fn canvas(s: &AppState, t: &Theme, k: &Kit) -> El {
             .child(note(if s.model.imported.is_some() {
                 "No section computed. Choose a plane and press Compute section."
             } else {
-                "Open or drop a STEP file."
+                "Open or drop a CAD file."
             }));
     };
     let scene = s.section.scene();

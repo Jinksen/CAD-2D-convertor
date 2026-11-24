@@ -101,7 +101,7 @@ fn canvas(s: &AppState, t: &Theme) -> El {
             s.ensure_preview();
         });
     let message = match &s.preview.status {
-        _ if s.model.imported.is_none() => "Open or drop a STEP file.".to_string(),
+        _ if s.model.imported.is_none() => "Open or drop a CAD file.".to_string(),
         MeshStatus::Empty | MeshStatus::Loading => "Generating 3D preview…".to_string(),
         MeshStatus::Failed(message) => message.clone(),
         MeshStatus::Ready => {

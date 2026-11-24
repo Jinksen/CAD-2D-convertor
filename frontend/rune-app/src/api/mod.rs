@@ -168,7 +168,7 @@ impl Client {
             "application/json",
         )?;
         let summary: ImportSummary =
-            Self::decode(&reply, "The STEP file could not be imported.", invalid)?;
+            Self::decode(&reply, "The model file could not be imported.", invalid)?;
         summary.validate().map_err(|_| invalid.to_string())?;
         Ok(summary)
     }

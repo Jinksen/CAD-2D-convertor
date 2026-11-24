@@ -45,9 +45,15 @@ impl Tasks {
     }
 }
 
-fn is_step(path: &Path) -> bool {
-    path.extension()
-        .is_some_and(|e| e.eq_ignore_ascii_case("step") || e.eq_ignore_ascii_case("stp"))
+/// Extensions of the CAD formats the service imports.
+pub const MODEL_EXTENSIONS: [&str; 5] = ["step", "stp", "igs", "iges", "brep"];
+
+fn is_model(path: &Path) -> bool {
+    path.extension().is_some_and(|e| {
+        MODEL_EXTENSIONS
+            .iter()
+            .any(|known| e.eq_ignore_ascii_case(known))
+    })
 }
 
 impl AppState {
@@ -127,14 +133,16 @@ impl AppState {
     }
 
     pub fn open_step(&mut self, path: PathBuf) {
-        if !is_step(&path) {
-            self.shell
-                .log(Severity::Error, "Choose a STEP or STP file.");
+        if !is_model(&path) {
+            self.shell.log(
+                Severity::Error,
+                "Choose a STEP, IGES or BREP file (.step .stp .igs .iges .brep).",
+            );
             return;
         }
         let service_path = path.to_string_lossy().into_owned();
         self.start(
-            "Importing STEP",
+            "Importing model",
             move |client| client.import_step(&service_path),
             move |state, summary| state.finish_import(summary),
         );
@@ -170,7 +178,7 @@ impl AppState {
         let Some(imported) = &self.model.imported else {
             self.shell.log(
                 Severity::Warning,
-                "Open a STEP file before computing a section.",
+                "Open a model before computing a section.",
             );
             return;
         };
@@ -335,7 +343,7 @@ impl AppState {
                 }
                 if changed {
                     let text = format!(
-                        "The STEP file changed since the project was saved (SHA-256 mismatch for {}). Results may differ from the saved session.",
+                        "The model file changed since the project was saved (SHA-256 mismatch for {}). Results may differ from the saved session.",
                         project.step.path
                     );
                     state.shell.log(Severity::Warning, text);
@@ -487,7 +495,7 @@ mod tests {
         let (mut state, rx) = harness(&fake.url);
 
         state.open_step(PathBuf::from("C:/m.step"));
-        assert_eq!(state.shell.busy.as_deref(), Some("Importing STEP"));
+        assert_eq!(state.shell.busy.as_deref(), Some("Importing model"));
         settle(&mut state, &rx);
         assert!(state.shell.busy.is_none());
         assert_eq!(state.model.visible_bodies().len(), 1);
@@ -594,5 +602,15 @@ mod tests {
             Severity::Warning
         );
         settle(&mut state, &rx);
+    }
+
+    #[test]
+    fn every_supported_cad_extension_is_accepted_and_others_are_not() {
+        for name in ["a.step", "a.STP", "a.igs", "a.IGES", "a.brep"] {
+            assert!(is_model(Path::new(name)), "{name}");
+        }
+        for name in ["a.dxf", "a.c2mproj", "a"] {
+            assert!(!is_model(Path::new(name)), "{name}");
+        }
     }
 }

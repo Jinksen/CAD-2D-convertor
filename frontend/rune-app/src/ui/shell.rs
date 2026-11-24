@@ -23,7 +23,7 @@ fn dialog(title: &str, file_name: Option<&str>) -> FileDialogOptions {
 }
 
 pub fn open_step_dialog(_: &mut AppState, tx: &mut Tx) {
-    let options = dialog("Open STEP file", None).filter("STEP", &["step", "stp"]);
+    let options = dialog("Open model", None).filter("CAD files", &crate::tasks::MODEL_EXTENSIONS);
     tx.open_file(options, |s: &mut AppState, result, _| match result {
         Ok(Some(path)) => s.open_step(path),
         Ok(None) => {}
@@ -44,7 +44,7 @@ pub(super) fn open_project_dialog(_: &mut AppState, tx: &mut Tx) {
 pub(super) fn save_project_dialog(s: &mut AppState, tx: &mut Tx, save_as: bool) {
     if s.model.imported.is_none() {
         s.shell
-            .log(Severity::Error, "Open a STEP file before saving a project.");
+            .log(Severity::Error, "Open a model before saving a project.");
     } else if let (false, Some(path)) = (save_as, s.shell.project_path.clone()) {
         s.save_project(path);
     } else {

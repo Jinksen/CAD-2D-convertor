@@ -416,7 +416,7 @@ fn step_form(s: &AppState, k: &Kit) -> El {
         .gap(space::S1)
         .child(
             TextInput::new(&s.shell.step_path)
-                .label("STEP path")
+                .label("Model path")
                 .placeholder("C:\\Projects\\motor.step")
                 .width(None)
                 .height(22.0)
@@ -427,11 +427,11 @@ fn step_form(s: &AppState, k: &Kit) -> El {
         .child(
             row()
                 .gap(space::S1)
-                .child(button(k, "import-path", "Import STEP", idle).on_press(
+                .child(button(k, "import-path", "Import model", idle).on_press(
                     |s: &mut AppState| {
                         let path = s.shell.step_path.text.trim().to_owned();
                         if path.is_empty() {
-                            s.shell.log(Severity::Error, "Enter a STEP path.");
+                            s.shell.log(Severity::Error, "Enter a model path.");
                         } else {
                             s.open_step(PathBuf::from(path));
                         }

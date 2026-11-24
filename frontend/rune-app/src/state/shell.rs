@@ -134,7 +134,7 @@ impl ShellState {
     pub fn cancellable(&self) -> bool {
         matches!(
             self.busy.as_deref(),
-            Some("Importing STEP" | "Opening project" | "Computing exact section")
+            Some("Importing model" | "Opening project" | "Computing exact section")
         )
     }
 
