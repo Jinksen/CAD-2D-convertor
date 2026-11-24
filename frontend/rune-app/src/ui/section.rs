@@ -4,7 +4,7 @@ use rune::tok::{Theme, space, type_};
 use rune::{El, TextEdit, col, edit_access, row, text};
 use rune_kit::{Kit, TextInput};
 
-use super::{button, choice, heading, label_value, severity_color};
+use super::{button, heading, label_value, severity_color};
 use crate::api::dto::Severity;
 use crate::state::section::PlaneKind;
 use crate::state::{AppState, now_ms};
@@ -68,32 +68,14 @@ pub fn settings(s: &AppState, t: &Theme, k: &Kit) -> El {
     let fmt = s.shell.number_format;
     s.section.fmt.set(fmt);
     let sec = &s.section;
-    let kinds = [
-        PlaneKind::XY,
-        PlaneKind::XZ,
-        PlaneKind::YZ,
-        PlaneKind::Custom,
-    ];
-    let plane_row = choice(
-        k,
-        "plane",
-        "Plane",
-        &["XY", "XZ", "YZ", "Custom"],
-        kinds.iter().position(|p| *p == sec.plane),
-        move |s, i| s.section.set_plane(kinds[i], now_ms()),
-    );
     let panel = col()
         .key("section-settings")
         .w_full()
         .child(heading(t, "Section"))
-        .child(
-            col()
-                .w_full()
-                .padding(space::S2)
-                .gap(space::S2)
-                .child(note(t, "Exact planar cut of all bodies"))
-                .child(plane_row),
-        );
+        .child(col().w_full().padding(space::S2).gap(space::S2).child(note(
+            t,
+            "Exact planar cut of all bodies. Pick the plane and compute from the ribbon.",
+        )));
     let Some(imported) = &s.model.imported else {
         return panel.child(
             text("No model imported.")
@@ -183,29 +165,14 @@ pub fn settings(s: &AppState, t: &Theme, k: &Kit) -> El {
                 .w_full(),
         );
     }
-    let computing = s.shell.busy.as_deref() == Some("Computing exact section");
-    form = form
-        .child(
-            button(
-                k,
-                "section-compute",
-                if computing {
-                    "Computing…"
-                } else {
-                    "Compute section"
-                },
-                !busy,
-            )
-            .on_press(AppState::compute_section),
-        )
-        .child(note(
-            t,
-            format!(
-                "History: {} undo, {} redo",
-                sec.past.len(),
-                sec.future.len()
-            ),
-        ));
+    form = form.child(note(
+        t,
+        format!(
+            "History: {} undo, {} redo",
+            sec.past.len(),
+            sec.future.len()
+        ),
+    ));
 
     // Run status and result.
     let mut result = col().w_full().padding(space::S2).gap(space::S1);
@@ -288,8 +255,13 @@ mod tests {
     fn the_custom_plane_exposes_normal_fields_and_the_other_planes_do_not() {
         let mut rt = runtime(loaded());
         assert!(rt.find("normal-x").is_none());
-        press(&mut rt, "plane/segment3");
-        assert_eq!(rt.state.section.plane, PlaneKind::Custom);
+        assert!(
+            rt.find("plane").is_none(),
+            "the plane is picked in the ribbon only"
+        );
+        rt.state.section.set_plane(PlaneKind::Custom, 0);
+        rt.invalidate();
+        rt.frame(1.0 / 60.0);
         assert!(rt.find("normal-z").is_some() && rt.find("align-plane").is_some());
     }
 
@@ -299,7 +271,7 @@ mod tests {
         press(&mut rt, "offset-inc");
         assert_eq!(rt.state.section.offset_mm, Some(16.0));
         assert_eq!(rt.state.section.offset_text.text, "16.000");
-        press(&mut rt, "plane/segment1");
+        rt.state.section.set_plane(PlaneKind::XZ, 1_000_000);
         assert_eq!(rt.state.section.offset_text.text, "");
     }
 }

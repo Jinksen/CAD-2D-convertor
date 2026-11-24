@@ -5,6 +5,7 @@ mod groups;
 mod icons;
 mod model_tree;
 mod preview;
+mod ribbon;
 mod section;
 mod section_view;
 mod shell;
@@ -44,7 +45,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .w_full()
         .h_full()
         .fill(t.bg)
-        .child(shell::toolbar(s, &t, &k))
+        .child(ribbon::toolbar(s, &t, &k))
         .child(
             row()
                 .key("workspace")
@@ -260,6 +261,8 @@ mod tests {
     }
 }
 
+#[cfg(test)]
+mod ribbon_tests;
 #[cfg(test)]
 mod shell_tests;
 #[cfg(test)]

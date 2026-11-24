@@ -36,3 +36,7 @@ Rune has no element-to-element drop target, so the drag finds the group row from
 ### Cross-highlight and filter
 
 Hovering a body row highlights the body in the 2D and 3D views, and hovering a body in either view highlights its row and scrolls it into view. Hover is display only and never changes the selection. The filter marks the matching part of each name, shows a match count and has a clear button. The tree header has Expand all and Collapse all.
+
+## Ribbon
+
+Groups, each with a caption: File (Open STEP, Open project, Save), Section (plane XY/XZ/YZ/Custom, Compute section), Export (DXF), Edit (Undo, Redo) and View (2D/3D), then Settings at the right. Every button has a tooltip with its shortcut. The plane and Compute exist only in the ribbon; the Section pane keeps the offset, custom normal and align fields.

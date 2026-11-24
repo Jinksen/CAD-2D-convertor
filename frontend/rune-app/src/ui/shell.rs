@@ -2,7 +2,7 @@
 
 use rune::tok::{Theme, space, type_};
 use rune::{El, FileDialogOptions, Key, KeyEvent, Tx, col, row, spacer, text};
-use rune_kit::{Checkbox, Kit, SegmentedControl, State, Toast, ToastRegion};
+use rune_kit::{Checkbox, Kit, Toast, ToastRegion};
 
 use super::{
     MESSAGES_HEIGHT, button, choice, heading, label_value, rule, scroller, severity_color,
@@ -34,7 +34,7 @@ pub fn open_step_dialog(_: &mut AppState, tx: &mut Tx) {
     });
 }
 
-fn open_project_dialog(_: &mut AppState, tx: &mut Tx) {
+pub(super) fn open_project_dialog(_: &mut AppState, tx: &mut Tx) {
     let options = dialog("Open project", None).filter("CAD2Maxwell project", &["c2mproj"]);
     tx.open_file(options, |s: &mut AppState, result, _| match result {
         Ok(Some(path)) => s.open_project(path),
@@ -44,7 +44,7 @@ fn open_project_dialog(_: &mut AppState, tx: &mut Tx) {
 }
 
 /// Saves to the known project path, else (or with `save_as`) asks for one.
-fn save_project_dialog(s: &mut AppState, tx: &mut Tx, save_as: bool) {
+pub(super) fn save_project_dialog(s: &mut AppState, tx: &mut Tx, save_as: bool) {
     if s.model.imported.is_none() {
         s.shell
             .log(Severity::Error, "Open a STEP file before saving a project.");
@@ -61,11 +61,11 @@ fn save_project_dialog(s: &mut AppState, tx: &mut Tx, save_as: bool) {
     }
 }
 
-fn exportable(s: &AppState) -> bool {
+pub(super) fn exportable(s: &AppState) -> bool {
     s.section.export_blocker().is_none()
 }
 
-fn export_dialog(s: &mut AppState, tx: &mut Tx) {
+pub(super) fn export_dialog(s: &mut AppState, tx: &mut Tx) {
     if let Some(reason) = s.section.export_blocker() {
         s.shell.log(Severity::Warning, reason);
         return;
@@ -79,109 +79,9 @@ fn export_dialog(s: &mut AppState, tx: &mut Tx) {
     });
 }
 
-fn compute(s: &mut AppState) {
+pub(super) fn compute(s: &mut AppState) {
     s.preview.mode = ViewportMode::TwoD;
     s.compute_section();
-}
-
-fn group(label: &str) -> El {
-    row()
-        .key(format!("group-{label}"))
-        .role("group")
-        .label(label)
-        .gap(space::S1)
-        .items_center()
-}
-
-const PRINCIPAL: [PlaneKind; 3] = [PlaneKind::XY, PlaneKind::XZ, PlaneKind::YZ];
-
-pub fn toolbar(s: &AppState, t: &Theme, k: &Kit) -> El {
-    let idle = s.shell.busy.is_none();
-    let has_model = s.model.imported.is_some();
-    let names = PRINCIPAL.map(crate::project::kind_name);
-    let on = PRINCIPAL.iter().position(|p| *p == s.section.plane);
-    let mut planes = SegmentedControl::new(&names, on.filter(|_| has_model))
-        .label("Section plane")
-        .fit()
-        .on_pick(|s: &mut AppState, i, _| s.section.set_plane(PRINCIPAL[i], now_ms()));
-    for i in (0..names.len()).filter(|_| !has_model) {
-        planes = planes.segment_state(i, State::Disabled);
-    }
-    row()
-        .key("toolbar")
-        .role("toolbar")
-        .label("Toolbar")
-        .w_full()
-        .gap(space::S3)
-        .padding(space::S2)
-        .items_center()
-        .border(1.0, t.separator)
-        .child(text("CAD2Maxwell").font(type_::TITLE).color(t.text))
-        .child(
-            group("Model").child(
-                button(k, "open-step", "Open STEP…", idle)
-                    .shortcut_hint("Ctrl+O")
-                    .on_press_tx(open_step_dialog),
-            ),
-        )
-        .child(
-            group("Project")
-                .child(
-                    button(k, "save-project", "Save", has_model)
-                        .shortcut_hint("Ctrl+S")
-                        .on_press_tx(|s: &mut AppState, tx: &mut Tx| {
-                            save_project_dialog(s, tx, false)
-                        }),
-                )
-                .child(
-                    button(k, "open-project", "Open project…", idle)
-                        .on_press_tx(open_project_dialog),
-                ),
-        )
-        .child(group("Section plane").child(planes.build(k).key("ribbon-plane")))
-        .child(
-            group("Run").child(
-                button(k, "run-section", "Compute section", idle && has_model)
-                    .shortcut_hint("Ctrl+Enter")
-                    .on_press(compute),
-            ),
-        )
-        .child(
-            group("Export").child(
-                button(k, "export-dxf", "Export DXF…", idle && exportable(s))
-                    .shortcut_hint("Ctrl+E")
-                    .on_press_tx(export_dialog),
-            ),
-        )
-        .child(
-            group("History")
-                .child(
-                    button(k, "undo-plane", "Undo", !s.section.past.is_empty())
-                        .shortcut_hint("Ctrl+Z")
-                        .on_press(|s: &mut AppState| s.section.undo()),
-                )
-                .child(
-                    button(k, "redo-plane", "Redo", !s.section.future.is_empty())
-                        .shortcut_hint("Ctrl+Y")
-                        .on_press(|s: &mut AppState| s.section.redo()),
-                ),
-        )
-        .child(spacer())
-        .child(
-            button(k, "open-settings", "Settings", true)
-                .checked(s.shell.show_prefs)
-                .on_press(|s: &mut AppState| s.shell.show_prefs = !s.shell.show_prefs),
-        )
-        .child(choice(
-            k,
-            "toggle-view",
-            "View",
-            &["2D", "3D"],
-            Some(usize::from(s.preview.mode == ViewportMode::ThreeD)),
-            |s, i| {
-                s.preview.mode = [ViewportMode::TwoD, ViewportMode::ThreeD][i];
-            },
-        ))
 }
 
 /// Applies `change` to the number format and remembers it.
