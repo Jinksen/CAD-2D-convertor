@@ -2,8 +2,8 @@
 //!
 //! Curves stay analytic in state; each view build tessellates only what is on screen, at a
 //! tolerance of a fraction of a pixel, so arcs look round at any zoom and the section data (and
-//! the DXF export) are never touched. Holes are painted in the canvas color over their body's
-//! fill because Rune fills are simple polygons without holes.
+//! the DXF export) are never touched. Rune fills are simple polygons without holes, so each hole
+//! is bridged into its outer ring (`fill`) to leave it genuinely empty.
 
 use rune::tok::{Theme, space, type_};
 use rune::{
@@ -18,7 +18,7 @@ use crate::api::dto::{SectionComponent, SectionResponse, SectionWire, Severity, 
 use crate::state::AppState;
 use crate::state::section::Scene;
 use crate::state::section::camera::{self, Size, ViewBox};
-use crate::state::section::geometry::{self, outline_color};
+use crate::state::section::geometry::{self, inside, outline_color};
 
 const PAN_DRAG_PX: f32 = 3.0;
 /// Pointer tolerance for picking a curve, in pixels.
@@ -32,7 +32,6 @@ type P = [f64; 2];
 
 struct Look {
     dark: bool,
-    bg: Color,
     selected: Color,
     related: Color,
     default: Color,
@@ -47,7 +46,6 @@ impl Look {
         let dark = t.bg.luminance() < 0.5;
         Look {
             dark,
-            bg: t.bg,
             selected: rgb(if dark { [98, 160, 234] } else { [26, 95, 180] }),
             related: rgb(if dark { [255, 163, 72] } else { [179, 92, 0] }),
             default: rgb(if dark {
@@ -141,6 +139,36 @@ fn draw_wires(comp: &SectionComponent, map: &Map, shown: [f64; 4]) -> Vec<Drawn>
     out
 }
 
+/// Each outer ring of a body with the holes inside it (smallest enclosing outer wins).
+fn fill_rings(wires: &[Drawn]) -> Vec<(Vec<P>, Vec<Vec<P>>)> {
+    let ring = |w: &Drawn| -> Vec<P> {
+        w.lines[0]
+            .iter()
+            .map(|p| [f64::from(p[0]), f64::from(p[1])])
+            .collect()
+    };
+    let closed = |role: WireRole| {
+        wires
+            .iter()
+            .filter(move |w| {
+                w.closed && w.role == Some(role) && w.lines[0].len() <= MAX_FILL_POINTS
+            })
+            .map(ring)
+    };
+    let mut out: Vec<(Vec<P>, Vec<Vec<P>>)> =
+        closed(WireRole::Outer).map(|o| (o, vec![])).collect();
+    for h in closed(WireRole::Hole) {
+        let owner = out
+            .iter_mut()
+            .filter(|(o, _)| inside(o, h[0]))
+            .min_by(|a, b| fill::area(&a.0).abs().total_cmp(&fill::area(&b.0).abs()));
+        if let Some((_, holes)) = owner {
+            holes.push(h);
+        }
+    }
+    out
+}
+
 /// What the painter needs to know about the shown section and its bodies.
 pub struct Paint<'a> {
     pub section: &'a SectionResponse,
@@ -185,18 +213,14 @@ fn build_shape(p: &Paint, view: ViewBox, size: Size, look: &Look) -> Shape {
             if !complete || (p.hidden)(&comp.component_id) {
                 continue;
             }
-            let fill = base(&comp.component_id).0;
-            for w in drawn[i].iter().filter(|w| w.closed) {
-                let pts = &w.lines[0];
-                if pts.len() > MAX_FILL_POINTS {
-                    continue;
+            let fill_color = base(&comp.component_id).0.alpha(0.28 * dim);
+            for (pts, holes) in fill_rings(&drawn[i]) {
+                let cut: Vec<&[P]> = holes.iter().map(|h| h.as_slice()).collect();
+                if let Some(poly) = fill::with_holes(&pts, &cut) {
+                    let poly: Vec<[f32; 2]> =
+                        poly.iter().map(|p| [p[0] as f32, p[1] as f32]).collect();
+                    shape = shape.fill(poly, fill_color);
                 }
-                let color = if w.role == Some(WireRole::Hole) {
-                    look.bg
-                } else {
-                    fill.alpha(0.28 * dim)
-                };
-                shape = shape.fill(pts.clone(), color);
             }
         }
     }
@@ -493,5 +517,6 @@ pub fn canvas(s: &AppState, t: &Theme, k: &Kit) -> El {
         .child(surface)
 }
 
+mod fill;
 #[cfg(test)]
 mod tests;

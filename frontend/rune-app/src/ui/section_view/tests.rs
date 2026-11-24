@@ -282,7 +282,7 @@ fn picking_ignores_hidden_bodies_and_treats_a_hole_as_empty() {
 }
 
 #[test]
-fn holes_are_painted_over_and_errors_suppress_fills_but_not_outlines() {
+fn holes_are_bridged_out_of_the_fill_and_errors_suppress_fills_but_not_outlines() {
     let mut s = state_with(two_bodies());
     let look = Look::of(&rune::tok::theme(false));
     let build = |s: &AppState| {
@@ -309,8 +309,8 @@ fn holes_are_painted_over_and_errors_suppress_fills_but_not_outlines() {
             related_component_id: None,
         });
     let outlined = format!("{:?}", build(&s));
-    // Fills: square, hole (canvas color) and the second square; strokes in both cases.
-    assert_eq!(filled.matches("Fill {").count(), 3);
+    // Fills: the square with its hole bridged out, and the second square; strokes in both cases.
+    assert_eq!(filled.matches("Fill {").count(), 2);
     assert_eq!(outlined.matches("Fill {").count(), 0);
     assert_eq!(outlined.matches("Stroke {").count(), 3);
 }
