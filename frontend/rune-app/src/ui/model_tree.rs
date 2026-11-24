@@ -9,10 +9,11 @@ use rune_kit::glyphs;
 use rune_kit::{Kit, TextInput};
 
 use super::groups::{self, folder_rows, group_rows, new_group_form};
+use super::panels::side_heading;
 use super::shell::open_step_dialog;
 use super::tree_menu::attach;
 use super::tree_row::{Glyph, Item, row_el};
-use super::{TREE_WIDTH, button, heading, icons, label_value, rule, scroller};
+use super::{button, heading, icons, label_value, rule, scroller};
 use crate::api::dto::{ImportComponent, Severity};
 use crate::state::AppState;
 use crate::state::selection::Node as TreeNode;
@@ -185,11 +186,18 @@ pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
         .key("model-tree")
         .role("region")
         .label("Model builder")
-        .w(TREE_WIDTH)
+        .w(s.shell.layout.tree_width)
         .h_full()
         .min_h(0.0)
         .border(1.0, t.separator)
-        .child(heading(t, "Model Builder"));
+        .child(side_heading(
+            t,
+            "Model Builder",
+            "tree-collapse",
+            "Collapse model builder",
+            &icons::CARET_LEFT,
+            |s| s.shell.layout.tree_collapsed = true,
+        ));
     let Some(imported) = &s.model.imported else {
         return panel.child(
             text("No model loaded.")

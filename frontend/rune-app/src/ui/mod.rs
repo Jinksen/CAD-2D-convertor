@@ -5,6 +5,7 @@ mod groups;
 mod icons;
 mod messages;
 mod model_tree;
+mod panels;
 mod preview;
 mod ribbon;
 mod section;
@@ -22,9 +23,6 @@ use rune_kit::{Button, ControlSize, Kit, PaletteSeed, SegmentedControl, scroll_b
 
 use crate::api::dto::Severity;
 use crate::state::AppState;
-
-pub const TREE_WIDTH: f32 = 260.0;
-pub const SETTINGS_WIDTH: f32 = 320.0;
 
 /// Kit tokens derived from the app's neutral theme, with small radii.
 pub(crate) fn kit(t: &Theme, accent: Color) -> Kit {
@@ -47,36 +45,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .h_full()
         .fill(t.bg)
         .child(ribbon::toolbar(s, &t, &k))
-        .child(
-            row()
-                .key("workspace")
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .child(model_tree::tree(s, &t, &k))
-                .child(preview::viewport(s, &t, &k))
-                .child(
-                    col()
-                        .key("properties")
-                        .role("region")
-                        .label("Settings")
-                        .w(SETTINGS_WIDTH)
-                        .h_full()
-                        .min_h(0.0)
-                        .border(1.0, t.separator)
-                        .child(scroller(
-                            &k,
-                            "properties-scroll",
-                            col().w_full().child(if s.shell.show_prefs {
-                                shell::preferences(s, &t, &k)
-                            } else if s.model.section_selected && s.model.imported.is_some() {
-                                section::settings(s, &t, &k)
-                            } else {
-                                model_tree::properties(s, &t, &k)
-                            }),
-                        )),
-                ),
-        )
+        .child(panels::workspace(s, &t, &k))
         .child(messages::messages(s, &t, &k))
         .child(messages::status_bar(s, &t))
         .on_drop_files(|s: &mut AppState, files, _| match files.first() {
@@ -265,6 +234,8 @@ mod tests {
 
 #[cfg(test)]
 mod messages_tests;
+#[cfg(test)]
+mod panels_tests;
 #[cfg(test)]
 mod ribbon_tests;
 #[cfg(test)]

@@ -46,12 +46,10 @@ impl Layout {
         }
     }
 
-    #[allow(dead_code)] // wired to the panel splitters in the next change
     pub fn set_tree_width(&mut self, w: f32) {
         self.tree_width = clamp(w, TREE_RANGE);
     }
 
-    #[allow(dead_code)]
     pub fn set_props_width(&mut self, w: f32) {
         self.props_width = clamp(w, PROPS_RANGE);
     }

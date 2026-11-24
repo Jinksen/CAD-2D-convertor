@@ -48,3 +48,7 @@ The right pane shows exactly one titled context, chosen by the tree selection: `
 ## Messages panel
 
 The panel is collapsed when it only holds info messages and opens on the next warning or error. It has a severity filter (All, Errors, Warnings, Info), and the status bar shows error and warning counts that open it filtered to that severity. Drag its top edge to resize it (double-click resets); the height is remembered in the preferences file.
+
+## Side panels
+
+Drag the splitters between the model tree, the viewport and the properties pane to resize them; double-click a splitter or press the arrow keys on it (focused) to reset or nudge. Each side panel collapses to a thin strip with its heading button. Widths, collapsed state and the messages height are stored in the Rune preferences file under `layout` and restored on start.

@@ -22,3 +22,8 @@ pub static SECTION: Icon = Icon {
     view: 16.0,
     body: r#"<path d="M1.5 11.5 4.5 5.5h10l-3 6Z" stroke="currentColor" stroke-linejoin="round"/><path d="M8 1.5v4" stroke="currentColor" stroke-linecap="round"/>"#,
 };
+pub static CARET_LEFT: Icon = Icon {
+    name: "c2m-caret-left",
+    view: 16.0,
+    body: r#"<path d="M10 4L6 8L10 12V4Z" fill="currentColor"/>"#,
+};
