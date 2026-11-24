@@ -56,6 +56,18 @@ fn cross(o: P, a: P, b: P) -> f64 {
     (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
 }
 
+/// `from` moved toward `to` by a slit width: 0.01 screen points (well above f32 resolution at
+/// screen coordinates, far below a pixel), at most a quarter of the edge.
+fn toward(from: P, to: P) -> P {
+    let (dx, dy) = (to[0] - from[0], to[1] - from[1]);
+    let len = dx.hypot(dy);
+    if len == 0.0 {
+        return from;
+    }
+    let t = (0.01 / len).min(0.25);
+    [from[0] + dx * t, from[1] + dy * t]
+}
+
 /// Segments `ab` and `cd` cross at an interior point of both.
 fn crosses(a: P, b: P, c: P, d: P) -> bool {
     let (d1, d2, d3, d4) = (
@@ -108,10 +120,13 @@ pub fn with_holes(outer: &[P], holes: &[&[P]]) -> Option<Vec<P>> {
         let at = cand.into_iter().find(|&i| clear(poly[i]))?;
         let v = poly[at];
         bridges.push((v, m));
-        let mut walk: Vec<P> = (0..=ring.len())
-            .map(|j| ring[(k + j) % ring.len()])
-            .collect();
-        walk.push(v);
+        // Rune's ear test skips ear corners by index, so a second vertex at the same spot as `m`
+        // or `v` reads as inside every bridge ear and Rune falls back to a fan (wedges). The way
+        // back therefore stops a hair short of both, on their own edges: a slit, not a seam.
+        let n = ring.len();
+        let mut walk: Vec<P> = (0..n).map(|j| ring[(k + j) % n]).collect();
+        walk.push(toward(m, ring[(k + n - 1) % n]));
+        walk.push(toward(v, poly[(at + 1) % poly.len()]));
         poly.splice(at + 1..at + 1, walk);
     }
     Some(poly)
@@ -130,8 +145,76 @@ mod tests {
         let outer = rect(0.0, 0.0, 10.0, 10.0);
         let (a, b) = (rect(2.0, 2.0, 4.0, 4.0), rect(6.0, 5.0, 8.0, 9.0));
         let poly = with_holes(&outer, &[&a, &b]).expect("bridged");
-        assert!((area(&poly).abs() - (100.0 - 4.0 - 8.0)).abs() < 1e-9);
+        // The two 0.01-wide tapered slits remove a sliver of area.
+        assert!((area(&poly).abs() - (100.0 - 4.0 - 8.0)).abs() < 0.1);
         assert_eq!(poly.len(), 4 + 2 * (4 + 2));
+    }
+
+    /// Rune's ear clipping (`rune::shape::triangulate`, pinned a7f276c, crate-private) step for
+    /// step: Some(triangle area) or None where Rune falls back to a fan and draws wedges.
+    fn rune_fill_area(points: &[P]) -> Option<f64> {
+        let n = points.len();
+        let ccw = area(points) > 0.0;
+        let cr = |a: P, b: P, c: P| {
+            let v = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+            if ccw { v } else { -v }
+        };
+        let (mut ring, mut total, mut misses, mut i): (Vec<usize>, f64, usize, usize) =
+            ((0..n).collect(), 0.0, 0, 0);
+        while ring.len() > 3 {
+            let m = ring.len();
+            let (ia, ib, ic) = (ring[(i + m - 1) % m], ring[i % m], ring[(i + 1) % m]);
+            let (a, b, c) = (points[ia], points[ib], points[ic]);
+            let empty = cr(a, b, c) > 0.0
+                && ring.iter().all(|&k| {
+                    k == ia || k == ib || k == ic || {
+                        let p = points[k];
+                        !(cr(a, b, p) >= 0.0 && cr(b, c, p) >= 0.0 && cr(c, a, p) >= 0.0)
+                    }
+                });
+            if empty || (misses >= m && cr(a, b, c) == 0.0) {
+                if empty {
+                    total += cr(a, b, c).abs() / 2.0;
+                }
+                ring.remove(i % m);
+                misses = 0;
+                i %= ring.len();
+            } else {
+                misses += 1;
+                if misses > 2 * m {
+                    return None;
+                }
+                i = (i + 1) % m;
+            }
+        }
+        let (a, b, c) = (points[ring[0]], points[ring[1]], points[ring[2]]);
+        Some(total + cr(a, b, c).abs() / 2.0)
+    }
+
+    fn circle(cx: f64, cy: f64, r: f64, n: usize) -> Vec<P> {
+        (0..n)
+            .map(|i| {
+                let t = std::f64::consts::TAU * i as f64 / n as f64;
+                [cx + r * t.cos(), cy + r * t.sin()]
+            })
+            .collect()
+    }
+
+    #[test]
+    fn rune_triangulates_a_bridged_annulus_without_falling_back_to_a_fan() {
+        // A rotor lamination: disc with a shaft hole and an off-centre magnet pocket.
+        let outer = circle(400.0, 300.0, 200.0, 96);
+        let (shaft, pocket) = (
+            circle(400.0, 300.0, 50.0, 48),
+            rect(520.0, 280.0, 560.0, 320.0),
+        );
+        let poly = with_holes(&outer, &[&shaft, &pocket]).expect("bridged");
+        let want = area(&outer).abs() - area(&shaft).abs() - area(&pocket).abs();
+        let got = rune_fill_area(&poly).expect("Rune would fall back to a fan");
+        assert!(
+            (got - want).abs() < want * 1e-4,
+            "filled {got}, want {want}"
+        );
     }
 
     #[test]

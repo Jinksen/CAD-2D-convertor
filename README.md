@@ -15,7 +15,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%20x64-0078d4)
 
-<img src="docs/images/section-2d.png" alt="Exact XY section of the demo motor next to the Model Builder with stator and rotor assembly folders and a North poles group" width="900">
+<img src="docs/images/section-2d.png" alt="Exact XY section of the demo motor: Model Builder tree with stator and rotor assemblies, 2D view with scale bar and axes, section properties" width="900">
 
 </div>
 
@@ -80,6 +80,8 @@ back to its source body.
 3. Pick a plane (keys **1 / 2 / 3**) and set the offset in **Section**. For a tilted lamination, select one sheet and click **Align to selected body**.
 4. **Compute** (Ctrl+Enter), then **DXF** (Ctrl+E). The ZIP holds `section.dxf` (1:1, mm) and `section.json`.
 5. Import the DXF into Maxwell 2D with the [Maxwell import checklist](docs/maxwell-import-checklist.md).
+
+<img src="docs/images/welcome.png" alt="Welcome screen with Open model, Open project, Open demo motor, recent projects and the documentation link" width="720">
 
 The [walkthrough](docs/first-trial.md) has details and troubleshooting.
 
