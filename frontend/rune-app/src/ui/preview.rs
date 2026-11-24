@@ -4,15 +4,16 @@
 use rune::tok::{Theme, space, type_};
 use rune::{
     Drag, El, Key, KeyEvent, Phase, PointerButton, PointerEvent, SurfaceFit, Tx, WheelEvent, col,
-    row, text,
+    el, row, text,
 };
 
 use rune_kit::Kit;
 
+use super::preview_aids as aids;
 use super::{button, heading};
-use crate::api::dto::{BoundsMm, SectionPlane};
-use crate::render3d::raster::{Body, Line, Scene, guide_outline};
-use crate::render3d::{StandardView, plane_guide};
+use crate::api::dto::BoundsMm;
+use crate::render3d::raster::{Body, Line, Scene, draw_triad, guide_outline};
+use crate::render3d::{StandardView, plane_guide, triad};
 use crate::state::AppState;
 use crate::state::preview::{MeshStatus, RenderKey, ViewportMode};
 
@@ -45,12 +46,12 @@ pub fn viewport(s: &AppState, t: &Theme, k: &Kit) -> El {
             },
         ));
     if three_d {
-        c = c.child(toolbar(s, t, k));
+        c = c.child(toolbar(s, k));
     }
     c.child(body)
 }
 
-fn toolbar(s: &AppState, t: &Theme, k: &Kit) -> El {
+fn toolbar(s: &AppState, k: &Kit) -> El {
     let ready = s.preview.status == MeshStatus::Ready;
     let mut r = row()
         .key("view-toolbar")
@@ -79,42 +80,12 @@ fn toolbar(s: &AppState, t: &Theme, k: &Kit) -> El {
             ),
         );
     }
-    r.child(
-        text(help(s))
-            .font(type_::LABEL)
-            .color(t.text_secondary)
-            .truncate()
-            .grow(1.0),
-    )
+    r.child(el().grow(1.0))
+        .child(button(k, "view-help", "?", true).help(aids::HINT))
 }
 
 fn bounds(s: &AppState) -> Option<BoundsMm> {
     Some(s.model.imported.as_ref()?.bounds_mm.clone())
-}
-
-fn help(s: &AppState) -> String {
-    let plane = s
-        .model
-        .imported
-        .as_ref()
-        .and_then(|i| s.section.request(&i.bounds_mm))
-        .map(|p| match p {
-            SectionPlane::XY { offset_mm } => format!("XY plane, z = {offset_mm:.3} mm"),
-            SectionPlane::XZ { offset_mm } => format!("XZ plane, y = {offset_mm:.3} mm"),
-            SectionPlane::YZ { offset_mm } => format!("YZ plane, x = {offset_mm:.3} mm"),
-            SectionPlane::Custom { .. } => "Custom plane".to_string(),
-        })
-        .unwrap_or_default();
-    let coarse = match &s.preview.mesh {
-        Some(m) if m.coarsened => format!(
-            " | Coarse display mesh ({:.3} mm); sectioning uses exact geometry",
-            m.deflection_mm
-        ),
-        _ => String::new(),
-    };
-    format!(
-        "{plane} | Drag to orbit, right or middle drag to pan, wheel to zoom, click a body to select, F fit selection, Shift+F fit all{coarse}"
-    )
 }
 
 fn canvas(s: &AppState, t: &Theme) -> El {
@@ -137,6 +108,7 @@ fn canvas(s: &AppState, t: &Theme) -> El {
             draw(s, t);
             return base
                 .pixels_fit(&s.preview.pixels, SurfaceFit::Fill)
+                .children(aids::labels(s, t))
                 .on_wheel(|s: &mut AppState, e: WheelEvent, _| {
                     s.preview.camera.zoom(f64::from(e.dy));
                     true
@@ -297,10 +269,18 @@ fn draw(s: &AppState, t: &Theme) {
         background: key.background,
         edge_color: [0x1f, 0x23, 0x28],
     };
-    let rgba = p
+    let mut rgba = p
         .frame
         .borrow_mut()
         .render(size.0, size.1, &p.camera, &scene);
+    let inset = aids::TRIAD_INSET * scale;
+    draw_triad(
+        &mut rgba,
+        size.0,
+        size.1,
+        [inset, size.1 as f32 - inset],
+        triad(&p.camera, f64::from(aids::TRIAD_LEN as f32 * scale)),
+    );
     p.pixels.set(size.0 as u32, size.1 as u32, rgba);
     p.last_frame_ms
         .set(started.elapsed().as_secs_f32() * 1000.0);
@@ -448,6 +428,32 @@ mod tests {
         assert!(key(s, "F", true));
         assert_ne!(s.preview.camera, panned);
         assert!(!key(s, "x", false));
+    }
+
+    #[test]
+    fn the_plane_label_triad_letters_and_hint_tooltip_are_present() {
+        let mut rt = runtime();
+        rt.state.shell.number_format.length_unit = crate::format::LengthUnit::Cm;
+        rt.state.section.offset_mm = Some(25.0);
+        rt.invalidate();
+        rt.frame(1.0 / 60.0);
+        for key in ["plane-label", "triad-x", "triad-y", "triad-z", "view-help"] {
+            assert!(rt.find(key).is_some(), "{key}");
+        }
+        let label = super::aids::plane_label(&rt.state).unwrap();
+        assert_eq!(label, "XY plane, z = 2.500\u{a0}cm");
+        assert!(super::aids::mesh_note(&rt.state).is_none());
+        rt.state.preview.mesh = rt.state.preview.mesh.take().map(|m| {
+            std::sync::Arc::new(PreviewMesh {
+                coarsened: true,
+                ..(*m).clone()
+            })
+        });
+        assert!(
+            super::aids::mesh_note(&rt.state)
+                .unwrap()
+                .contains("exact geometry")
+        );
     }
 
     #[test]

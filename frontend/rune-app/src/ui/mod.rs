@@ -7,6 +7,7 @@ mod messages;
 mod model_tree;
 mod panels;
 mod preview;
+mod preview_aids;
 mod ribbon;
 mod section;
 mod section_view;

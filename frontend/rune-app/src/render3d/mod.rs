@@ -147,6 +147,20 @@ impl Camera {
     }
 }
 
+/// Screen offsets (right, down) of the model X, Y and Z axes, each `length` long: the corner
+/// axis triad. Axes pointing at or away from the viewer shrink to a dot.
+pub fn triad(cam: &Camera, length: f64) -> [[f32; 2]; 3] {
+    let (right, up, _) = cam.basis();
+    std::array::from_fn(|i| {
+        let mut e = [0.0; 3];
+        e[i] = 1.0;
+        [
+            (dot(e, right) * length) as f32,
+            (-dot(e, up) * length) as f32,
+        ]
+    })
+}
+
 /// The translucent guide quad for the current section plane: `center` plus/minus half of the
 /// edge vectors `u` and `v`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -295,6 +309,18 @@ mod tests {
         c.fit([5.0, 5.0, 5.0], 2.0, 1.0);
         assert_eq!((c.yaw, c.pitch, c.target), (yaw, pitch, [5.0, 5.0, 5.0]));
         assert!(near(c.distance, fit_distance(2.0, FOV_DEG, 1.0)));
+    }
+
+    #[test]
+    fn triad_follows_the_camera_basis() {
+        let front = triad(
+            &Camera::looking([0.0; 3], StandardView::Front.direction(), 1.0, 1.0),
+            10.0,
+        );
+        // Front view: +X to the right, +Z up (negative y down), +Y away from the viewer.
+        assert!(near(f64::from(front[0][0]), 10.0) && front[0][1].abs() < 1e-4);
+        assert!(near(f64::from(front[2][1]), -10.0) && front[2][0].abs() < 1e-4);
+        assert!(front[1][0].abs() < 1e-4 && front[1][1].abs() < 1e-4);
     }
 
     const BOUNDS: BoundsMm = BoundsMm {
