@@ -4,14 +4,17 @@ from tempfile import TemporaryDirectory
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from cad2maxwell_backend.export.dxf import export_dxf
+from cad2maxwell_backend.models.exports import ExportOptions
 from cad2maxwell_backend.models.imports import ImportResponse
 from cad2maxwell_backend.models.sections import SectionResponse
 
 
-def export_archive(imported: ImportResponse, section: SectionResponse) -> bytes:
+def export_archive(
+    imported: ImportResponse, section: SectionResponse, options: ExportOptions | None = None,
+) -> bytes:
     """Package the validated analytic draft and manifest for a browser download."""
     with TemporaryDirectory(prefix="cad2maxwell-export-") as directory:
-        result = export_dxf(imported, section, Path(directory) / "section.dxf")
+        result = export_dxf(imported, section, Path(directory) / "section.dxf", options)
         output = io.BytesIO()
         with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:
             archive.write(result.dxf_path, "section.dxf")

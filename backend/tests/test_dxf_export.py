@@ -41,7 +41,7 @@ def test_export_keeps_units_component_layer_and_traceability(tmp_path: Path) -> 
     assert len(drawing.modelspace().query("LINE")) == 4
     assert {entity.dxf.layer for entity in drawing.modelspace()} == {"Civka"}
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
-    assert manifest["schema_version"] == 1
+    assert manifest["schema_version"] == 2
     assert manifest["validation_status"] == "draft_unvalidated"
     assert manifest["components"][0]["source_name"] == imported.components[0].source_name
     assert manifest["components"][0]["export_name"] == "Civka"
