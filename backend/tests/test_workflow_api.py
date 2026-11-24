@@ -1,6 +1,7 @@
 import io
 import json
 from pathlib import Path
+from typing import Any
 from zipfile import ZipFile
 
 import ezdxf
@@ -121,9 +122,9 @@ def test_duplicate_section_edges_block_export(
     from cad2maxwell_backend.models.sections import SectionPlane
 
     def duplicated_section(
-        shape: TopoDS_Shape, plane: SectionPlane,
+        shape: TopoDS_Shape, plane: SectionPlane, *rest: Any,
     ) -> tuple[ExactSectionWire, ...]:
-        wires = section_shape(shape, plane)
+        wires = section_shape(shape, plane, *rest)
         return wires + wires
 
     monkeypatch.setattr(

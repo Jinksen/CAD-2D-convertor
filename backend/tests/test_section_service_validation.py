@@ -19,7 +19,7 @@ def test_invalid_face_becomes_component_diagnostic(monkeypatch: pytest.MonkeyPat
     invalid = ExactSectionWire(shape=polygon.Wire(), dto=SectionWire(closed=True, curves=[]))
     monkeypatch.setattr(
         "cad2maxwell_backend.services.section_service.section_shape",
-        lambda _shape, _plane: (invalid,),
+        lambda _shape, _plane, _policy: (invalid,),
     )
     body = ImportedBody(
         shape=BRepPrimAPI_MakeBox(10, 10, 20).Shape(), occurrence_key="block",

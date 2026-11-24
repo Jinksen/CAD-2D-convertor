@@ -166,6 +166,8 @@ def export_dxf(
         "section_plane": section.plane.model_dump(),
         "import_diagnostics": [item.model_dump() for item in imported.diagnostics],
         "section_diagnostics": [item.model_dump() for item in section.diagnostics],
+        **({"tolerance": section.tolerance.model_dump(exclude_none=True)}
+           if section.tolerance is not None else {}),
         "components": [_manifest_component(source, component) for source, component in selected],
     }
     created_dxf = False
