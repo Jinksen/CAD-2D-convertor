@@ -1,0 +1,37 @@
+site_name: CAD2Maxwell
+site_description: STEP to Maxwell 2D DXF converter with exact analytic sectioning
+repo_url: https://github.com/Jinksen/CAD-2D-convertor
+edit_uri: edit/main/docs/
+docs_dir: docs
+strict: true
+theme:
+  name: material
+  features: [navigation.sections, content.code.copy]
+exclude_docs: |
+  superpowers/plans/
+nav:
+  - Home: README.md
+  - User guide:
+      - First trial: first-trial.md
+      - Settings: settings.md
+      - Maxwell import checklist: maxwell-import-checklist.md
+  - Reference:
+      - Number format: number-format.md
+      - DXF export: dxf-export.md
+      - Projects and formats: projects-and-formats.md
+      - UX: ux.md
+  - Developer guide:
+      - Architecture: architecture.md
+      - Geometry: geometry.md
+      - Rune migration: rune-migration.md
+      - Release: release.md
+      - Research:
+          - Format spikes: research/format-spikes.md
+          - FreeCAD 3D/2D workflow: research/freecad-3d-2d-workflow.md
+  - Plans and specs:
+      - UI, settings and formats: superpowers/specs/2026-11-24-ui-settings-formats.md
+      - v0.1 completion: superpowers/specs/2026-11-01-v0.1-completion.md
+      - UX performance: superpowers/specs/2026-11-01-ux-performance.md
+      - STEP import backend design: superpowers/specs/2026-09-23-step-import-backend-design.md
+  - Release notes:
+      - v0.2.0: release-notes/v0.2.0.md

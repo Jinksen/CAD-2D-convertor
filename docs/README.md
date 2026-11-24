@@ -1,6 +1,6 @@
 # CAD2Maxwell documentation
 
-Start with the [project README](../README.md) for download, quick start and shortcuts.
+Start with the [project README](https://github.com/Jinksen/CAD-2D-convertor/blob/main/README.md) for download, quick start and shortcuts.
 
 ## User guide
 
@@ -28,8 +28,8 @@ Start with the [project README](../README.md) for download, quick start and shor
 | [Geometry](geometry.md) | Import, sectioning and validation, and why |
 | [Rune migration](rune-migration.md) | Pinned Rune revision, gates, known gaps |
 | [Release](release.md) | Release checklist |
-| [Contributing](../CONTRIBUTING.md) | Workflow, one spec = one branch = one PR |
-| [Research](research/) | Background notes (FreeCAD 3D/2D workflow) |
+| [Contributing](https://github.com/Jinksen/CAD-2D-convertor/blob/main/CONTRIBUTING.md) | Workflow, one spec = one branch = one PR |
+| [Research](research/format-spikes.md) | Background notes (FreeCAD 3D/2D workflow) |
 
 ## Plans and specs
 
@@ -39,9 +39,9 @@ Start with the [project README](../README.md) for download, quick start and shor
 | [v0.1 completion](superpowers/specs/2026-11-01-v0.1-completion.md) | Done |
 | [UX performance](superpowers/specs/2026-11-01-ux-performance.md) | Done |
 
-Release notes are in [release-notes/](release-notes/) and the [changelog](../CHANGELOG.md).
-A published documentation site is planned in [#78](https://github.com/Jinksen/CAD-2D-convertor/issues/78);
-until then this page is the navigation.
+Release notes are in [release notes](release-notes/v0.2.0.md) and the [changelog](https://github.com/Jinksen/CAD-2D-convertor/blob/main/CHANGELOG.md).
+Documentation site: https://jinksen.github.io/CAD-2D-convertor/ (built from this folder with MkDocs Material, see [#78](https://github.com/Jinksen/CAD-2D-convertor/issues/78)).
+Preview locally with `pip install -r docs/requirements.txt && mkdocs serve`.
 
 ## Writing docs
 
