@@ -172,6 +172,9 @@ impl AppState {
             custom_normal: [0.0, 0.0, 1.0],
         });
         self.section.stats = None;
+        self.section.tolerance.restore(Default::default());
+        self.section.named = Default::default();
+        self.section.ensure_named();
         self.model.set_imported(summary);
         self.ensure_preview();
     }
@@ -278,6 +281,7 @@ impl AppState {
                 }
             },
             move |state, ()| {
+                state.section.set_last_export(target.display().to_string());
                 state.shell.notify(
                     "DXF bundle exported",
                     format!("Saved DXF bundle: {}", target.display()),
@@ -316,6 +320,22 @@ fn describe_plane(
     }
 }
 
+/// A saved section as live state; `None` when its plane kind is unknown.
+fn section_of(
+    r: &crate::project::SectionRef,
+) -> Option<crate::state::section::named::NamedSection> {
+    Some(crate::state::section::named::NamedSection {
+        name: r.name.clone(),
+        plane: PlaneSnapshot {
+            kind: crate::project::parse_kind(&r.plane.kind)?,
+            offset_mm: r.plane.offset_mm,
+            custom_normal: r.plane.normal_xyz,
+        },
+        tolerance: r.tolerance.unwrap_or_default(),
+        last_export: r.last_export.clone(),
+    })
+}
+
 impl AppState {
     /// Opens a `.c2mproj`: re-imports its STEP file, then restores plane, hidden bodies and
     /// number format. Component IDs derive from the file hash, so unknown IDs are dropped.
@@ -351,6 +371,13 @@ impl AppState {
                     .section
                     .tolerance
                     .restore(project.tolerance.unwrap_or_default());
+                state.section.ensure_named();
+                if !project.sections.is_empty() {
+                    let list = project.sections.iter().filter_map(section_of).collect();
+                    state
+                        .section
+                        .load_named(list, project.active_section.unwrap_or(0));
+                }
                 state.model.hidden = hidden;
                 state.model.restore_groups(project.groups);
                 state.model.collapsed = project.collapsed_folders.into_iter().collect();

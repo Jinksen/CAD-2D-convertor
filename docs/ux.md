@@ -59,6 +59,10 @@ The window title reads `* name - CAD2Maxwell` while the session differs from the
 
 With no model open the viewport shows a welcome block: Open model, Open project, Open demo motor, the recent projects, a link to the documentation (https://jinksen.github.io/CAD-2D-convertor/) and a hint that files can be dropped on the window. The demo motor is looked up as `docs/demo/demo-motor.step` in the folders above the executable or the working directory, or as `demo/demo-motor.step` next to the executable; if it is not found the button is disabled and the text says where it looked.
 
+## Named sections
+
+A project holds one or more named sections, for example "Mid stack z = 25 mm" and "End winding z = 48 mm". Each keeps its plane, offset, advanced tolerances and the path it was last exported to. With two or more, they are listed under the Section node and a click switches to one (the computed result is cleared; compute again). The Section pane adds a section from the current plane, renames and deletes the active one; names are unique (case-insensitive) and the last section cannot be deleted.
+
 ## Properties pane
 
 The right pane shows exactly one titled context, chosen by the tree selection: `Section XY`, `Body Rotor`, `Group North poles` or `Model motor.step`. Section statistics sit under the Section context and in the status bar. Long values wrap and group members are listed one per line instead of being truncated.

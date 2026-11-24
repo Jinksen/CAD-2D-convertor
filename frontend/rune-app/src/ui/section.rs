@@ -121,6 +121,72 @@ fn tolerances(s: &AppState, t: &Theme, k: &Kit) -> El {
     ))
 }
 
+/// Named sections of the project: switch in the tree, add, rename and delete here.
+fn named_sections(s: &AppState, t: &Theme, k: &Kit) -> El {
+    let named = &s.section.named;
+    let many = named.list.len() > 1;
+    let mut out = col()
+        .key("named-sections")
+        .w_full()
+        .gap(space::S1)
+        .child(note(
+            t,
+            format!(
+                "Named sections: {} (active: {}). Switch in the model tree.",
+                named.list.len(),
+                s.section.active_name().unwrap_or("Section 1")
+            ),
+        ))
+        .child(field(
+            t,
+            k,
+            "section-name",
+            "Section name",
+            &named.name_edit,
+            "Section name",
+            edit_access(|s: &mut AppState| &mut s.section.named.name_edit),
+        ))
+        .child(
+            row()
+                .gap(space::S1)
+                .child(button(k, "section-add", "Add section", true).on_press(
+                    |s: &mut AppState| {
+                        let name = s.section.named.name_edit.text.clone();
+                        s.section.named.error = s.section.add_named(&name).err();
+                    },
+                ))
+                .child(
+                    button(k, "section-rename", "Rename", true).on_press(|s: &mut AppState| {
+                        let name = s.section.named.name_edit.text.clone();
+                        s.section.named.error = s.section.rename_active(&name).err();
+                    }),
+                )
+                .child(
+                    button(k, "section-delete", "Delete", many).on_press(|s: &mut AppState| {
+                        let active = s.section.named.active;
+                        s.section.named.error = s.section.delete_named(active).err();
+                    }),
+                ),
+        );
+    if let Some(error) = &named.error {
+        out = out.child(
+            text(error.clone())
+                .font(type_::LABEL)
+                .color(severity_color(Severity::Error, t))
+                .wrap()
+                .w_full(),
+        );
+    }
+    if let Some(path) = named
+        .list
+        .get(named.active)
+        .and_then(|n| n.last_export.as_ref())
+    {
+        out = out.child(label_value(t, "Last export", path.clone()));
+    }
+    out
+}
+
 pub fn settings(s: &AppState, t: &Theme, k: &Kit) -> El {
     let fmt = s.shell.number_format;
     s.section.fmt.set(fmt);
@@ -240,7 +306,9 @@ pub fn settings(s: &AppState, t: &Theme, k: &Kit) -> El {
         ),
     ));
 
-    form = form.child(tolerances(s, t, k));
+    form = form
+        .child(tolerances(s, t, k))
+        .child(named_sections(s, t, k));
 
     // Run status and result.
     let mut result = col().w_full().padding(space::S2).gap(space::S1);

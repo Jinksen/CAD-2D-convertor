@@ -596,3 +596,27 @@ fn the_welcome_screen_shows_without_a_model_and_its_docs_link_is_requested() {
     let rt = runtime_with(motor());
     assert!(rt.find("welcome").is_none());
 }
+
+#[test]
+fn named_sections_list_under_the_section_node_and_switching_restores_each_plane() {
+    let mut state = motor();
+    state.section.ensure_named();
+    state.section.set_offset(5.0, 0);
+    state.section.add_named("End winding").unwrap();
+    state.section.set_offset(9.0, 100_000);
+    let mut rt = runtime_with(state);
+    assert!(rt.find("section-row-0").is_some() && rt.find("section-row-1").is_some());
+    click(&mut rt, "section-row-0");
+    assert_eq!(rt.state.section.offset_mm, Some(5.0));
+    assert_eq!(rt.state.section.active_name(), Some("Section 1"));
+    click(&mut rt, "section-add");
+    assert_eq!(rt.state.section.named.list.len(), 3);
+    click(&mut rt, "section-delete");
+    assert_eq!(rt.state.section.named.list.len(), 2);
+}
+
+#[test]
+fn a_single_section_shows_no_child_rows() {
+    let rt = runtime_with(motor());
+    assert!(rt.find("section-row-0").is_none());
+}

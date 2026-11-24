@@ -20,6 +20,7 @@ All fields after `plane` are optional, so older files load and older apps ignore
 | Field | Content |
 |-------|---------|
 | `tolerance` | optional `small_region_mm2`, `sliver_ratio`, `join_mm` overrides; absent means the service defaults |
+| `sections[]`, `active_section` | named sections: `name`, `plane` (`kind`, `normal_xyz`, `offset_mm`), optional `tolerance` and `last_export`. Files without them load as one section named "Section 1" built from `plane` and `tolerance`, which still mirror the active section |
 | `groups[]` | `name`, `component_ids`, optional `material` (one of the export's fixed labels) and `material_note` (custom only, 80 characters) |
 
 ## Next: project file
@@ -27,7 +28,7 @@ All fields after `plane` are optional, so older files load and older apps ignore
 In order of value:
 
 1. ~~**Unsaved-changes marker and prompt.**~~ Done (see [ux.md](ux.md)). Show `*` in the title after a change, and ask before closing or opening another model. The project already serializes the full session, so comparing the last-saved text with `project_file()` is enough.
-2. **Several named sections per project.** For example "Mid stack z = 25 mm" and "End winding z = 48 mm". Each one stores plane, offset and the export path it was last written to. This is the most common reason to reopen a project.
+2. ~~**Several named sections per project.**~~ Done. For example "Mid stack z = 25 mm" and "End winding z = 48 mm". Each one stores plane, offset and the export path it was last written to. This is the most common reason to reopen a project.
 3. **Groups in the export.** Write each body's groups to the JSON manifest and offer DXF layers per group (ASCII-safe names, as for export names). In Maxwell, a layer per group is one material or excitation assignment instead of one per body. This needs a backend change and a manifest schema version bump.
 4. ~~**Recent projects.**~~ Done. A short list in the ribbon, stored in preferences, not in the project.
 5. **Recovery file.** Write `<name>.c2mproj.autosave` every few minutes and offer it on the next open if it is newer than the project.

@@ -252,6 +252,22 @@ pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
         row_el(sec, t, k).on_press(|s: &mut AppState| s.model.activate(&TreeNode::Section)),
         TreeNode::Section,
     ));
+    if s.section.named.list.len() > 1 {
+        for (i, named) in s.section.named.list.iter().enumerate() {
+            let mut item = Item::new(
+                format!("section-row-{i}"),
+                named.name.clone(),
+                &icons::SECTION,
+            );
+            item.depth = 2;
+            item.on = m.section_selected && i == s.section.named.active;
+            item.aria = format!("Named section {}", named.name);
+            rows = rows.child(row_el(item, t, k).on_press(move |s: &mut AppState| {
+                s.section.switch_to(i);
+                s.model.activate(&TreeNode::Section)
+            }));
+        }
+    }
     let mut head = Item::new(
         "bodies-heading",
         format!("Bodies ({count})"),

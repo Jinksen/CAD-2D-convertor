@@ -11,6 +11,7 @@ use crate::format::{NumberFormat, parse_number};
 pub mod camera;
 pub mod geometry;
 pub mod measure;
+pub mod named;
 pub mod regions;
 pub mod tolerance;
 
@@ -136,6 +137,8 @@ pub struct SectionState {
     pub regions: regions::RegionCache,
     /// Validation tolerance overrides sent with the section request.
     pub tolerance: tolerance::ToleranceState,
+    /// The project's named sections; empty until one is needed.
+    pub named: named::Sections,
     /// Text of the plane fields: offset, then the custom normal components.
     pub offset_text: TextEdit,
     pub normal_text: [TextEdit; 3],
@@ -159,6 +162,7 @@ impl Default for SectionState {
             view: View2d::default(),
             regions: regions::RegionCache::default(),
             tolerance: tolerance::ToleranceState::default(),
+            named: named::Sections::default(),
             offset_text: TextEdit::default(),
             normal_text: Default::default(),
             field_error: None,
