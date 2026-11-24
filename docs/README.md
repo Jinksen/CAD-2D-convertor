@@ -39,7 +39,7 @@ Start with the [project README](https://github.com/Jinksen/CAD-2D-convertor/blob
 | [v0.1 completion](superpowers/specs/2026-11-01-v0.1-completion.md) | Done |
 | [UX performance](superpowers/specs/2026-11-01-ux-performance.md) | Done |
 
-Release notes are in [release notes](release-notes/v0.2.0.md) and the [changelog](https://github.com/Jinksen/CAD-2D-convertor/blob/main/CHANGELOG.md).
+Release notes are in [release notes](release-notes/v0.3.0.md) and the [changelog](https://github.com/Jinksen/CAD-2D-convertor/blob/main/CHANGELOG.md).
 Documentation site: https://jinksen.github.io/CAD-2D-convertor/ (built from this folder with MkDocs Material, see [#78](https://github.com/Jinksen/CAD-2D-convertor/issues/78)).
 Preview locally with `pip install -r docs/requirements.txt && mkdocs serve`.
 

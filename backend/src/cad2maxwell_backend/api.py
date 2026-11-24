@@ -55,7 +55,7 @@ ALLOWED_ORIGINS = (
 
 
 def create_app(import_service: ImportService | None = None) -> FastAPI:
-    app = FastAPI(title="CAD2Maxwell Backend", version="0.2.0")
+    app = FastAPI(title="CAD2Maxwell Backend", version="0.3.0")
     service = import_service or ImportService(read_model, ImportSessions())
     app.state.import_service = service
     section_service = SectionService(service.sessions, SectionSessions())

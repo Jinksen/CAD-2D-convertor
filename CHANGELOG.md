@@ -1,13 +1,47 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
-- Model Builder nests bodies in collapsible folders that follow the STEP assembly structure.
-- User groups: create, rename, hide, isolate and delete named sets of bodies. V and I act on the selected group. Groups are display organization only; export is unchanged.
-- Projects save groups and collapsed folders as optional fields (0.2 still opens them), store the STEP path relative to the project folder when possible, and are written atomically.
-- Installed builds start the geometry service on a free port, so several windows can run at once.
-- Messages describe the section plane in the display notation ("XY at z = 37.500 mm") and use sentence-case severity labels.
-- The demo motor is split into `Stator_Assembly` and `Rotor_Assembly`; README screenshots show the Rune app.
+Workspace
+- Ribbon groups with captions and shortcut tooltips; resizable, collapsible side panels and messages panel (severity filter), layout remembered.
+- 2D view: scale bar, cursor readout, origin axes, grid, legend, distance and radius measuring; holes stay empty in filled regions.
+- 3D view: axis triad, plane label, hint tooltip, triangles clipped at the near plane.
+- Properties pane shows one titled context per tree selection, with exact region area, perimeter, centroid and hole count.
+
+Model tree
+- Engineering-style rows (icons, guides, eye toggle), Section node, assembly folders that follow STEP.
+- Context menu, multi-select, F2 rename, drag to group, arrow keys, cross-highlight with the viewport, filter count and clear, expand/collapse all.
+- User groups with material labels; V and I act on the selected group.
+
+Settings
+- Settings dialog (Ctrl+,): General, Units, Viewport, Export, Service. Advanced section tolerances with inline validation.
+
+Import
+- IGES (solid B-Reps) and OCCT BREP import next to STEP; drop or open any of them.
+- Rotational symmetry hint and explicit 1/N sector section.
+
+Export
+- DXF layer modes (component, group, hybrid) and colour modes (original, group, material, monochrome); manifest schema 2.
+- CSV region table, SVG, FEMM Lua, Gmsh geo and PyAEDT script writers; batch jobs accept all formats.
+- Export uses the Export settings and group material labels.
+
+Projects
+- Named sections per project, unsaved-changes marker and prompt, recent projects, welcome screen with demo motor, autosave and recovery offer.
+- Groups and collapsed folders are saved as optional fields (0.2 still opens them); STEP path stored relative to the project when possible; atomic writes.
+- Installed builds start the geometry service on a free port, so several windows can run.
+
+Docs
+- MkDocs Material site with strict build and GitHub Pages deploy; README rewritten; format spikes (Motor-CAD, 2D STEP, DXF R12, PNG/PDF).
+
+Brand
+- New section-plane logo in the app, installer and docs site, with a dark variant.
+
+Breaking and behaviour changes
+- Export manifest `schema_version` is 2 (new keys `layer_mode`, `color_mode`, `groups`, per-component `layer`, `groups`, `primary_group`, `material_tag`). Default requests produce the same DXF as before.
+- Open model clears the current project path; the next save asks for a path.
+- Settings moved from the ribbon to the dialog. The old `theme` and `number_format` preferences are still read, so they carry over.
+- Messages describe the plane in display notation ("XY at z = 37.500 mm") with sentence-case severity labels.
+- The demo motor is split into `Stator_Assembly` and `Rotor_Assembly`.
 
 ## 0.2.0
 
