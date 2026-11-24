@@ -112,8 +112,7 @@ pub fn group_rows(
         let members = s.model.visible_members(group);
         let collapse = group_key(&group.name);
         let open = !s.model.is_collapsed(&collapse);
-        let on =
-            s.model.selected_group.as_deref() == Some(group.name.as_str()) && !s.shell.show_prefs;
+        let on = s.model.selected_group.as_deref() == Some(group.name.as_str());
         let (select, hide) = (group.name.clone(), group.name.clone());
         let hidden = s.model.group_hidden(&group.name);
         let count = group.component_ids.len();
@@ -151,7 +150,6 @@ pub fn group_rows(
                 if editing_here {
                     return; // a press inside the name editor must not end the edit
                 }
-                s.shell.show_prefs = false;
                 s.model.select_group(&select)
             }),
             menu,

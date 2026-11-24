@@ -162,6 +162,9 @@ pub struct Paint<'a> {
     pub hover: Option<&'a str>,
     pub stale: bool,
     pub grid: bool,
+    /// Region fill alpha and ordinary outline width, from the viewport settings.
+    pub fill_opacity: f32,
+    pub line_width: f32,
     pub fmt: NumberFormat,
     pub measure: &'a Measure,
 }
@@ -197,7 +200,7 @@ fn build_shape(p: &Paint, view: ViewBox, size: Size, look: &Look) -> Shape {
             if !complete || (p.hidden)(&comp.component_id) {
                 continue;
             }
-            let fill_color = base(&comp.component_id).0.alpha(0.28 * dim);
+            let fill_color = base(&comp.component_id).0.alpha(p.fill_opacity * dim);
             for (pts, holes) in fill::rings(&drawn[i]) {
                 let cut: Vec<&[P]> = holes.iter().map(|h| h.as_slice()).collect();
                 if let Some(poly) = fill::with_holes(&pts, &cut) {
@@ -218,7 +221,7 @@ fn build_shape(p: &Paint, view: ViewBox, size: Size, look: &Look) -> Shape {
     for i in order {
         let id = &s.components[i].component_id;
         let alpha = if (p.hidden)(id) { 0.2 } else { dim };
-        let width = if rank(id) == 0 { 1.0 } else { 2.0 };
+        let width = p.line_width * if rank(id) == 0 { 1.0 } else { 2.0 };
         let color = base(id).1.alpha(alpha);
         for w in &drawn[i] {
             for line in &w.lines {
@@ -288,6 +291,8 @@ fn paint<'a>(
         hover: s.model.hover.as_deref(),
         stale: s.section.stats.is_none(),
         grid: s.section.view.grid,
+        fill_opacity: s.shell.settings.viewport.fill_opacity,
+        line_width: s.shell.settings.viewport.line_width,
         fmt: s.shell.number_format,
         measure: &s.section.view.measure,
     }

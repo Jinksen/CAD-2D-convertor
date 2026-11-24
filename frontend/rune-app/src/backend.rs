@@ -75,7 +75,7 @@ fn bundled_executable() -> Option<PathBuf> {
     path.is_file().then_some(path)
 }
 
-fn log_dir() -> PathBuf {
+pub fn log_dir() -> PathBuf {
     std::env::var_os("LOCALAPPDATA")
         .map(|dir| {
             PathBuf::from(dir)

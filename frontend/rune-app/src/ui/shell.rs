@@ -1,15 +1,11 @@
-//! Toolbar, preferences, messages pane, status bar and global keyboard shortcuts.
+//! File dialogs, toasts and global keyboard shortcuts.
 
-use rune::tok::{Theme, space, type_};
-use rune::{El, FileDialogOptions, Key, KeyEvent, Tx, col, row, text};
-use rune_kit::{Checkbox, Kit, Toast, ToastRegion};
+use rune::{El, FileDialogOptions, Key, KeyEvent, Tx};
+use rune_kit::{Kit, Toast, ToastRegion};
 
-use super::{button, choice, heading, label_value, rule};
 use crate::api::dto::Severity;
-use crate::format::{DecimalMarker, LengthUnit, MAX_DECIMALS, NumberFormat};
 use crate::state::preview::ViewportMode;
 use crate::state::section::PlaneKind;
-use crate::state::shell::Theme as ThemeChoice;
 use crate::state::{AppState, now_ms};
 
 const TOAST_TTL: std::time::Duration = std::time::Duration::from_secs(5);
@@ -81,201 +77,6 @@ pub(super) fn compute(s: &mut AppState) {
     s.compute_section();
 }
 
-/// Applies `change` to the number format and remembers it.
-fn edit_format(change: impl Fn(&mut NumberFormat) + 'static) -> impl Fn(&mut AppState) + 'static {
-    move |s| {
-        let mut format = s.shell.number_format;
-        change(&mut format);
-        s.shell.set_format(format);
-    }
-}
-
-fn stepper(
-    t: &Theme,
-    k: &Kit,
-    key: &str,
-    label: &str,
-    value: u8,
-    set: fn(&mut NumberFormat, u8),
-) -> El {
-    row()
-        .w_full()
-        .gap(space::S1)
-        .items_center()
-        .key(format!("{key}-stepper"))
-        .role("group")
-        .label(label)
-        .child(
-            text(label)
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .w(96.0),
-        )
-        .child(
-            button(k, &format!("{key}-dec"), "−", value > 0)
-                .label(format!("Fewer {label}"))
-                .on_press(edit_format(move |f| set(f, value.saturating_sub(1)))),
-        )
-        .child(
-            text(value.to_string())
-                .font(type_::BODY)
-                .color(t.text)
-                .w(20.0),
-        )
-        .child(
-            button(k, &format!("{key}-inc"), "+", value < MAX_DECIMALS)
-                .label(format!("More {label}"))
-                .on_press(edit_format(move |f| set(f, (value + 1).min(MAX_DECIMALS)))),
-        )
-}
-
-/// Display unit, notation and theme (replaces the settings column while open).
-pub fn preferences(s: &AppState, t: &Theme, k: &Kit) -> El {
-    let f = s.shell.number_format;
-    let themes = choice(
-        k,
-        "theme",
-        "Theme",
-        &ThemeChoice::ALL.map(|c| format!("{c:?}")),
-        ThemeChoice::ALL.iter().position(|c| *c == s.shell.theme),
-        |s, i| s.shell.set_theme(ThemeChoice::ALL[i]),
-    );
-    let units = choice(
-        k,
-        "unit",
-        "Display unit",
-        &LengthUnit::ALL.map(LengthUnit::symbol),
-        LengthUnit::ALL.iter().position(|u| *u == f.length_unit),
-        |s, i| edit_format(move |f| f.length_unit = LengthUnit::ALL[i])(s),
-    );
-    let markers = choice(
-        k,
-        "marker",
-        "Decimal marker",
-        &["Point (12.5)", "Comma (12,5)"],
-        Some(usize::from(f.decimal_marker == DecimalMarker::Comma)),
-        |s, i| {
-            let marker = [DecimalMarker::Point, DecimalMarker::Comma][i];
-            edit_format(move |f| f.decimal_marker = marker)(s)
-        },
-    );
-    let check = |key: &str, label: &str, on: bool, set: fn(&mut NumberFormat)| {
-        Checkbox::new(on)
-            .label(label)
-            .on_toggle(edit_format(set))
-            .build(k)
-            .key(key.to_string())
-    };
-    let resolution = NumberFormat {
-        trailing_zeros: true,
-        ..f
-    }
-    .length(10f64.powi(-i32::from(f.length_decimals)) * f.length_unit.mm_per_unit());
-    let section = |title: &str| {
-        text(title)
-            .font(type_::SECTION)
-            .color(t.text_secondary)
-            .padding(space::S2)
-    };
-    col()
-        .key("preferences")
-        .role("region")
-        .label("Preferences")
-        .w_full()
-        .child(heading(t, "Preferences"))
-        .child(
-            text("Display notation per ISO 80000-1; geometry and DXF stay in mm.")
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .wrap()
-                .padding(space::S2),
-        )
-        .child(section("Appearance"))
-        .child(themes.mx(space::S2))
-        .child(section("Length"))
-        .child(units.mx(space::S2))
-        .child(
-            col()
-                .w_full()
-                .padding(space::S2)
-                .gap(space::S1)
-                .child(stepper(
-                    t,
-                    k,
-                    "length-decimals",
-                    "Decimal places",
-                    f.length_decimals,
-                    |f, v| f.length_decimals = v,
-                ))
-                .child(label_value(t, "Resolution", resolution)),
-        )
-        .child(section("Direction vectors"))
-        .child(col().w_full().px(space::S2).child(stepper(
-            t,
-            k,
-            "direction-decimals",
-            "Direction places",
-            f.direction_decimals,
-            |f, v| f.direction_decimals = v,
-        )))
-        .child(section("Notation"))
-        .child(markers.mx(space::S2))
-        .child(
-            col()
-                .gap(space::S1)
-                .padding(space::S2)
-                .child(check(
-                    "grouping",
-                    "Group digits in threes",
-                    f.digit_grouping,
-                    |f| f.digit_grouping = !f.digit_grouping,
-                ))
-                .child(check(
-                    "trailing-zeros",
-                    "Keep trailing zeros",
-                    f.trailing_zeros,
-                    |f| f.trailing_zeros = !f.trailing_zeros,
-                )),
-        )
-        .child(section("Preview"))
-        .child(
-            col()
-                .w_full()
-                .px(space::S2)
-                .gap(space::S1)
-                .child(label_value(t, "Length", f.length(-12345.6789)))
-                .child(label_value(
-                    t,
-                    "Size",
-                    f.length_product(&[120.0, 85.5, 0.35]),
-                ))
-                .child(label_value(
-                    t,
-                    "Normal n",
-                    f.direction(&[
-                        std::f64::consts::FRAC_1_SQRT_2,
-                        0.0,
-                        -std::f64::consts::FRAC_1_SQRT_2,
-                    ]),
-                ))
-                .child(label_value(t, "Number", f.number(1_234_567.25, 2))),
-        )
-        .child(
-            col().padding(space::S2).child(
-                button(k, "restore-format", "Restore defaults", true)
-                    .on_press(|s: &mut AppState| s.shell.set_format(NumberFormat::default())),
-            ),
-        )
-        .child(rule(t))
-        .child(
-            text("Values are rounded for display only; computation uses the full value.")
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .wrap()
-                .padding(space::S2),
-        )
-}
-
 /// The newest confirmation (save, export) as a toast; Messages stays the record.
 pub fn toasts(s: &AppState, k: &Kit) -> Vec<El> {
     let Some((title, detail, _)) = &s.shell.toast else {
@@ -311,6 +112,7 @@ pub fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
                     export_dialog(s, tx)
                 }
             }
+            Key::Command(',') => s.shell.show_settings = true,
             Key::Command('s') => save_project_dialog(s, tx, ev.mods.shift),
             Key::Command('z') if !ev.mods.shift => s.section.undo(),
             Key::Command('z' | 'y') => s.section.redo(),
@@ -342,7 +144,6 @@ pub fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Key::Right if has_model => s.model.expand_or_child(),
         // Enter opens the properties of the row under the cursor.
         Key::Enter if has_model => {
-            s.shell.show_prefs = false;
             let node = s.model.current();
             s.model.activate(&node)
         }

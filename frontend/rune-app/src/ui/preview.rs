@@ -16,6 +16,7 @@ use crate::render3d::raster::{Body, Line, Scene, draw_triad, guide_outline};
 use crate::render3d::{StandardView, plane_guide, triad};
 use crate::state::AppState;
 use crate::state::preview::{MeshStatus, RenderKey, ViewportMode};
+use crate::state::settings::{Button, DragAction};
 
 /// Default body color when the source has none (Three.js scene's 0x78a9ca).
 const DEFAULT_COLOR: [u8; 3] = [0x78, 0xa9, 0xca];
@@ -156,9 +157,19 @@ fn on_key(s: &mut AppState, e: &KeyEvent) -> bool {
     true
 }
 
-/// Left drag orbits (a short one is a click that picks), other buttons pan.
+/// What a drag does depends on the mouse preset; a short left drag is a click that picks.
 fn drag(s: &mut AppState, d: &mut Drag, tx: &mut Tx) {
-    let pan = tx.button() != PointerButton::Primary;
+    let button = match tx.button() {
+        PointerButton::Primary => Button::Left,
+        PointerButton::Middle => Button::Middle,
+        _ => Button::Right,
+    };
+    let action = s
+        .shell
+        .settings
+        .viewport
+        .mouse
+        .action(button, tx.mods().shift);
     let p = &mut s.preview;
     match d.phase {
         Phase::Down => p.drag_from = p.camera,
@@ -166,13 +177,13 @@ fn drag(s: &mut AppState, d: &mut Drag, tx: &mut Tx) {
         _ => {
             let (dx, dy, h) = (f64::from(d.dx), f64::from(d.dy), f64::from(d.h));
             let mut camera = p.drag_from;
-            if pan {
-                camera.pan(dx, dy, h);
-            } else {
-                camera.orbit(dx, dy, h);
+            match action {
+                DragAction::Pan => camera.pan(dx, dy, h),
+                DragAction::Orbit => camera.orbit(dx, dy, h),
+                DragAction::None => {}
             }
             p.camera = camera;
-            if d.phase == Phase::Up && !pan && d.dx.hypot(d.dy) < CLICK_SLOP {
+            if d.phase == Phase::Up && button == Button::Left && d.dx.hypot(d.dy) < CLICK_SLOP {
                 pick(s, d.x / d.w, d.y / d.h);
             }
         }
@@ -211,6 +222,8 @@ fn draw(s: &AppState, t: &Theme) {
     } else {
         1.0
     };
+    // Preview quality scales the software renderer's resolution; the surface stretches to fit.
+    let scale = scale * s.shell.settings.viewport.quality.render_scale();
     let size = (
         (p.viewport.0 * scale).round() as usize,
         (p.viewport.1 * scale).round() as usize,
@@ -230,7 +243,12 @@ fn draw(s: &AppState, t: &Theme) {
         selected: s.model.selected.clone(),
         hover: s.model.hover.clone(),
         guide,
-        background: [t.bg.r, t.bg.g, t.bg.b].map(|c| (c * 255.0).round() as u8),
+        background: s
+            .shell
+            .settings
+            .viewport
+            .background_3d
+            .rgb([t.bg.r, t.bg.g, t.bg.b].map(|c| (c * 255.0).round() as u8)),
     };
     if p.drawn.borrow().as_ref() == Some(&key) {
         return;
@@ -400,6 +418,25 @@ mod tests {
         rt.frame(1.0 / 60.0);
         assert_ne!(rt.state.preview.camera.yaw, before.yaw, "drag orbits");
         assert_ne!(*rt.state.preview.drawn.borrow(), drawn);
+    }
+
+    #[test]
+    fn the_inventor_preset_does_not_orbit_on_a_left_drag_and_quality_scales_the_render() {
+        let mut rt = runtime();
+        rt.state.shell.settings.viewport.mouse = crate::state::settings::MousePreset::Inventor;
+        rt.state.shell.settings.viewport.quality = crate::state::settings::Quality::Draft;
+        rt.invalidate();
+        rt.frame(1.0 / 60.0);
+        let (w, _) = rt.state.preview.pixels.size();
+        assert!(w < 400, "draft quality renders at half resolution: {w}");
+        let (x, y) = rt.find("preview3d").expect("viewport");
+        let before = rt.state.preview.camera;
+        rt.pointer_move(x, y);
+        rt.pointer_down(x, y);
+        rt.pointer_move(x + 60.0, y + 30.0);
+        rt.pointer_up(x + 60.0, y + 30.0);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.state.preview.camera.yaw, before.yaw);
     }
 
     #[test]

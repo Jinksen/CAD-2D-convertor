@@ -6,6 +6,7 @@ pub mod model;
 pub mod preview;
 pub mod section;
 pub mod selection;
+pub mod settings;
 pub mod shell;
 pub mod tree;
 

@@ -12,6 +12,7 @@ mod regions;
 mod ribbon;
 mod section;
 mod section_view;
+mod settings;
 mod shell;
 mod splitter;
 mod tree_menu;
@@ -63,6 +64,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         });
     let mut overlays = shell::toasts(s, &k);
     overlays.extend(tree_menu::overlay(s, &k));
+    overlays.extend(settings::overlay(s, &t, &k));
     rune_kit::root(base, overlays)
 }
 

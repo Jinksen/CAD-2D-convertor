@@ -16,7 +16,6 @@ pub fn attach(row: El, node: Node) -> El {
         if !picked {
             s.model.activate(&node);
         }
-        s.shell.show_prefs = false;
         s.model.menu = Some(ContextMenu {
             node: node.clone(),
             x: p.x,

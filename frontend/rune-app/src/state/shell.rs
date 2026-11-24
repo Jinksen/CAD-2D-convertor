@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::api::dto::{Health, Severity};
 pub use crate::format::NumberFormat;
 use crate::state::layout::Layout;
+use crate::state::settings::{Category, Settings};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -74,8 +75,12 @@ pub struct ShellState {
     pub busy_since: Option<std::time::Instant>,
     /// Bumped by Cancel: a result started under an older value is dropped (like React's abort).
     pub cancel_gen: u64,
-    /// The preferences panel replaces the settings column while open.
-    pub show_prefs: bool,
+    /// The settings dialog is open, on this category.
+    pub show_settings: bool,
+    pub settings_category: Category,
+    pub settings: Settings,
+    /// Bound to the default export folder field of the settings dialog.
+    pub export_folder: TextEdit,
     /// Where the open project was saved; Ctrl+S saves there.
     pub project_path: Option<PathBuf>,
     /// Bound to the STEP path field of the model settings.
@@ -95,7 +100,13 @@ pub struct ShellState {
 impl ShellState {
     /// Loads the remembered theme and number format.
     pub fn with_prefs(prefs: Prefs) -> Self {
+        let settings = prefs
+            .get::<Settings>("settings")
+            .unwrap_or_default()
+            .sanitized();
         ShellState {
+            export_folder: TextEdit::new(settings.export.folder.clone().unwrap_or_default()),
+            settings,
             theme: prefs.get("theme").unwrap_or_default(),
             number_format: prefs.get("number_format").unwrap_or_default(),
             layout: prefs
@@ -153,6 +164,81 @@ impl ShellState {
         self.remember();
     }
 
+    /// Applies `change` to the settings and remembers them.
+    pub fn edit_settings(&mut self, change: impl FnOnce(&mut Settings)) {
+        change(&mut self.settings);
+        self.settings = std::mem::take(&mut self.settings).sanitized();
+        let settings = self.settings.clone();
+        let Some(prefs) = &mut self.prefs else { return };
+        if let Err(error) = prefs.set("settings", &settings) {
+            self.log(Severity::Warning, error.to_string());
+        }
+    }
+
+    /// Restores one category to its defaults (theme and number format belong to General and
+    /// Units).
+    pub fn reset_category(&mut self, category: Category) {
+        match category {
+            Category::General => {
+                self.set_theme(Theme::default());
+                self.edit_settings(|s| s.general = Default::default());
+            }
+            Category::Units => self.set_format(NumberFormat::default()),
+            Category::Viewport => self.edit_settings(|s| s.viewport = Default::default()),
+            Category::Export => {
+                self.edit_settings(|s| s.export = Default::default());
+                self.export_folder.replace_text(String::new());
+            }
+            Category::Service => {}
+        }
+    }
+
+    /// Sets (or clears) the default export folder and its field.
+    pub fn set_export_folder(&mut self, folder: Option<PathBuf>) {
+        let text = folder
+            .as_ref()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        self.export_folder.replace_text(text.clone());
+        self.edit_settings(|s| s.export.folder = folder.map(|_| text));
+    }
+
+    /// Applies the typed folder; it must be an existing folder.
+    pub fn commit_export_folder(&mut self) {
+        let typed = self.export_folder.text.trim().to_owned();
+        if typed.is_empty() {
+            return self.set_export_folder(None);
+        }
+        let path = PathBuf::from(&typed);
+        if path.is_dir() {
+            self.set_export_folder(Some(path));
+        } else {
+            self.log(
+                Severity::Error,
+                format!("\"{typed}\" is not an existing folder."),
+            );
+        }
+    }
+
+    /// Shows the service log folder in the file manager.
+    pub fn open_log_folder(&mut self) {
+        let dir = crate::backend::log_dir();
+        let _ = std::fs::create_dir_all(&dir);
+        let program = if cfg!(windows) {
+            "explorer"
+        } else if cfg!(target_os = "macos") {
+            "open"
+        } else {
+            "xdg-open"
+        };
+        if let Err(error) = std::process::Command::new(program).arg(&dir).spawn() {
+            self.log(
+                Severity::Error,
+                format!("Cannot open {}: {error}", dir.display()),
+            );
+        }
+    }
+
     pub fn remember_layout(&mut self) {
         let layout = self.layout;
         let Some(prefs) = &mut self.prefs else { return };
@@ -201,6 +287,36 @@ mod tests {
         let again = ShellState::with_prefs(Prefs::at(&path));
         assert_eq!(again.theme, Theme::Dark);
         assert_eq!(again.number_format.length_unit, LengthUnit::In);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn settings_survive_a_restart_and_reset_per_category() {
+        let path = std::env::temp_dir().join(format!("c2m-settings-{}.json", std::process::id()));
+        let mut shell = ShellState::with_prefs(Prefs::at(&path));
+        shell.edit_settings(|s| {
+            s.general.recent_count = 5;
+            s.viewport.grid_default = true;
+            s.export.zip = false;
+        });
+        shell.set_theme(Theme::Dark);
+        let mut again = ShellState::with_prefs(Prefs::at(&path));
+        assert_eq!(again.settings.general.recent_count, 5);
+        assert!(again.settings.viewport.grid_default && !again.settings.export.zip);
+        again.reset_category(Category::Viewport);
+        assert!(!again.settings.viewport.grid_default);
+        assert_eq!(
+            again.settings.general.recent_count, 5,
+            "other categories stay"
+        );
+        again.reset_category(Category::General);
+        assert_eq!(
+            (again.settings.general.recent_count, again.theme),
+            (10, Theme::System)
+        );
+        let third = ShellState::with_prefs(Prefs::at(&path));
+        assert_eq!(third.settings.general.recent_count, 10);
+        assert!(!third.settings.export.zip, "export kept");
         std::fs::remove_file(path).unwrap();
     }
 }

@@ -47,6 +47,7 @@ fn main() {
             tasks: Some(tasks),
             ..AppState::default()
         };
+        state.section.view.grid = state.shell.settings.viewport.grid_default;
         state.check_service(HEALTH_ATTEMPTS);
         state
     })

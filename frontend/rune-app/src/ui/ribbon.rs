@@ -148,9 +148,9 @@ pub fn toolbar(s: &AppState, t: &Theme, k: &Kit) -> El {
         .child(spacer())
         .child(tip(
             button(k, "open-settings", "Settings", true)
-                .checked(s.shell.show_prefs)
-                .on_press(|s: &mut AppState| s.shell.show_prefs = !s.shell.show_prefs),
-            "Display units, notation and theme",
-            &[],
+                .checked(s.shell.show_settings)
+                .on_press(|s: &mut AppState| s.shell.show_settings = true),
+            "Settings: theme, units, viewport, export and service",
+            &["Ctrl", ","],
         ))
 }

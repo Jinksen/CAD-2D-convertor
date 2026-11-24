@@ -7,7 +7,7 @@ use rune_kit::Kit;
 use rune_kit::glyphs::CARET_RIGHT;
 
 use super::splitter::Splitter;
-use super::{icons, model_tree, preview, scroller, section, shell};
+use super::{icons, model_tree, preview, scroller, section};
 use crate::state::AppState;
 use crate::state::layout;
 
@@ -87,9 +87,7 @@ fn props_width(s: &AppState) -> f32 {
 }
 
 fn properties(s: &AppState, t: &Theme, k: &Kit) -> El {
-    let body = if s.shell.show_prefs {
-        shell::preferences(s, t, k)
-    } else if s.model.section_selected && s.model.imported.is_some() {
+    let body = if s.model.section_selected && s.model.imported.is_some() {
         section::settings(s, t, k)
     } else {
         model_tree::properties(s, t, k)

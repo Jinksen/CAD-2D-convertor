@@ -153,6 +153,8 @@ fn paint_of<'a>(
         related: None,
         stale: false,
         grid: s.section.view.grid,
+        fill_opacity: 0.28,
+        line_width: 1.0,
         fmt: crate::format::NumberFormat::default(),
         measure: &s.section.view.measure,
     }

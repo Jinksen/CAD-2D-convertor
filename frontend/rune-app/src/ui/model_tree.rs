@@ -28,7 +28,7 @@ pub(super) fn body_row(
     node: TreeNode,
 ) -> El {
     let m = &s.model;
-    let on = m.is_picked(&body.id) && !m.section_selected && !s.shell.show_prefs;
+    let on = m.is_picked(&body.id) && !m.section_selected;
     let hidden = m.hidden.contains(&body.id);
     let (eye_id, hover_id) = (body.id.clone(), body.id.clone());
 
@@ -65,7 +65,6 @@ pub(super) fn body_row(
     let row = row_el(n, t, k)
         .on_press_tx(move |s: &mut AppState, tx| {
             let mods = tx.mods();
-            s.shell.show_prefs = false;
             s.model
                 .click_body(&press_node, mods.ctrl || mods.cmd, mods.shift)
         })
@@ -225,7 +224,7 @@ pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
     let model_open = !m.is_collapsed("model");
     let bodies_open = !m.is_collapsed("bodies");
     let mut file_node = Item::new("node-model", file, &glyphs::FILE);
-    (file_node.open, file_node.on) = (Some(model_open), model_on && !s.shell.show_prefs);
+    (file_node.open, file_node.on) = (Some(model_open), model_on);
     file_node.chevron_act = Some(Glyph {
         key: "model-toggle".into(),
         label: if model_open {
@@ -238,10 +237,7 @@ pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
     });
     let mut rows = col()
         .w_full()
-        .child(row_el(file_node, t, k).on_press(|s: &mut AppState| {
-            s.shell.show_prefs = false;
-            s.model.select(None)
-        }));
+        .child(row_el(file_node, t, k).on_press(|s: &mut AppState| s.model.select(None)));
     if !model_open {
         return panel
             .child(tree_tools(k))
@@ -250,13 +246,10 @@ pub fn tree(s: &AppState, t: &Theme, k: &Kit) -> El {
             .child(scroller(k, "tree-scroll", rows));
     }
     let mut sec = Item::new("node-section", section_label(s), &icons::SECTION);
-    (sec.depth, sec.on) = (1, m.section_selected && !s.shell.show_prefs);
+    (sec.depth, sec.on) = (1, m.section_selected);
     sec.aria = format!("Section {}", sec.name);
     rows = rows.child(attach(
-        row_el(sec, t, k).on_press(|s: &mut AppState| {
-            s.shell.show_prefs = false;
-            s.model.activate(&TreeNode::Section)
-        }),
+        row_el(sec, t, k).on_press(|s: &mut AppState| s.model.activate(&TreeNode::Section)),
         TreeNode::Section,
     ));
     let mut head = Item::new(

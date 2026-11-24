@@ -47,6 +47,14 @@ pub(super) fn click(rt: &mut Runtime<AppState>, key: &str) {
     rt.frame(1.0 / 60.0);
 }
 
+/// Opens the settings dialog and lets its open motion finish.
+fn open_settings(rt: &mut Runtime<AppState>) {
+    click(rt, "open-settings");
+    for i in 1..=30 {
+        rt.frame(f64::from(i) / 60.0 + 1.0);
+    }
+}
+
 pub(super) fn press(rt: &mut Runtime<AppState>, key: Key, mods: Mods) {
     rt.key(KeyEvent { key, mods });
     rt.frame(1.0 / 60.0);
@@ -209,18 +217,84 @@ fn plane_keys_do_nothing_without_a_model_and_never_while_typing() {
 }
 
 #[test]
-fn preferences_change_the_displayed_units_and_restore_defaults() {
+fn settings_change_the_displayed_units_and_reset_the_category() {
     let mut rt = runtime_with(motor());
     click(&mut rt, "body-body-1");
-    click(&mut rt, "open-settings");
+    open_settings(&mut rt);
+    assert!(rt.state.shell.show_settings);
+    click(&mut rt, "settings-units");
     click(&mut rt, "unit/segment3");
     assert_eq!(rt.state.shell.number_format.length_unit, LengthUnit::In);
     click(&mut rt, "length-decimals-dec");
     assert_eq!(rt.state.shell.number_format.length_decimals, 2);
-    click(&mut rt, "restore-format");
+    click(&mut rt, "reset-category");
     assert_eq!(rt.state.shell.number_format, Default::default());
-    click(&mut rt, "open-settings");
-    assert!(!rt.state.shell.show_prefs);
+}
+
+#[test]
+fn ctrl_comma_opens_the_dialog_and_escape_closes_it_and_the_old_pane_is_gone() {
+    let mut rt = runtime_with(motor());
+    press(
+        &mut rt,
+        Key::Command(','),
+        Mods {
+            cmd: true,
+            ..Mods::default()
+        },
+    );
+    assert!(rt.state.shell.show_settings);
+    assert!(rt.find("settings-dialog").is_some());
+    for key in [
+        "settings-general",
+        "settings-units",
+        "settings-viewport",
+        "settings-export",
+        "settings-service",
+    ] {
+        assert!(rt.find(key).is_some(), "{key}");
+    }
+    press(&mut rt, Key::Escape, Mods::default());
+    assert!(!rt.state.shell.show_settings);
+    assert!(rt.find("preferences").is_none());
+}
+
+#[test]
+fn viewport_and_export_settings_edit_the_stored_values_and_reset_per_category() {
+    let mut rt = runtime_with(motor());
+    open_settings(&mut rt);
+    click(&mut rt, "settings-viewport");
+    click(&mut rt, "fill-opacity/segment2");
+    click(&mut rt, "mouse-preset/segment1");
+    click(&mut rt, "grid-default");
+    let v = rt.state.shell.settings.viewport.clone();
+    assert_eq!(v.fill_opacity, 0.5);
+    assert_eq!(v.mouse, crate::state::settings::MousePreset::Inventor);
+    assert!(v.grid_default && rt.state.section.view.grid);
+    click(&mut rt, "settings-export");
+    click(&mut rt, "export-layers/segment1");
+    // The format and ZIP checkboxes lie below the dialog's fold, so it is set through the same edit path.
+    rt.state.shell.edit_settings(|x| {
+        x.export.zip = false;
+        x.export.formats = vec!["svg".into()];
+    });
+    let e = rt.state.shell.settings.export.clone();
+    assert_eq!(e.layer_mode, crate::state::settings::LayerMode::Group);
+    assert_eq!(e.formats, vec!["svg".to_string()]);
+    assert!(!e.zip);
+    click(&mut rt, "reset-category");
+    assert_eq!(rt.state.shell.settings.export, Default::default());
+    assert_eq!(rt.state.shell.settings.viewport, v, "other categories stay");
+}
+
+#[test]
+fn service_actions_that_the_adapter_cannot_do_are_disabled_with_a_reason() {
+    let mut rt = runtime_with(motor());
+    open_settings(&mut rt);
+    click(&mut rt, "settings-service");
+    assert!(rt.find("open-log-folder").is_some());
+    let json = rt.accessibility_json().to_string();
+    assert!(json.contains("Restart CAD2Maxwell to restart the service"));
+    assert!(json.contains("no runtime log setting"));
 }
 
 #[test]
