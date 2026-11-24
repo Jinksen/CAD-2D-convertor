@@ -228,6 +228,37 @@ impl SectionResponse {
     }
 }
 
+/// One export group as the service takes it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ExportGroup {
+    pub name: String,
+    pub members: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub material: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub material_note: Option<String>,
+}
+
+/// Export request options besides the import and section ids.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ExportOptions {
+    pub layer_mode: String,
+    pub color_mode: String,
+    pub groups: Vec<ExportGroup>,
+    pub formats: Vec<String>,
+}
+
+impl Default for ExportOptions {
+    fn default() -> Self {
+        ExportOptions {
+            layer_mode: "component".into(),
+            color_mode: "original".into(),
+            groups: vec![],
+            formats: vec!["dxf".into()],
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[allow(dead_code)] // used by the 3D preview and section features in phase 3
 pub struct ComponentPlane {

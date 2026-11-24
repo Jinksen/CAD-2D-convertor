@@ -433,3 +433,29 @@ fn tree_rows_have_one_height_and_status_is_text_not_colour() {
     click(&mut rt, "bodies-heading");
     assert!(rt.find("body-body-2").is_none());
 }
+
+#[test]
+fn a_group_gets_a_material_label_and_a_custom_note_that_the_export_sends() {
+    let mut state = motor();
+    state.model.groups.push(crate::state::model::BodyGroup {
+        name: "Magnets".into(),
+        component_ids: vec!["body-1".into()],
+        ..Default::default()
+    });
+    state.model.select_group("Magnets");
+    let mut rt = runtime_with(state);
+    click(&mut rt, "material-permanent_magnet");
+    assert_eq!(
+        rt.state.model.groups[0].material.as_deref(),
+        Some("permanent_magnet")
+    );
+    assert!(rt.find("material-note").is_none(), "only custom has a note");
+    click(&mut rt, "material-custom");
+    rt.state.model.set_material_note("Magnets", "  N42SH  ");
+    let sent = rt.state.export_options();
+    assert_eq!(sent.groups[0].material.as_deref(), Some("custom"));
+    assert_eq!(sent.groups[0].material_note.as_deref(), Some("N42SH"));
+    click(&mut rt, "material-none");
+    assert_eq!(rt.state.model.groups[0].material, None);
+    assert_eq!(rt.state.model.groups[0].material_note, None);
+}

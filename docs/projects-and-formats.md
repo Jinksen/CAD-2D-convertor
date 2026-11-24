@@ -13,6 +13,14 @@ Status: proposal plus the first slice, implemented in the same PR (0.3).
 
 Groups are display organization only. They do not change sectioning, validation, export names or the DXF.
 
+## Project file fields
+
+All fields after `plane` are optional, so older files load and older apps ignore them; the version stays 1.
+
+| Field | Content |
+|-------|---------|
+| `groups[]` | `name`, `component_ids`, optional `material` (one of the export's fixed labels) and `material_note` (custom only, 80 characters) |
+
 ## Next: project file
 
 In order of value:

@@ -41,6 +41,10 @@ Hovering a body row highlights the body in the 2D and 3D views, and hovering a b
 
 Groups, each with a caption: File (Open STEP, Open project, Save), Section (plane XY/XZ/YZ/Custom, Compute section), Export (DXF), Edit (Undo, Redo) and View (2D/3D), then Settings at the right. Every button has a tooltip with its shortcut. The plane and Compute exist only in the ribbon; the Section pane keeps the offset, custom normal and align fields.
 
+## Export and group materials
+
+Export uses the Export settings (layers, colours, formats, default folder, ZIP or folder). The group pane has a **Material label** choice (None, Air, Copper, Aluminum, Electrical steel, Structural steel, Permanent magnet, Insulation, Custom) and a note for Custom. The label is the user's own bookkeeping, stored in the project and sent with the export; it is not a Maxwell library material. Groups without members are not sent.
+
 ## Properties pane
 
 The right pane shows exactly one titled context, chosen by the tree selection: `Section XY`, `Body Rotor`, `Group North poles` or `Model motor.step`. Section statistics sit under the Section context and in the status bar. Long values wrap and group members are listed one per line instead of being truncated.

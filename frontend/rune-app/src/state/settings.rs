@@ -128,7 +128,6 @@ pub enum LayerMode {
 impl LayerMode {
     pub const ALL: [LayerMode; 3] = [Self::Component, Self::Group, Self::Hybrid];
 
-    #[allow(dead_code)] // sent with the export request (next ticket)
     pub fn wire(self) -> &'static str {
         match self {
             Self::Component => "component",
@@ -156,7 +155,6 @@ impl ColorMode {
         Self::Monochrome,
     ];
 
-    #[allow(dead_code)] // sent with the export request (next ticket)
     pub fn wire(self) -> &'static str {
         match self {
             Self::Original => "original",

@@ -63,8 +63,18 @@ pub(super) fn export_dialog(s: &mut AppState, tx: &mut Tx) {
         s.shell.log(Severity::Warning, reason);
         return;
     }
-    let options = dialog("Save CAD2Maxwell DXF bundle", Some("section.zip"))
-        .filter("DXF bundle (ZIP)", &["zip"]);
+    let settings = &s.shell.settings.export;
+    let mut options = if settings.zip {
+        dialog("Save CAD2Maxwell DXF bundle", Some("section.zip"))
+            .filter("DXF bundle (ZIP)", &["zip"])
+    } else {
+        dialog("Name the export folder", Some("section"))
+    };
+    options.directory = settings
+        .folder
+        .as_ref()
+        .map(std::path::PathBuf::from)
+        .filter(|p| p.is_dir());
     tx.save_file(options, |s: &mut AppState, result, _| match result {
         Ok(Some(path)) => s.export_section(path),
         Ok(None) => {}

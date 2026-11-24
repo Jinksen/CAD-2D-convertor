@@ -11,11 +11,32 @@ use crate::state::selection::{ContextMenu, Node};
 use crate::state::tree::{self, Folder};
 
 /// A named set of bodies, such as "Magnets" or "Stator laminations". A body can be in several.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct BodyGroup {
     pub name: String,
     pub component_ids: Vec<String>,
+    /// User-assigned material label of the export (never inferred); see `MATERIALS`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material: Option<String>,
+    /// Free text of the `custom` label.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material_note: Option<String>,
 }
+
+/// The labels the export accepts. They describe a group for the user's own bookkeeping; they
+/// are not Maxwell library materials.
+pub const MATERIALS: [&str; 8] = [
+    "air",
+    "copper",
+    "aluminum",
+    "electrical_steel",
+    "structural_steel",
+    "permanent_magnet",
+    "insulation",
+    "custom",
+];
+/// Longest custom note the service accepts.
+pub const MATERIAL_NOTE_MAX: usize = 80;
 
 #[derive(Default)]
 pub struct ModelState {
@@ -49,6 +70,8 @@ pub struct ModelState {
     /// Name fields of "New group" and of the selected group's rename.
     pub new_group: TextEdit,
     pub rename_group: TextEdit,
+    /// Note field of the selected group's `custom` material label.
+    pub material_note: TextEdit,
 }
 
 /// Collapse key of a group; the prefix keeps it apart from assembly paths.
@@ -106,6 +129,11 @@ impl ModelState {
         self.cursor = Some(Node::Group(name.to_owned()));
         self.selected_group = Some(name.to_owned());
         self.rename_group = TextEdit::new(name);
+        let note = self.groups.iter().find(|g| g.name == name);
+        self.material_note = TextEdit::new(
+            note.and_then(|g| g.material_note.clone())
+                .unwrap_or_default(),
+        );
     }
 
     pub fn toggle_hidden(&mut self, id: &str) {
@@ -172,6 +200,7 @@ impl ModelState {
         self.groups.push(BodyGroup {
             name: name.clone(),
             component_ids,
+            ..BodyGroup::default()
         });
         self.new_group.clear();
         self.select_group(&name);
@@ -195,6 +224,23 @@ impl ModelState {
         }
         self.select_group(&name);
         Ok(())
+    }
+
+    /// Sets (or clears) the material label of a group; a note only belongs to `custom`.
+    pub fn set_material(&mut self, group: &str, material: Option<&str>) {
+        if let Some(g) = self.groups.iter_mut().find(|g| g.name == group) {
+            g.material = material.map(str::to_owned);
+            if material != Some("custom") {
+                g.material_note = None;
+            }
+        }
+    }
+
+    pub fn set_material_note(&mut self, group: &str, note: &str) {
+        let note: String = note.trim().chars().take(MATERIAL_NOTE_MAX).collect();
+        if let Some(g) = self.groups.iter_mut().find(|g| g.name == group) {
+            g.material_note = (!note.is_empty()).then_some(note);
+        }
     }
 
     pub fn delete_group(&mut self, name: &str) {
@@ -404,6 +450,7 @@ pub(crate) mod tests {
         m.restore_groups(vec![BodyGroup {
             name: "G".into(),
             component_ids: vec!["a".into(), "gone".into()],
+            ..BodyGroup::default()
         }]);
         assert_eq!(m.groups[0].component_ids, ["a"]);
     }

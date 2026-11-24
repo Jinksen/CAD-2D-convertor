@@ -19,6 +19,7 @@ fn with_group() -> Runtime<AppState> {
     state.model.groups.push(BodyGroup {
         name: "North".into(),
         component_ids: vec![],
+        ..BodyGroup::default()
     });
     runtime_with(state)
 }

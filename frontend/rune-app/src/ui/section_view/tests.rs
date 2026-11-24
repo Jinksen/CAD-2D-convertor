@@ -500,10 +500,12 @@ fn the_legend_lists_visible_groups_with_their_color() {
         crate::state::model::BodyGroup {
             name: "Stator".into(),
             component_ids: vec!["a".into()],
+            ..crate::state::model::BodyGroup::default()
         },
         crate::state::model::BodyGroup {
             name: "Rotor".into(),
             component_ids: vec!["b".into()],
+            ..crate::state::model::BodyGroup::default()
         },
     ];
     assert_eq!(overlay::legend(&s).len(), 2);

@@ -12,7 +12,7 @@ use super::tree_row::{Action, Glyph, Item, row_el};
 use super::{button, heading, icons, label_value};
 use crate::api::dto::Severity;
 use crate::state::AppState;
-use crate::state::model::group_key;
+use crate::state::model::{MATERIALS, group_key};
 use crate::state::selection::Node as TreeNode;
 use crate::state::tree::Folder;
 
@@ -282,6 +282,7 @@ pub fn properties(s: &AppState, t: &Theme, k: &Kit, name: &str) -> El {
                     }),
                 ),
         )
+        .child(material(s, t, k, name))
         .child(label_value(t, "Bodies", members.len().to_string()))
         .child(
             col()
@@ -325,4 +326,81 @@ pub fn properties(s: &AppState, t: &Theme, k: &Kit, name: &str) -> El {
         .w_full()
         .child(heading(t, &format!("Group {name}")))
         .child(fields)
+}
+
+/// Display name of a material label: "electrical_steel" reads "Electrical steel".
+fn material_name(label: &str) -> String {
+    let mut name = label.replace('_', " ");
+    name[..1].make_ascii_uppercase();
+    name
+}
+
+/// The group's material label for the export: a choice of the service's fixed labels, and a
+/// note for `custom`. Labels are the user's own bookkeeping, never inferred or library entries.
+fn material(s: &AppState, t: &Theme, k: &Kit, group: &str) -> El {
+    let current = s
+        .model
+        .groups
+        .iter()
+        .find(|g| g.name == group)
+        .and_then(|g| g.material.clone());
+    let mut choices = col()
+        .key("group-material")
+        .role("group")
+        .label("Material label")
+        .w_full()
+        .gap(2.0);
+    let options: Vec<Option<&str>> = std::iter::once(None)
+        .chain(MATERIALS.iter().copied().map(Some))
+        .collect();
+    for chunk in options.chunks(3) {
+        let mut line = row().gap(space::S1);
+        for option in chunk {
+            let label = option.map_or("None".to_owned(), material_name);
+            let name = group.to_owned();
+            let value = option.map(str::to_owned);
+            let key = format!("material-{}", option.unwrap_or("none"));
+            line = line.child(
+                button(k, &key, &label, true)
+                    .checked(current.as_deref() == *option)
+                    .on_press(move |s: &mut AppState| {
+                        s.model.set_material(&name, value.as_deref())
+                    }),
+            );
+        }
+        choices = choices.child(line);
+    }
+    let mut out = col()
+        .w_full()
+        .gap(space::S1)
+        .child(
+            text("Material label")
+                .font(type_::LABEL)
+                .color(t.text_secondary),
+        )
+        .child(choices);
+    if current.as_deref() == Some("custom") {
+        let name = group.to_owned();
+        out = out.child(
+            TextInput::new(&s.model.material_note)
+                .label("Custom material note")
+                .placeholder("Note, Enter applies (max 80 characters)")
+                .width(None)
+                .height(22.0)
+                .on_edit(|s: &mut AppState| &mut s.model.material_note)
+                .on_submit(move |s: &mut AppState, _| {
+                    let text = s.model.material_note.text.clone();
+                    s.model.set_material_note(&name, &text)
+                })
+                .build(k)
+                .key("material-note"),
+        );
+    }
+    out.child(
+        text("Written to the export manifest and tables as your own label. It is not a Maxwell library material; assign the real material in Maxwell.")
+            .font(type_::LABEL)
+            .color(t.text_secondary)
+            .wrap()
+            .w_full(),
+    )
 }

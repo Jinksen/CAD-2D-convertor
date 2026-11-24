@@ -252,6 +252,8 @@ mod tests {
         saved.model.groups = vec![BodyGroup {
             name: "Magnets".into(),
             component_ids: vec!["b1".into(), "gone".into()],
+            material: Some("custom".into()),
+            material_note: Some("N42SH".into()),
         }];
         saved.model.collapsed = ["Motor".to_string()].into();
         saved.save_project(dir.join("p"));
@@ -279,6 +281,14 @@ mod tests {
     }
 
     #[test]
+    fn groups_without_material_fields_load_and_do_not_write_them() {
+        let old = r#"{"name":"G","component_ids":["a"]}"#;
+        let group: BodyGroup = serde_json::from_str(old).unwrap();
+        assert_eq!(group.material, None);
+        assert_eq!(serde_json::to_string(&group).unwrap(), old);
+    }
+
+    #[test]
     fn round_trips_plane_hidden_bodies_and_drops_ids_the_step_no_longer_has() {
         let state = reopen("x");
         assert_eq!(
@@ -287,6 +297,11 @@ mod tests {
         );
         assert_eq!(state.model.hidden, ["b2".to_string()].into());
         assert_eq!(state.model.groups[0].component_ids, ["b1"]);
+        assert_eq!(state.model.groups[0].material.as_deref(), Some("custom"));
+        assert_eq!(
+            state.model.groups[0].material_note.as_deref(),
+            Some("N42SH")
+        );
         assert!(state.model.collapsed.contains("Motor"));
         let last = state.shell.messages.last().unwrap();
         assert_eq!(

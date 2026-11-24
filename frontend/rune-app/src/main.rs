@@ -4,6 +4,7 @@
 mod api;
 mod archive;
 mod backend;
+mod export;
 mod format;
 mod project;
 mod render3d;

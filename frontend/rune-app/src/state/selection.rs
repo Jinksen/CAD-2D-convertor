@@ -360,6 +360,7 @@ mod tests {
         m.groups.push(BodyGroup {
             name: "G".into(),
             component_ids: vec!["a".into()],
+            ..BodyGroup::default()
         });
         m.collapse_all();
         let kinds: Vec<Node> = m.rows().into_iter().map(|r| r.0).collect();
@@ -393,6 +394,7 @@ mod tests {
         m.groups.push(BodyGroup {
             name: "G".into(),
             component_ids: vec!["a".into()],
+            ..BodyGroup::default()
         });
         m.add_to_group("G", &m.targets());
         assert_eq!(m.groups[0].component_ids, ["a", "b", "c"]);

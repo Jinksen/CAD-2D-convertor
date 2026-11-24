@@ -248,17 +248,24 @@ impl AppState {
         let Some(section) = &self.section.last else {
             return;
         };
-        if path.extension().is_none() {
+        let zip = self.shell.settings.export.zip;
+        if zip && path.extension().is_none() {
             path.set_extension("zip");
+        } else if !zip {
+            path.set_extension(""); // the bundle becomes a folder of this name
         }
         let (import_id, section_id) = (section.import_id.clone(), section.section_id.clone());
+        let options = self.export_options();
         let target = path.clone();
         self.start(
             "Exporting DXF bundle",
             move |client| {
-                let bytes = client.export_dxf(&import_id, &section_id)?;
-                archive::write_archive(&path, &bytes)?;
-                Ok(())
+                let bytes = client.export_dxf(&import_id, &section_id, &options)?;
+                if zip {
+                    archive::write_archive(&path, &bytes)
+                } else {
+                    archive::extract_archive(&path, &bytes)
+                }
             },
             move |state, ()| {
                 state.shell.notify(
@@ -612,5 +619,48 @@ mod tests {
         for name in ["a.dxf", "a.c2mproj", "a"] {
             assert!(!is_model(Path::new(name)), "{name}");
         }
+    }
+
+    #[test]
+    fn export_sends_the_settings_and_can_write_a_folder_instead_of_a_zip() {
+        use std::io::Write;
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        let mut zip = zip::ZipWriter::new(&mut cursor);
+        zip.start_file("section.dxf", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(
+            b"0
+EOF",
+        )
+        .unwrap();
+        zip.finish().unwrap();
+        let fake = serve(vec![
+            (200, "application/json", IMPORT.as_bytes().to_vec()),
+            (200, "application/json", SECTION.as_bytes().to_vec()),
+            (200, "application/zip", cursor.into_inner()),
+        ]);
+        let (mut state, rx) = harness(&fake.url);
+        state.shell.edit_settings(|s| {
+            s.export.zip = false;
+            s.export.formats = vec!["svg".into()];
+            s.export.layer_mode = crate::state::settings::LayerMode::Group;
+        });
+        state.open_step(PathBuf::from("C:/m.step"));
+        settle(&mut state, &rx);
+        state.compute_section();
+        settle(&mut state, &rx);
+        let dir = std::env::temp_dir().join(format!("c2m-export-dir-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        state.export_section(dir.join("bundle.zip"));
+        settle(&mut state, &rx);
+        assert_eq!(
+            std::fs::read(dir.join("bundle").join("section.dxf")).unwrap(),
+            b"0
+EOF"
+        );
+        let request = fake.requests.lock().unwrap()[2].clone();
+        assert!(request.contains(r#""layer_mode":"group""#), "{request}");
+        assert!(request.contains(r#""formats":["dxf","svg"]"#), "{request}");
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -6,8 +6,8 @@ pub mod dto;
 use std::time::Duration;
 
 use dto::{
-    ComponentPlane, Health, ImportSummary, PreviewMesh, PreviewMeshWire, RegionsResponse,
-    SectionPlane, SectionResponse,
+    ComponentPlane, ExportOptions, Health, ImportSummary, PreviewMesh, PreviewMeshWire,
+    RegionsResponse, SectionPlane, SectionResponse,
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -246,8 +246,15 @@ impl Client {
     }
 
     /// The DXF bundle (ZIP bytes) of a computed section.
-    pub fn export_dxf(&self, import_id: &str, section_id: &str) -> Result<Vec<u8>, String> {
-        let body = json!({ "import_id": import_id, "section_id": section_id });
+    pub fn export_dxf(
+        &self,
+        import_id: &str,
+        section_id: &str,
+        options: &ExportOptions,
+    ) -> Result<Vec<u8>, String> {
+        let mut body = json!(options);
+        body["import_id"] = json!(import_id);
+        body["section_id"] = json!(section_id);
         let reply = self.call("export/dxf", Some(body), "application/zip")?;
         if !(200..300).contains(&reply.status) {
             return Err(Self::failure(&reply, "The DXF could not be exported."));
@@ -432,9 +439,13 @@ mod tests {
             (200, "text/plain", b"nope".to_vec()),
         ]);
         let c = client(&fake.url);
-        assert_eq!(c.export_dxf("i1", "s1").unwrap(), b"PK\x03\x04zz");
         assert_eq!(
-            c.export_dxf("i1", "s1").unwrap_err(),
+            c.export_dxf("i1", "s1", &ExportOptions::default()).unwrap(),
+            b"PK\x03\x04zz"
+        );
+        assert_eq!(
+            c.export_dxf("i1", "s1", &ExportOptions::default())
+                .unwrap_err(),
             "The geometry service returned an invalid DXF download."
         );
     }
@@ -537,7 +548,7 @@ mod tests {
         let _ = c.import_step(r"C:\models\Motor.step");
         let _ = c.preview("imp 1/\u{fc}!'()*~");
         let _ = c.component_plane("imp-1", "body 1");
-        let _ = c.export_dxf("imp-1", "sec-1");
+        let _ = c.export_dxf("imp-1", "sec-1", &ExportOptions::default());
         let _ = c.section("imp-1", &state.request(&bounds).unwrap());
 
         let (head, body) = sent(&fake, 0);
@@ -560,7 +571,11 @@ mod tests {
         let (head, body) = sent(&fake, 3);
         assert!(head.starts_with("POST /api/v1/export/dxf "), "{head}");
         assert!(head.to_lowercase().contains("accept: application/zip"));
-        assert_eq!(body, json!({"import_id": "imp-1", "section_id": "sec-1"}));
+        assert_eq!(
+            body,
+            json!({"import_id": "imp-1", "section_id": "sec-1", "layer_mode": "component",
+                "color_mode": "original", "groups": [], "formats": ["dxf"]})
+        );
         // Default plane: XY through the model midpoint (z = 15).
         let (head, body) = sent(&fake, 4);
         assert!(head.starts_with("POST /api/v1/section "), "{head}");
@@ -671,7 +686,11 @@ mod tests {
         let section = c.section(&summary.import_id, &plane).unwrap();
         state.last = Some(section.clone());
         let zip = c
-            .export_dxf(&summary.import_id, &section.section_id)
+            .export_dxf(
+                &summary.import_id,
+                &section.section_id,
+                &ExportOptions::default(),
+            )
             .unwrap();
         assert!(zip.starts_with(b"PK\x03\x04"));
         let mesh = c.preview(&summary.import_id).unwrap();
@@ -715,7 +734,11 @@ mod tests {
             let plane = state.request(&summary.bounds_mm).unwrap();
             let section = c.section(&summary.import_id, &plane).unwrap();
             let zip = c
-                .export_dxf(&summary.import_id, &section.section_id)
+                .export_dxf(
+                    &summary.import_id,
+                    &section.section_id,
+                    &ExportOptions::default(),
+                )
                 .unwrap();
             std::fs::write(out.join(format!("rust_{name}.zip")), zip).unwrap();
         }
