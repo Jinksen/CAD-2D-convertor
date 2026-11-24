@@ -224,7 +224,9 @@ def create_app(import_service: ImportService | None = None) -> FastAPI:
         if section.import_id != request.import_id:
             return _error(409, "export_session_mismatch", "The section belongs to another import.")
         try:
-            archive = export_archive(imported, section, request)
+            archive = export_archive(
+                imported, section, request, section_service.sections.get(request.section_id),
+            )
         except DxfExportError as exc:
             return _error(422, "export_not_ready", str(exc))
         return Response(

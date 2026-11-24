@@ -46,10 +46,12 @@ The core constraint applies to every format: exact B-Rep in, analytic curves out
 | Format | Verdict | Notes |
 |--------|---------|-------|
 | DXF + JSON manifest | Supported | 1:1 in millimetres, analytic arcs, deterministic names. |
-| DXF with layers per group | Recommended next | See "Groups in the export" above. |
-| Region table (CSV) | Recommended | Region name, source body, groups, area, perimeter and centroid. Useful for checking and reports, and computed from exact geometry in the backend. |
-| SVG | Useful | Documentation and reports. Arcs map to SVG arcs exactly. Same geometry as the DXF, with a different writer. |
-| PyAEDT script (`.py`) | Adapter | Builds the regions in Maxwell 2D, names them and assigns materials per group. It belongs behind an adapter. PyAEDT stays optional and is never required to run the core. |
+| DXF with layers per group | Supported (backend) | `layer_mode` group or hybrid, `color_mode` and material labels; manifest schema 2. See [dxf-export](dxf-export.md). |
+| Region table (CSV) | Supported (backend) | Region name, source body, groups, area, perimeter and centroid. Useful for checking and reports, and computed from exact geometry in the backend. |
+| SVG | Supported (backend) | Documentation and reports. Arcs map to SVG arcs exactly. Same geometry as the DXF, with a different writer. |
+| PyAEDT script (`.py`) | Supported (backend) | Builds the regions in Maxwell 2D, names them and assigns materials per group. It belongs behind an adapter. PyAEDT stays optional and is never required to run the core. |
+| FEMM `.lua` | Supported (backend) | `mi_addarc` with exact angles, block labels per region. FEMM is never a dependency. |
+| Gmsh `.geo` | Supported (backend) | `Circle` arcs under 180 degrees, physical surfaces per body and group. |
 | Motor-CAD DXF | Check first | Motor-CAD imports DXF. Verify which layer and closure rules it needs before adding a preset. |
 | ACIS `.sat` | Not possible | No free writer in Open CASCADE. DXF covers Maxwell 2D import. |
 

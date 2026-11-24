@@ -16,6 +16,18 @@ The manifest records source SHA-256, original names, hierarchy, color, section p
 
 Manifest `schema_version` is now 2. New keys: `layer_mode`, `color_mode`, `groups` (name, layer_name, material, material_note, members) and per component `layer`, `groups`, `primary_group`, `material_tag`. Default requests produce the same DXF as before.
 
+## Additional formats
+
+Set `formats` on the export request to add files to the archive (`section.dxf` and `section.json` are always included). Region-based formats read the exact section wires held by the service, so they work only for a section computed in the same session. A region is an outer wire minus the holes inside it; its name is the component export name, with `_01`, `_02` when a body has several regions. All writers are deterministic and use raw millimetres.
+
+| `formats` | File | Notes |
+|-----------|------|-------|
+| `csv` | `regions.csv` | `region, source_body, groups, area_mm2, perimeter_mm, centroid_x_mm, centroid_y_mm, holes`; groups joined with `;`. |
+| `svg` | `section.svg` | 1 user unit = 1 mm. Lines and exact `A` arc commands (a full circle is two arcs), ellipses as elliptical arcs, one `<path id=region>` per region with `fill-rule=evenodd` for holes. Fill follows `color_mode`. The section plane has y up and SVG y down, so the drawing sits in a `scale(1 -1)` group and the `viewBox` is given in that flipped frame; numbers equal the DXF coordinates. |
+| `femm` | `section.lua` | `mi_addnode`, `mi_addsegment`, `mi_addarc` with the exact analytic angle (arcs over 180 degrees are split into equal exact parts, clockwise arcs have their end points swapped), one `mi_addblocklabel` at an interior point per region, `mi_setgroup` per export group. The `maxseg` argument (1 degree) only controls FEMM's display and meshing of arcs. `mi_setblockprop` lines are written commented out: block names are material labels or group names, not FEMM library materials. Ellipses are rejected. |
+| `gmsh` | `section.geo` | `Point`, `Line`, `Circle(start, center, end)` (arcs split below 180 degrees, so a full circle is three arcs), `Curve Loop` and `Plane Surface` with hole loops, `Physical Surface("Body_<name>")` per body and `("Group_<name>")` per group. Coincident points and curves are shared, but bodies are not fused. `lc` is a placeholder mesh size. Ellipses are rejected. |
+| `pyaedt` | `section_pyaedt.py` | Text only; the script imports `pyaedt` when run and the backend never does. It imports `section.dxf`, lists regions, layers and material labels, and leaves a `MATERIAL_MAP` of TODO entries so labels are not presented as Maxwell library materials. |
+
 ## Region metrics
 
 `GET /api/v1/sections/{section_id}/regions` returns one entry per region (an outer wire minus the holes inside it): `area_mm2`, `perimeter_mm` (outer plus hole boundaries), `centroid`, `hole_count`, an `interior_point` guaranteed to lie in the material, and the wire indices in the section response. Values come from OpenCascade `BRepGProp` on the exact faces, not from polylines. They are display and table data only; geometry export never reads them.
