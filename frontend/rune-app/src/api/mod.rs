@@ -6,8 +6,8 @@ pub mod dto;
 use std::time::Duration;
 
 use dto::{
-    ComponentPlane, Health, ImportSummary, PreviewMesh, PreviewMeshWire, SectionPlane,
-    SectionResponse,
+    ComponentPlane, Health, ImportSummary, PreviewMesh, PreviewMeshWire, RegionsResponse,
+    SectionPlane, SectionResponse,
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -228,6 +228,21 @@ impl Client {
             return Err("The geometry service returned an invalid plane response.".into());
         }
         Ok(plane)
+    }
+
+    /// Exact area, perimeter, centroid and hole count of every region of a computed section.
+    pub fn regions(&self, section_id: &str) -> Result<RegionsResponse, String> {
+        let path = format!("sections/{}/regions", segment(section_id));
+        let reply = self.call(&path, None, "application/json")?;
+        let regions: RegionsResponse = Self::decode(
+            &reply,
+            "The region metrics could not be computed.",
+            "The geometry service returned an invalid region response.",
+        )?;
+        if regions.section_id != section_id {
+            return Err("The geometry service returned an invalid region response.".into());
+        }
+        Ok(regions)
     }
 
     /// The DXF bundle (ZIP bytes) of a computed section.
@@ -470,6 +485,39 @@ mod tests {
             serde_json::from_str(body).unwrap()
         };
         (head.to_owned(), body)
+    }
+
+    #[test]
+    fn regions_decode_and_must_belong_to_the_requested_section() {
+        let body = |id: &str| {
+            format!(
+                r#"{{"section_id":"{id}","regions":[{{"component_id":"c1","region_index":0,"outer_wire":0,
+                "hole_wires":[1],"area_mm2":96.5,"perimeter_mm":42.0,"centroid":[5.0,5.0],"hole_count":1,
+                "interior_point":[1.0,1.0]}}]}}"#
+            )
+            .into_bytes()
+        };
+        let fake = serve(vec![
+            (200, "application/json", body("s 1")),
+            (200, "application/json", body("other")),
+            (
+                404,
+                "application/json",
+                br#"{"error":{"message":"Compute the section again."}}"#.to_vec(),
+            ),
+        ]);
+        let c = client(&fake.url);
+        let r = c.regions("s 1").unwrap();
+        assert_eq!((r.regions[0].area_mm2, r.regions[0].hole_count), (96.5, 1));
+        assert!(
+            fake.requests.lock().unwrap()[0].starts_with("GET /api/v1/sections/s%201/regions ")
+        );
+        assert!(
+            c.regions("s 1")
+                .unwrap_err()
+                .contains("invalid region response")
+        );
+        assert_eq!(c.regions("s 1").unwrap_err(), "Compute the section again.");
     }
 
     #[test]

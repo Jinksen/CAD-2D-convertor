@@ -4,6 +4,7 @@ use rune::{Env, Mods, Runtime};
 
 use super::*;
 use crate::api::dto::{SectionCurve, SectionPlane, SectionWire};
+use crate::state::section::measure::Tool;
 use crate::state::section::{PlaneKind, SectionStats};
 
 fn line(a: P, b: P) -> SectionCurve {
@@ -153,6 +154,7 @@ fn paint_of<'a>(
         stale: false,
         grid: s.section.view.grid,
         fmt: crate::format::NumberFormat::default(),
+        measure: &s.section.view.measure,
     }
 }
 
@@ -510,4 +512,62 @@ fn the_legend_lists_visible_groups_with_their_color() {
     s.model.toggle_group_hidden("Rotor");
     let names: Vec<_> = overlay::legend(&s).into_iter().map(|e| e.0).collect();
     assert_eq!(names, ["Stator"]);
+}
+
+fn click_at(rt: &mut Runtime<AppState>, world: P) {
+    let (cx, cy) = rt.find("section-canvas").expect("canvas");
+    let size = rt.state.section.view.size.unwrap();
+    let origin = (cx - size.width as f32 / 2.0, cy - size.height as f32 / 2.0);
+    let p = Map::new(view_of(&rt.state), size).px(world);
+    rt.pointer_down(origin.0 + p[0], origin.1 + p[1]);
+    rt.pointer_up(origin.0 + p[0], origin.1 + p[1]);
+    rt.frame(1.0 / 60.0);
+}
+
+#[test]
+fn the_distance_tool_snaps_to_corners_and_reads_the_distance_in_the_display_unit() {
+    let mut s = state_with(two_bodies());
+    s.shell.number_format.length_unit = crate::format::LengthUnit::Cm;
+    let mut rt = runtime(s);
+    assert!(rt.find("measure-reading").is_none(), "Select shows no hint");
+    assert!(
+        rt.find("tool-2d").is_some(),
+        "tool control in the 2D toolbar"
+    );
+    rt.state.section.view.tool = Tool::Distance;
+    rt.invalidate();
+    rt.frame(1.0 / 60.0);
+    assert!(rt.find("measure-reading").is_some(), "the tool hint");
+    // Near (not on) the corners (0,0) and (10,10): both snap.
+    click_at(&mut rt, [0.05, -0.04]);
+    assert_eq!(rt.state.section.view.measure.first, Some([0.0, 0.0]));
+    assert!(rt.state.model.selected.is_none(), "measuring never selects");
+    click_at(&mut rt, [10.03, 9.97]);
+    let text = overlay::measure_text(&rt.state).unwrap();
+    assert!(text.starts_with("Distance 1.414\u{a0}cm"), "{text}");
+    assert!(text.contains("dx 1.000\u{a0}cm"), "{text}");
+}
+
+#[test]
+fn the_radius_tool_reads_a_circle_and_reports_a_miss() {
+    let mut rt = runtime(state_with(two_bodies()));
+    rt.state.section.view.tool = Tool::Radius;
+    click_at(&mut rt, [7.0, 5.0]);
+    let text = overlay::measure_text(&rt.state).unwrap();
+    assert!(text.starts_with("Radius 2.000\u{a0}mm"), "{text}");
+    assert!(text.contains("(5.000\u{a0}mm, 5.000\u{a0}mm)"), "{text}");
+    click_at(&mut rt, [1.0, 1.0]);
+    assert_eq!(
+        overlay::measure_text(&rt.state).as_deref(),
+        Some("No arc or circle under the pointer.")
+    );
+}
+
+#[test]
+fn measure_marks_add_strokes_over_the_geometry() {
+    let mut s = state_with(two_bodies());
+    let before = strokes(&s);
+    s.section.view.measure.click_distance([0.0, 0.0]);
+    s.section.view.measure.click_distance([10.0, 10.0]);
+    assert_eq!(strokes(&s), before + 5, "two crosses and the line");
 }

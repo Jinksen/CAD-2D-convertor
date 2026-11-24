@@ -4,10 +4,11 @@
 use rune::tok::{Theme, space, type_};
 use rune::{El, LineCap, Shape, col, el, row, text};
 
-use super::{Look, Map, rgb, visible_box};
+use super::{Look, Map, P, rgb, visible_box};
 use crate::format::NumberFormat;
 use crate::state::AppState;
 use crate::state::section::camera::{self, Size};
+use crate::state::section::measure::{Measure, Reading, Tool};
 
 const GRID_TARGET_PX: f64 = 60.0;
 const MAX_GRID_LINES: usize = 120;
@@ -126,6 +127,15 @@ pub(super) fn legend(s: &AppState) -> Vec<(String, Option<[u8; 3]>)> {
 pub(super) fn labels(s: &AppState, t: &Theme, map: Option<&Map>, size: Option<Size>) -> Vec<El> {
     let small = |msg: String| text(msg).font(type_::LABEL).color(t.text_secondary);
     let mut out = vec![];
+    if let Some(msg) = measure_text(s) {
+        out.push(
+            small(msg)
+                .key("measure-reading")
+                .role("status")
+                .pin(Some(MARGIN), Some(6.0), None, None)
+                .inert(),
+        );
+    }
     if let Some(msg) = readout(s) {
         out.push(
             small(msg)
@@ -166,4 +176,95 @@ pub(super) fn labels(s: &AppState, t: &Theme, map: Option<&Map>, size: Option<Si
         out.push(c);
     }
     out
+}
+
+/// Markers of the current measurement, painted over the geometry.
+pub(super) fn marks(mut shape: Shape, map: &Map, look: &Look, m: &Measure) -> Shape {
+    let cross = |shape: Shape, p: P| {
+        let [x, y] = map.px(p);
+        shape
+            .line(
+                [x - 5.0, y],
+                [x + 5.0, y],
+                1.5,
+                LineCap::Butt,
+                look.selected,
+            )
+            .line(
+                [x, y - 5.0],
+                [x, y + 5.0],
+                1.5,
+                LineCap::Butt,
+                look.selected,
+            )
+    };
+    if let Some(p) = m.first {
+        shape = cross(shape, p);
+    }
+    match &m.reading {
+        Some(Reading::Distance { from, to }) => {
+            shape = cross(cross(shape, *from), *to);
+            shape.line(
+                map.px(*from),
+                map.px(*to),
+                1.5,
+                LineCap::Round,
+                look.selected,
+            )
+        }
+        Some(Reading::Radius { center, radius }) => {
+            let c = cross(shape, *center);
+            c.line(
+                map.px(*center),
+                map.px([center[0] + radius, center[1]]),
+                1.5,
+                LineCap::Round,
+                look.selected,
+            )
+        }
+        None => shape,
+    }
+}
+
+/// What the active tool wants next, or the reading it produced.
+pub(super) fn measure_text(s: &AppState) -> Option<String> {
+    let v = &s.section.view;
+    let f = &s.shell.number_format;
+    let at = |p: P| {
+        format!(
+            "({}{}{})",
+            f.length(p[0]),
+            f.list_separator(),
+            f.length(p[1])
+        )
+    };
+    match (v.tool, &v.measure.reading) {
+        (Tool::Select, _) => None,
+        (_, Some(Reading::Distance { from, to })) => {
+            let (dx, dy) = (to[0] - from[0], to[1] - from[1]);
+            Some(format!(
+                "Distance {}  (dx {}, dy {})",
+                f.length(dx.hypot(dy)),
+                f.length(dx),
+                f.length(dy)
+            ))
+        }
+        (_, Some(Reading::Radius { center, radius })) => Some(format!(
+            "Radius {}  centre {}",
+            f.length(*radius),
+            at(*center)
+        )),
+        (Tool::Distance, None) if v.measure.first.is_some() => {
+            Some("Distance: click the second point.".into())
+        }
+        (Tool::Distance, None) => {
+            Some("Distance: click two points. They snap to curve ends and arc centres.".into())
+        }
+        (Tool::Radius, None) => Some(
+            v.measure
+                .note
+                .clone()
+                .unwrap_or_else(|| "Radius: click an arc or circle.".into()),
+        ),
+    }
 }

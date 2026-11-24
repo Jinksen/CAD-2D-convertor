@@ -10,6 +10,8 @@ use crate::format::{NumberFormat, parse_number};
 
 pub mod camera;
 pub mod geometry;
+pub mod measure;
+pub mod regions;
 
 use camera::{Size, ViewBox};
 
@@ -112,6 +114,9 @@ pub struct View2d {
     pub grid: bool,
     /// Pointer in section coordinates (mm, y up) while over the view.
     pub cursor: Option<[f64; 2]>,
+    /// Active 2D tool and its measurement.
+    pub tool: measure::Tool,
+    pub measure: measure::Measure,
     scene: RefCell<Option<Rc<Scene>>>,
 }
 
@@ -126,6 +131,8 @@ pub struct SectionState {
     pub last: Option<SectionResponse>,
     pub stats: Option<SectionStats>,
     pub view: View2d,
+    /// Exact region metrics per section id.
+    pub regions: regions::RegionCache,
     /// Text of the plane fields: offset, then the custom normal components.
     pub offset_text: TextEdit,
     pub normal_text: [TextEdit; 3],
@@ -147,6 +154,7 @@ impl Default for SectionState {
             last: None,
             stats: None,
             view: View2d::default(),
+            regions: regions::RegionCache::default(),
             offset_text: TextEdit::default(),
             normal_text: Default::default(),
             field_error: None,

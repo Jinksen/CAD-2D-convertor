@@ -387,6 +387,29 @@ impl AppState {
 }
 
 impl AppState {
+    /// Fetches the exact region metrics of the shown section when a body is selected, once per
+    /// section id (cached). Not a blocking operation: the properties pane shows its status.
+    /// Returns true when a request started.
+    pub fn ensure_regions(&mut self) -> bool {
+        let (Some(section), Some(_), Some(tasks)) = (
+            self.section.last.as_ref(),
+            self.model.selected.as_ref(),
+            self.tasks.clone(),
+        ) else {
+            return false;
+        };
+        let id = section.section_id.clone();
+        if !self.section.regions.begin(&id) {
+            return false;
+        }
+        let wanted = id.clone();
+        tasks.run(
+            move |client| client.regions(&id).map(|r| r.regions),
+            move |state, result| state.section.regions.finish(&wanted, result),
+        );
+        true
+    }
+
     /// Sets a custom plane on the selected sheet body's own plane (normal and offset).
     pub fn align_plane_to_selected(&mut self) {
         let (Some(import_id), Some(body)) = (
@@ -496,6 +519,34 @@ mod tests {
             b"PK\x03\x04bundle"
         );
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn regions_are_fetched_once_per_section_after_a_body_is_selected() {
+        let regions = br#"{"section_id":"s1","regions":[{"component_id":"c1","region_index":0,"outer_wire":0,
+            "hole_wires":[],"area_mm2":12.0,"perimeter_mm":14.0,"centroid":[1,2],"hole_count":0,"interior_point":[1,2]}]}"#;
+        let fake = serve(vec![
+            (200, "application/json", IMPORT.as_bytes().to_vec()),
+            (200, "application/json", SECTION.as_bytes().to_vec()),
+            (200, "application/json", regions.to_vec()),
+        ]);
+        let (mut state, rx) = harness(&fake.url);
+        state.open_step(PathBuf::from("C:/m.step"));
+        settle(&mut state, &rx);
+        state.compute_section();
+        settle(&mut state, &rx);
+        assert!(!state.ensure_regions(), "nothing selected, nothing fetched");
+        state.model.select(Some("c1".into()));
+        assert!(state.ensure_regions());
+        assert!(!state.ensure_regions(), "already in flight");
+        assert_eq!(
+            state.section.regions.get("s1"),
+            Some(&crate::state::section::regions::Load::Loading)
+        );
+        settle(&mut state, &rx);
+        assert_eq!(state.section.regions.of_body("s1", "c1")[0].area_mm2, 12.0);
+        assert!(!state.ensure_regions(), "cached");
+        assert_eq!(fake.requests.lock().unwrap().len(), 3);
     }
 
     #[test]

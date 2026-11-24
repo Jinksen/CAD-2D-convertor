@@ -60,3 +60,9 @@ Holes in a region stay empty: the display fill bridges each hole into its outer 
 ## 3D view aids
 
 The 3D view has an axis triad in the bottom left corner (X red, Y green, Z blue, with letters) that follows the camera, and a label for the section plane and its offset in the display unit at the top left. The usage hint is the tooltip of the `?` button in the 3D toolbar, so it never truncates. Triangles and edges that cross the camera near plane are clipped against it, so the model no longer shows holes when the eye is inside or close to it. Hovering a body reads the id buffer of the last frame (one array lookup) and redraws only when the hovered body changes.
+
+## Measuring in 2D
+
+The 2D toolbar has a tool switch: Select, Distance and Radius. Distance takes two clicks; each point snaps to a curve end or arc centre within 8 px, otherwise it is the raw point. The reading shows the distance and dx, dy in the display unit. Radius takes one click on an arc or circle and shows its radius and centre; other curves report "No arc or circle under the pointer." Measuring never changes the selection, the section or the export.
+
+Selecting a body also lists its exact regions in the properties pane: area, perimeter, centroid and hole count, taken from `GET /api/v1/sections/{section_id}/regions` (OpenCascade values, not recomputed in the UI). The reply is cached per section id; the pane shows "Computing exact region metrics" while it loads and the service message if it fails. Metrics are per region of the selected body; picking one region among several of the same body is not available yet.

@@ -237,6 +237,23 @@ pub struct ComponentPlane {
     pub planar_area_mm2: f64,
 }
 
+/// Exact (OpenCascade) metrics of one region: an outer wire minus its holes.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct RegionMetric {
+    pub component_id: String,
+    pub region_index: usize,
+    pub area_mm2: f64,
+    pub perimeter_mm: f64,
+    pub centroid: Point2,
+    pub hole_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct RegionsResponse {
+    pub section_id: String,
+    pub regions: Vec<RegionMetric>,
+}
+
 /// Preview mesh as sent: buffers are base64 little-endian typed arrays.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PreviewMeshWire {

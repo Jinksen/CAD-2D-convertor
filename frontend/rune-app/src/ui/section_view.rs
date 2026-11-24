@@ -13,17 +13,21 @@ use rune::{
 
 use rune_kit::Kit;
 
-use super::button;
+use super::{button, choice};
 use crate::api::dto::{SectionComponent, SectionResponse, SectionWire, Severity, WireRole};
 use crate::format::NumberFormat;
 use crate::state::AppState;
 use crate::state::section::Scene;
 use crate::state::section::camera::{self, Size, ViewBox};
 use crate::state::section::geometry::{self, outline_color};
+use crate::state::section::measure::Measure;
+use crate::state::section::measure::Tool;
 
 const PAN_DRAG_PX: f32 = 3.0;
 /// Pointer tolerance for picking a curve, in pixels.
 const PICK_PX: f64 = 4.0;
+/// A measurement point snaps to a curve end or arc centre within this many pixels.
+const SNAP_PX: f64 = 8.0;
 /// Wires smaller than this on screen are not drawn.
 const MIN_WIRE_PX: f64 = 0.3;
 type P = [f64; 2];
@@ -159,6 +163,7 @@ pub struct Paint<'a> {
     pub stale: bool,
     pub grid: bool,
     pub fmt: NumberFormat,
+    pub measure: &'a Measure,
 }
 
 fn build_shape(p: &Paint, view: ViewBox, size: Size, look: &Look) -> Shape {
@@ -221,6 +226,7 @@ fn build_shape(p: &Paint, view: ViewBox, size: Size, look: &Look) -> Shape {
             }
         }
     }
+    let shape = overlay::marks(shape, &map, look, p.measure);
     overlay::over(shape, &map, size, look, &p.fmt)
 }
 
@@ -283,6 +289,7 @@ fn paint<'a>(
         stale: s.section.stats.is_none(),
         grid: s.section.view.grid,
         fmt: s.shell.number_format,
+        measure: &s.section.view.measure,
     }
 }
 
@@ -357,6 +364,9 @@ pub(super) fn hover_from_view(s: &mut AppState, id: Option<String>, tx: &mut Tx)
 }
 
 fn click(s: &mut AppState, at: P) {
+    if measuring::click(s, at) {
+        return;
+    }
     let (Some(section), Some(scene), Some(view), Some(size)) = (
         &s.section.last,
         s.section.scene(),
@@ -442,6 +452,17 @@ pub fn canvas(s: &AppState, t: &Theme, k: &Kit) -> El {
             button(k, "zoom-out", "−", true)
                 .on_press(|s: &mut AppState| s.section.zoom(1.25, None)),
         )
+        .child(choice(
+            k,
+            "tool-2d",
+            "2D tool",
+            &Tool::ALL.map(Tool::label),
+            Tool::ALL.iter().position(|t| *t == s.section.view.tool),
+            |s, i| {
+                s.section.view.tool = Tool::ALL[i];
+                s.section.view.measure.clear();
+            },
+        ))
         .child(
             button(k, "toggle-grid", "Grid", true)
                 .checked(s.section.view.grid)
@@ -514,6 +535,7 @@ pub fn canvas(s: &AppState, t: &Theme, k: &Kit) -> El {
 }
 
 mod fill;
+mod measuring;
 mod overlay;
 #[cfg(test)]
 mod tests;

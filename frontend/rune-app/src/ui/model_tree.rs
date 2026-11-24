@@ -402,7 +402,8 @@ pub fn properties(s: &AppState, t: &Theme, k: &Kit) -> El {
                                 .on_press(move |s: &mut AppState| s.model.toggle_isolate(&id)),
                         ),
                 )
-                .child(groups),
+                .child(groups)
+                .children(super::regions::rows(s, t, &b.id)),
         )
 }
 

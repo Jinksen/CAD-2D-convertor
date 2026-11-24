@@ -367,7 +367,7 @@ pub fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
 
 /// While an operation runs, redraw once a second so its elapsed time counts up; toasts expire.
 pub fn poll(s: &mut AppState, _: f64, tx: &mut Tx) -> bool {
-    let mut changed = s.shell.busy.is_some();
+    let mut changed = s.shell.busy.is_some() | s.ensure_regions();
     if changed {
         tx.wake_after(std::time::Duration::from_secs(1));
     }
