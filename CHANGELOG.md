@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: 2D region fills with holes (shaft bore, magnet pockets) drew grey wedge artifacts in the running app. The bridged hole polygon repeated two vertices, which made the renderer's ear clipping fall back to a fan. The return path of each bridge now ends a 0.01 pt slit away, and a regression test runs the renderer's triangulation. Display only; export is unchanged.
+- README screenshots retaken from the real app window (welcome screen, 2D section with the fill fix, 3D preview light and dark).
+
 ## 0.3.0
 
 Workspace
