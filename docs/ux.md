@@ -12,7 +12,7 @@ Selection synchronizes across the model tree, 3D preview, 2D section viewport, c
 
 The visual direction is neutral graphite with restrained accent color, compact controls, and tabular engineering data instead of consumer-dashboard cards.
 
-The workspace is bounded to the window height. Long component lists and diagnostics scroll within their panels so the drawing and status bar remain reachable. The ribbon exposes Open STEP, a named section-plane group, Compute, and DXF export; planes and Compute are disabled until a model is loaded, and DXF stays disabled until the computed section is exportable. Ribbon Compute and DXF open the Section settings so their results and saved path are visible. The 2D view explains its initial empty state, fits rendered section curves, offers fit and zoom controls, and reports intersected bodies plus actual region and diagnostic counts. Changing planes before an export download completes cancels the pending Save dialog.
+The workspace is bounded to the window height. Long component lists and diagnostics scroll within their panels so the drawing and status bar remain reachable. The ribbon exposes Open model, a named section-plane group, Compute, and DXF export; planes and Compute are disabled until a model is loaded, and DXF stays disabled until the computed section is exportable. Ribbon Compute and DXF open the Section settings so their results and saved path are visible. The 2D view explains its initial empty state, fits rendered section curves, offers fit and zoom controls, and reports intersected bodies plus actual region and diagnostic counts. Changing planes before an export download completes cancels the pending Save dialog.
 
 The compiled trial opens a native Save dialog for the draft DXF ZIP. Successful saves report the chosen path and explain that the archive must be extracted for Maxwell. Cancellation leaves the section available; write failures appear as actionable errors. Moving or recomputing the plane clears the previous export notice.
 
@@ -39,7 +39,7 @@ Hovering a body row highlights the body in the 2D and 3D views, and hovering a b
 
 ## Ribbon
 
-Groups, each with a caption: File (Open STEP, Open project, Save), Section (plane XY/XZ/YZ/Custom, Compute section), Export (DXF), Edit (Undo, Redo) and View (2D/3D), then Settings at the right. Every button has a tooltip with its shortcut. The plane and Compute exist only in the ribbon; the Section pane keeps the offset, custom normal and align fields.
+Groups, each with a caption: File (Open model, Open project, Recent, Save), Section (plane XY/XZ/YZ/Custom, Compute section), Export (DXF), Edit (Undo, Redo) and View (2D/3D), then Settings at the right. Every button has a tooltip with its shortcut. The plane and Compute exist only in the ribbon; the Section pane keeps the offset, custom normal and align fields.
 
 ## Export and group materials
 

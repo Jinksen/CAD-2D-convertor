@@ -35,7 +35,8 @@ section. What lands in Maxwell is what you modelled.
 | **Any plane** | XY / XZ / YZ with an offset, or a custom tilted plane aligned to a selected sheet in one click. Plane edits have undo/redo; the shown section is marked stale until you compute again. |
 | **Organization** | The Model Builder nests bodies in collapsible folders that follow the STEP assemblies. Your own groups (for example *Magnets* or *Phase A coils*) can be shown, hidden or isolated together. |
 | **Engineering UI** | Model Builder tree (icons, context menu, multi-select, drag to group, cross-highlight), grouped ribbon with shortcut tooltips, property pane, 2D viewport with zoom-at-cursor, pan, hole-correct fills, scale bar, cursor readout, origin axes, grid, legend, distance and radius measuring, exact region area/perimeter/centroid, 3D preview with feature edges, standard views, axis triad and plane label, visibility and isolate, light and dark themes, ISO 80000-1 number formatting. |
-| **Projects** | Save the session as a `.c2mproj` (STEP path and hash, plane, preferences, visibility, groups; never geometry) and reopen it later. A STEP inside the project folder is also found after the folder is moved. |
+| **Projects** | Save the session as a `.c2mproj` (model path and hash, named sections, tolerances, preferences, visibility, groups with material labels; never geometry) and reopen it later. A STEP inside the project folder is also found after the folder is moved. |
+| **Sessions** | Several named sections per project, unsaved-changes marker and prompt, recent projects, autosave with recovery, welcome screen with the demo motor, a settings dialog (Ctrl+,) for units, viewport, mouse preset and export defaults, advanced section tolerances and a rotational symmetry hint with an explicit 1/N sector. |
 | **Local only** | Runs fully offline. The geometry service listens on `127.0.0.1` with a per-session token; no telemetry. |
 
 <table>
@@ -53,7 +54,7 @@ section. What lands in Maxwell is what you modelled.
 
 1. [Download](#download) and install CAD2Maxwell (or build it from source with the [one-time setup](#one-time-setup)).
 2. Start **CAD2Maxwell** from the Start menu.
-3. **Open STEP** (Ctrl+O) and choose a `.step` / `.stp` file. The backend also reads `.igs` / `.iges` (solid B-Reps) and `.brep`. Try [`docs/demo/demo-motor.step`](docs/demo/demo-motor.step).
+3. **Open model** (Ctrl+O) and choose a `.step` / `.stp`, `.igs` / `.iges` (solid B-Reps) or `.brep` file. Try [`docs/demo/demo-motor.step`](docs/demo/demo-motor.step).
 4. Pick a plane in the ribbon (keys **1 / 2 / 3** for XY / XZ / YZ) and set the offset in **Section** settings.
    For laminations that are not axis-aligned, select one sheet and click **Align to selected body**.
 5. **Compute** (Ctrl+Enter). Filled regions are closed contours; holes stay empty.
@@ -80,7 +81,9 @@ The app writes its service log to `%LOCALAPPDATA%\com.cad2maxwell.desktop\logs\b
 
 | Key | Action |
 |-----|--------|
-| Ctrl+O | Open STEP (to open a project, use *Open project…* or drop a `.c2mproj` on the window) |
+| Ctrl+O | Open model (to open a project, use *Open project…* or drop a `.c2mproj` on the window) |
+| Ctrl+, | Settings |
+| Ctrl+Q | Quit (asks about unsaved changes) |
 | Ctrl+S / Ctrl+Shift+S | Save project / save as |
 | Ctrl+Enter | Compute section |
 | Ctrl+E | Export DXF |
@@ -92,7 +95,7 @@ The app writes its service log to `%LOCALAPPDATA%\com.cad2maxwell.desktop\logs\b
 | V | Show or hide the selected body or group |
 | I | Isolate the selected body or group |
 | Esc | Clear selection |
-| Wheel, drag | 2D: zoom at cursor, pan. 3D: zoom, orbit with the left button, pan with the others |
+| Wheel, drag | 2D: zoom at cursor, pan. 3D: zoom, orbit with the left button, pan with the others (see the mouse presets in Settings) |
 | Arrows, + / − | Pan and zoom the 2D view |
 
 ## Export checks
