@@ -2,11 +2,23 @@
 //! messages below, status bar at the bottom. Each region lives in its own module.
 
 mod groups;
+mod icons;
+mod messages;
 mod model_tree;
+mod panels;
 mod preview;
+mod preview_aids;
+mod regions;
+mod ribbon;
 mod section;
 mod section_view;
+mod session;
+mod settings;
 mod shell;
+mod splitter;
+mod tree_menu;
+mod tree_row;
+mod welcome;
 
 pub use shell::{on_key, poll};
 
@@ -15,11 +27,8 @@ use rune::{Color, Cx, El, ScrollSpec, col, el, oklch, row, text};
 use rune_kit::{Button, ControlSize, Kit, PaletteSeed, SegmentedControl, scroll_bar};
 
 use crate::api::dto::Severity;
+use crate::session::Pending;
 use crate::state::AppState;
-
-pub const TREE_WIDTH: f32 = 260.0;
-pub const SETTINGS_WIDTH: f32 = 320.0;
-pub const MESSAGES_HEIGHT: f32 = 150.0;
 
 /// Kit tokens derived from the app's neutral theme, with small radii.
 pub(crate) fn kit(t: &Theme, accent: Color) -> Kit {
@@ -41,52 +50,26 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .w_full()
         .h_full()
         .fill(t.bg)
-        .child(shell::toolbar(s, &t, &k))
-        .child(
-            row()
-                .key("workspace")
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .child(model_tree::tree(s, &t, &k))
-                .child(preview::viewport(s, &t, &k))
-                .child(
-                    col()
-                        .key("properties")
-                        .role("region")
-                        .label("Settings")
-                        .w(SETTINGS_WIDTH)
-                        .h_full()
-                        .min_h(0.0)
-                        .border(1.0, t.separator)
-                        .child(scroller(
-                            &k,
-                            "properties-scroll",
-                            col().w_full().children(if s.shell.show_prefs {
-                                vec![shell::preferences(s, &t, &k)]
-                            } else {
-                                vec![
-                                    section::settings(s, &t, &k),
-                                    model_tree::properties(s, &t, &k),
-                                ]
-                            }),
-                        )),
-                ),
-        )
-        .child(shell::messages(s, &t, &k))
-        .child(shell::status_bar(s, &t))
-        .on_drop_files(|s: &mut AppState, files, _| match files.first() {
+        .child(ribbon::toolbar(s, &t, &k))
+        .child(panels::workspace(s, &t, &k))
+        .child(messages::messages(s, &t, &k))
+        .child(messages::status_bar(s, &t))
+        .on_drop_files(|s: &mut AppState, files, tx| match files.first() {
             Some(path)
                 if path
                     .extension()
                     .is_some_and(|e| e.eq_ignore_ascii_case("c2mproj")) =>
             {
-                s.open_project(path.clone())
+                s.guard(Pending::OpenProject(path.clone()), tx)
             }
-            Some(path) => s.open_step(path.clone()),
+            Some(path) => s.guard(Pending::OpenModel(path.clone()), tx),
             None => {}
         });
-    rune_kit::root(base, shell::toasts(s, &k))
+    let mut overlays = shell::toasts(s, &k);
+    overlays.extend(tree_menu::overlay(s, &k));
+    overlays.extend(settings::overlay(s, &t, &k));
+    overlays.extend(session::overlay(s, &t, &k));
+    rune_kit::root(base, overlays)
 }
 
 /// Region title bar.
@@ -176,8 +159,9 @@ pub fn label_value(t: &Theme, label: &str, value: impl Into<String>) -> El {
             text(value)
                 .font(type_::BODY)
                 .color(t.text)
-                .truncate()
-                .grow(1.0),
+                .wrap()
+                .grow(1.0)
+                .min_w(0.0),
         )
 }
 
@@ -223,13 +207,16 @@ mod tests {
     }
 
     #[test]
-    fn dropping_a_step_file_starts_an_import_and_other_files_are_refused() {
+    fn dropping_a_cad_file_starts_an_import_and_other_files_are_refused() {
         let mut runtime = runtime();
         let at = runtime.find("viewport");
         runtime.drop_files(vec!["part.dxf".into()], at);
         runtime.frame(1.0 / 60.0);
         let last = runtime.state.shell.messages.last().expect("a message");
-        assert_eq!(last.text, "Choose a STEP or STP file.");
+        assert_eq!(
+            last.text,
+            "Choose a STEP, IGES or BREP file (.step .stp .igs .iges .brep)."
+        );
     }
 
     #[test]
@@ -257,4 +244,12 @@ mod tests {
 }
 
 #[cfg(test)]
+mod messages_tests;
+#[cfg(test)]
+mod panels_tests;
+#[cfg(test)]
+mod ribbon_tests;
+#[cfg(test)]
 mod shell_tests;
+#[cfg(test)]
+mod tree_tests;

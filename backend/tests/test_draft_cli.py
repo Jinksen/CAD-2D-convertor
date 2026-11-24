@@ -29,3 +29,73 @@ def test_cli_reports_missing_input_without_traceback(
     assert status == 2
     assert "Traceback" not in capsys.readouterr().err
     assert not (tmp_path / "out.dxf").exists()
+
+
+def _job(tmp_path: Path, source: Path, **extra: object) -> Path:
+    import json
+
+    out = tmp_path / "out"
+    out.mkdir(exist_ok=True)
+    job = {"input": str(source), "output_dir": str(out), "sections": [
+        {"name": "mid", "plane": "XY", "offset_mm": 15},
+        {"name": "end", "plane": "XY", "offset_mm": 25}], **extra}
+    path = tmp_path / "job.json"
+    path.write_text(json.dumps(job))
+    return path
+
+
+def test_job_writes_one_export_per_section_and_refuses_overwrite(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    job = _job(tmp_path, named_colored_box(tmp_path / "coil.step"))
+
+    assert main(["--job", str(job)]) == 0
+    assert (tmp_path / "out" / "mid.dxf").is_file() and (tmp_path / "out" / "end.dxf").is_file()
+    assert main(["--job", str(job)]) == 2
+    assert "already exist" in capsys.readouterr().err
+
+
+def test_job_schema_errors_are_reported_without_writing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    job = _job(tmp_path, named_colored_box(tmp_path / "coil.step"), bogus=1)
+
+    assert main(["--job", str(job)]) == 2
+    assert "Batch export failed" in capsys.readouterr().err
+    assert not list((tmp_path / "out").iterdir())
+
+
+def test_job_mixed_with_single_run_args_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit):
+        main(["--job", "x.json", "--plane", "XY"])
+
+
+def test_job_writes_requested_extra_formats_next_to_dxf(tmp_path: Path) -> None:
+    job = _job(tmp_path, named_colored_box(tmp_path / "coil.step"))
+    import json
+
+    data = json.loads(job.read_text())
+    data["sections"][0]["formats"] = ["dxf", "csv", "svg", "femm", "gmsh", "pyaedt"]
+    job.write_text(json.dumps(data))
+
+    assert main(["--job", str(job)]) == 0
+    names = {p.name for p in (tmp_path / "out").iterdir()}
+    assert {"mid.dxf", "mid.json", "mid.csv", "mid.svg", "mid.lua", "mid.geo", "mid.py",
+            "end.dxf"} <= names
+    assert "mid.csv" in names and "end.csv" not in names
+
+
+def test_job_extra_format_clash_writes_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    import json
+
+    job = _job(tmp_path, named_colored_box(tmp_path / "coil.step"))
+    data = json.loads(job.read_text())
+    data["sections"][1]["formats"] = ["dxf", "svg"]
+    job.write_text(json.dumps(data))
+    (tmp_path / "out" / "end.svg").write_text("x")
+
+    assert main(["--job", str(job)]) == 2
+    assert "end.svg" in capsys.readouterr().err
+    assert [p.name for p in (tmp_path / "out").iterdir()] == ["end.svg"]

@@ -7,14 +7,36 @@ use rune::TextEdit;
 use serde::{Deserialize, Serialize};
 
 use crate::api::dto::{ImportComponent, ImportSummary};
+use crate::state::selection::{ContextMenu, Node};
 use crate::state::tree::{self, Folder};
 
 /// A named set of bodies, such as "Magnets" or "Stator laminations". A body can be in several.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct BodyGroup {
     pub name: String,
     pub component_ids: Vec<String>,
+    /// User-assigned material label of the export (never inferred); see `MATERIALS`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material: Option<String>,
+    /// Free text of the `custom` label.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material_note: Option<String>,
 }
+
+/// The labels the export accepts. They describe a group for the user's own bookkeeping; they
+/// are not Maxwell library materials.
+pub const MATERIALS: [&str; 8] = [
+    "air",
+    "copper",
+    "aluminum",
+    "electrical_steel",
+    "structural_steel",
+    "permanent_magnet",
+    "insulation",
+    "custom",
+];
+/// Longest custom note the service accepts.
+pub const MATERIAL_NOTE_MAX: usize = 80;
 
 #[derive(Default)]
 pub struct ModelState {
@@ -27,11 +49,29 @@ pub struct ModelState {
     pub groups: Vec<BodyGroup>,
     /// Name of the group shown in the property pane; exclusive with `selected`.
     pub selected_group: Option<String>,
+    /// The Section node is the tree selection; `selected` keeps the last body for "align".
+    pub section_selected: bool,
+    /// The hidden set came from Isolate, so visible rows are labelled "isolated".
+    pub isolated: bool,
+    /// Tree row that keyboard navigation and context menus act on.
+    pub cursor: Option<Node>,
+    /// Extra picked bodies (Ctrl/Shift); empty or one entry means a plain selection.
+    pub multi: BTreeSet<String>,
+    pub anchor: Option<String>,
+    pub menu: Option<ContextMenu>,
+    /// The selected group's name is being edited in its tree row (F2).
+    pub renaming: bool,
+    /// Group row under a body being dragged.
+    pub drop_target: Option<String>,
+    /// Body under the pointer in the tree or a viewport; display highlight only.
+    pub hover: Option<String>,
     /// Collapsed assembly folders (`Folder::key`) and groups (`group_key`).
     pub collapsed: BTreeSet<String>,
     /// Name fields of "New group" and of the selected group's rename.
     pub new_group: TextEdit,
     pub rename_group: TextEdit,
+    /// Note field of the selected group's `custom` material label.
+    pub material_note: TextEdit,
 }
 
 /// Collapse key of a group; the prefix keeps it apart from assembly paths.
@@ -53,6 +93,8 @@ impl ModelState {
     pub fn set_imported(&mut self, imported: ImportSummary) {
         *self = ModelState {
             imported: Some(imported),
+            section_selected: true,
+            cursor: Some(Node::Section),
             ..ModelState::default()
         };
     }
@@ -62,18 +104,40 @@ impl ModelState {
     }
 
     pub fn select(&mut self, id: Option<String>) {
+        let in_group = matches!((&self.cursor, &id), (Some(Node::Member(_, m)), Some(i)) if m == i);
+        if !in_group {
+            self.cursor = Some(id.clone().map_or(Node::Model, Node::Body));
+        }
+        self.multi.clear();
+        self.anchor = None;
+        self.renaming = false;
         self.selected = id;
         self.related = None;
         self.selected_group = None;
+        self.section_selected = false;
+    }
+
+    pub fn select_section(&mut self) {
+        self.cursor = Some(Node::Section);
+        self.selected_group = None;
+        self.related = None;
+        self.section_selected = true;
     }
 
     pub fn select_group(&mut self, name: &str) {
         self.select(None);
+        self.cursor = Some(Node::Group(name.to_owned()));
         self.selected_group = Some(name.to_owned());
         self.rename_group = TextEdit::new(name);
+        let note = self.groups.iter().find(|g| g.name == name);
+        self.material_note = TextEdit::new(
+            note.and_then(|g| g.material_note.clone())
+                .unwrap_or_default(),
+        );
     }
 
     pub fn toggle_hidden(&mut self, id: &str) {
+        self.isolated = false;
         if !self.hidden.remove(id) {
             self.hidden.insert(id.to_owned());
         }
@@ -85,7 +149,7 @@ impl ModelState {
     }
 
     /// Shows only `ids`; isolating the same set again restores all bodies.
-    fn isolate(&mut self, ids: &[String]) {
+    pub fn isolate(&mut self, ids: &[String]) {
         let others: BTreeSet<String> = self
             .imported
             .iter()
@@ -93,8 +157,9 @@ impl ModelState {
             .filter(|c| !ids.contains(&c.id))
             .map(|c| c.id.clone())
             .collect();
-        let isolated = !others.is_empty() && others == self.hidden;
-        self.hidden = if isolated { BTreeSet::new() } else { others };
+        let restore = !others.is_empty() && others == self.hidden;
+        self.isolated = !restore && !others.is_empty();
+        self.hidden = if restore { BTreeSet::new() } else { others };
     }
 
     pub fn toggle_collapsed(&mut self, key: &str) {
@@ -135,6 +200,7 @@ impl ModelState {
         self.groups.push(BodyGroup {
             name: name.clone(),
             component_ids,
+            ..BodyGroup::default()
         });
         self.new_group.clear();
         self.select_group(&name);
@@ -158,6 +224,23 @@ impl ModelState {
         }
         self.select_group(&name);
         Ok(())
+    }
+
+    /// Sets (or clears) the material label of a group; a note only belongs to `custom`.
+    pub fn set_material(&mut self, group: &str, material: Option<&str>) {
+        if let Some(g) = self.groups.iter_mut().find(|g| g.name == group) {
+            g.material = material.map(str::to_owned);
+            if material != Some("custom") {
+                g.material_note = None;
+            }
+        }
+    }
+
+    pub fn set_material_note(&mut self, group: &str, note: &str) {
+        let note: String = note.trim().chars().take(MATERIAL_NOTE_MAX).collect();
+        if let Some(g) = self.groups.iter_mut().find(|g| g.name == group) {
+            g.material_note = (!note.is_empty()).then_some(note);
+        }
     }
 
     pub fn delete_group(&mut self, name: &str) {
@@ -190,6 +273,7 @@ impl ModelState {
     /// Hides every member, or shows them all when the group is already hidden.
     pub fn toggle_group_hidden(&mut self, name: &str) {
         let hidden = self.group_hidden(name);
+        self.isolated = false;
         let Some(group) = self.group(name) else {
             return;
         };
@@ -366,6 +450,7 @@ pub(crate) mod tests {
         m.restore_groups(vec![BodyGroup {
             name: "G".into(),
             component_ids: vec!["a".into(), "gone".into()],
+            ..BodyGroup::default()
         }]);
         assert_eq!(m.groups[0].component_ids, ["a"]);
     }

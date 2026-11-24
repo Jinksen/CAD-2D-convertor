@@ -12,7 +12,7 @@ from OCP.TopExp import TopExp_Explorer
 from OCP.TopoDS import TopoDS, TopoDS_Shape, TopoDS_Wire
 from OCP.TopTools import TopTools_HSequenceOfShape
 
-from cad2maxwell_backend.geometry.tolerance import DEFAULT_TOLERANCE
+from cad2maxwell_backend.geometry.tolerance import DEFAULT_TOLERANCE, TolerancePolicy
 from cad2maxwell_backend.models.sections import (
     Circle2D,
     Curve2D,
@@ -108,7 +108,10 @@ class ExactSectionWire:
     dto: SectionWire
 
 
-def section_shape(shape: TopoDS_Shape, plane: SectionPlane) -> tuple[ExactSectionWire, ...]:
+def section_shape(
+    shape: TopoDS_Shape, plane: SectionPlane,
+    tolerance: TolerancePolicy = DEFAULT_TOLERANCE,
+) -> tuple[ExactSectionWire, ...]:
     frame = plane_frame(plane)
     section = BRepAlgoAPI_Section(
         shape, gp_Pln(gp_Pnt(*frame.origin), gp_Dir(*frame.normal)), False,
@@ -126,7 +129,7 @@ def section_shape(shape: TopoDS_Shape, plane: SectionPlane) -> tuple[ExactSectio
     wires = TopTools_HSequenceOfShape()
     # Shared vertices only: no implicit gap closing or geometry repair.
     ShapeAnalysis_FreeBounds.ConnectEdgesToWires_s(
-        edges, DEFAULT_TOLERANCE.join_mm, True, wires,
+        edges, tolerance.join_mm, True, wires,
     )
     result = []
     serialized_edges = 0

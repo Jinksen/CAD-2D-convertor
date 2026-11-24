@@ -31,6 +31,17 @@ pub struct PlaneRef {
     pub offset_mm: Option<f64>,
 }
 
+/// One named section: plane, optional tolerance and the last export path.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SectionRef {
+    pub name: String,
+    pub plane: PlaneRef,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tolerance: Option<crate::api::dto::Tolerance>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_export: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProjectFile {
     pub app: String,
@@ -47,6 +58,14 @@ pub struct ProjectFile {
     pub groups: Vec<BodyGroup>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub collapsed_folders: Vec<String>,
+    /// Named sections; absent in older files, which load as one section from `plane`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sections: Vec<SectionRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_section: Option<usize>,
+    /// Validation tolerance overrides; absent means the service defaults.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tolerance: Option<crate::api::dto::Tolerance>,
 }
 
 /// `step` relative to `dir` with forward slashes, if `step` lies inside `dir`.
@@ -144,6 +163,24 @@ impl AppState {
             hidden_component_ids: Some(self.model.hidden.iter().cloned().collect()),
             groups: self.model.groups.clone(),
             collapsed_folders: self.model.collapsed.iter().cloned().collect(),
+            sections: self
+                .section
+                .sections_now()
+                .into_iter()
+                .map(|s| SectionRef {
+                    name: s.name,
+                    plane: PlaneRef {
+                        kind: kind_name(s.plane.kind).into(),
+                        normal_xyz: s.plane.custom_normal,
+                        offset_mm: s.plane.offset_mm,
+                    },
+                    tolerance: (s.tolerance != Default::default()).then_some(s.tolerance),
+                    last_export: s.last_export,
+                })
+                .collect(),
+            active_section: (self.section.named.list.len() > 1)
+                .then_some(self.section.named.active),
+            tolerance: self.section.tolerance.request(),
         })
     }
 
@@ -151,7 +188,7 @@ impl AppState {
     pub fn save_project(&mut self, mut path: PathBuf) {
         let Some(mut project) = self.project_file() else {
             self.shell
-                .log(Severity::Error, "Open a STEP file before saving a project.");
+                .log(Severity::Error, "Open a model before saving a project.");
             return;
         };
         if path.extension().is_none() {
@@ -164,7 +201,12 @@ impl AppState {
             Ok(()) => {
                 let text = format!("Project saved to {}", path.display());
                 self.shell.notify("Project saved", text);
-                self.shell.project_path = Some(path);
+                self.shell.push_recent(path.clone());
+                if let Some(old) = self.shell.project_path.replace(path.clone()) {
+                    self.remove_autosave(&old);
+                }
+                self.remove_autosave(&path);
+                self.mark_clean();
             }
             Err(error) => self.shell.log(Severity::Error, error),
         }
@@ -252,8 +294,19 @@ mod tests {
         saved.model.groups = vec![BodyGroup {
             name: "Magnets".into(),
             component_ids: vec!["b1".into(), "gone".into()],
+            material: Some("custom".into()),
+            material_note: Some("N42SH".into()),
         }];
         saved.model.collapsed = ["Motor".to_string()].into();
+        saved.section.tolerance.restore(crate::api::dto::Tolerance {
+            join_mm: Some(2e-5),
+            ..Default::default()
+        });
+        saved.section.ensure_named();
+        saved.section.add_named("Mid stack").unwrap();
+        saved.section.set_offset(7.0, 0);
+        saved.section.set_last_export("C:/out/mid.zip".into());
+        saved.section.switch_to(0);
         saved.save_project(dir.join("p"));
         let path = saved.shell.project_path.clone().expect("saved path");
         assert_eq!(path.extension().unwrap(), "c2mproj");
@@ -279,6 +332,25 @@ mod tests {
     }
 
     #[test]
+    fn a_file_without_sections_parses_and_loads_as_one_section() {
+        let old = r#"{"app":"CAD2Maxwell","version":1,"step":{"path":"a.step","sha256":"x"},
+            "plane":{"kind":"XY","normal_xyz":[0,0,1],"offset_mm":2.0}}"#;
+        let project = parse_project(old).unwrap();
+        assert!(project.sections.is_empty() && project.active_section.is_none());
+        let mut state = AppState::default();
+        state.section.ensure_named();
+        assert_eq!(state.section.named.list.len(), 1);
+    }
+
+    #[test]
+    fn groups_without_material_fields_load_and_do_not_write_them() {
+        let old = r#"{"name":"G","component_ids":["a"]}"#;
+        let group: BodyGroup = serde_json::from_str(old).unwrap();
+        assert_eq!(group.material, None);
+        assert_eq!(serde_json::to_string(&group).unwrap(), old);
+    }
+
+    #[test]
     fn round_trips_plane_hidden_bodies_and_drops_ids_the_step_no_longer_has() {
         let state = reopen("x");
         assert_eq!(
@@ -287,7 +359,20 @@ mod tests {
         );
         assert_eq!(state.model.hidden, ["b2".to_string()].into());
         assert_eq!(state.model.groups[0].component_ids, ["b1"]);
+        assert_eq!(state.model.groups[0].material.as_deref(), Some("custom"));
+        assert_eq!(
+            state.model.groups[0].material_note.as_deref(),
+            Some("N42SH")
+        );
         assert!(state.model.collapsed.contains("Motor"));
+        assert_eq!(state.section.tolerance.value.join_mm, Some(2e-5));
+        let named = &state.section.named;
+        assert_eq!(named.list.len(), 2);
+        assert_eq!(named.list[1].name, "Mid stack");
+        assert_eq!(named.list[1].plane.offset_mm, Some(7.0));
+        assert_eq!(named.list[1].last_export.as_deref(), Some("C:/out/mid.zip"));
+        assert_eq!(state.section.active_name(), Some("Section 1"));
+        assert_eq!(state.section.tolerance.text[2].text, "0.00002");
         let last = state.shell.messages.last().unwrap();
         assert_eq!(
             (last.severity, last.text.as_str()),

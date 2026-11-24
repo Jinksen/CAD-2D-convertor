@@ -145,6 +145,16 @@ impl NumberFormat {
         )
     }
 
+    /// An area given in square millimetres, in the display unit squared: "12.500 mm²".
+    pub fn area(&self, mm2: f64) -> String {
+        let k = self.length_unit.mm_per_unit();
+        format!(
+            "{}{NBSP}{}\u{b2}",
+            self.number(mm2 / (k * k), self.length_decimals),
+            self.length_unit.symbol()
+        )
+    }
+
     /// Extents sharing one unit: "(10.000 x 20.000 x 30.000) mm".
     pub fn length_product(&self, mm: &[f64]) -> String {
         let numbers: Vec<String> = mm.iter().map(|v| self.length_number(*v)).collect();
@@ -219,6 +229,16 @@ mod tests {
         decimal_marker: DecimalMarker::Comma,
         ..D
     };
+
+    #[test]
+    fn areas_use_the_squared_display_unit() {
+        let cm = NumberFormat {
+            length_unit: LengthUnit::Cm,
+            ..NumberFormat::default()
+        };
+        assert_eq!(cm.area(250.0), "2.500\u{a0}cm\u{b2}");
+        assert_eq!(NumberFormat::default().area(96.5), "96.500\u{a0}mm\u{b2}");
+    }
 
     #[test]
     fn writes_a_length_with_a_fixed_resolution_and_a_no_break_space_before_the_unit() {

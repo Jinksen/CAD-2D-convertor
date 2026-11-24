@@ -45,14 +45,20 @@ impl Tasks {
     }
 }
 
-fn is_step(path: &Path) -> bool {
-    path.extension()
-        .is_some_and(|e| e.eq_ignore_ascii_case("step") || e.eq_ignore_ascii_case("stp"))
+/// Extensions of the CAD formats the service imports.
+pub const MODEL_EXTENSIONS: [&str; 5] = ["step", "stp", "igs", "iges", "brep"];
+
+fn is_model(path: &Path) -> bool {
+    path.extension().is_some_and(|e| {
+        MODEL_EXTENSIONS
+            .iter()
+            .any(|known| e.eq_ignore_ascii_case(known))
+    })
 }
 
 impl AppState {
     /// Starts a service call labelled `what` unless one is already running.
-    fn start<T: Send + 'static>(
+    pub(crate) fn start<T: Send + 'static>(
         &mut self,
         what: &str,
         work: impl FnOnce(&Client) -> Result<T, String> + Send + 'static,
@@ -127,16 +133,22 @@ impl AppState {
     }
 
     pub fn open_step(&mut self, path: PathBuf) {
-        if !is_step(&path) {
-            self.shell
-                .log(Severity::Error, "Choose a STEP or STP file.");
+        if !is_model(&path) {
+            self.shell.log(
+                Severity::Error,
+                "Choose a STEP, IGES or BREP file (.step .stp .igs .iges .brep).",
+            );
             return;
         }
         let service_path = path.to_string_lossy().into_owned();
         self.start(
-            "Importing STEP",
+            "Importing model",
             move |client| client.import_step(&service_path),
-            move |state, summary| state.finish_import(summary),
+            move |state, summary| {
+                state.finish_import(summary);
+                state.shell.project_path = None;
+                state.mark_clean();
+            },
         );
     }
 
@@ -147,7 +159,7 @@ impl AppState {
         );
         self.shell.log(Severity::Info, text);
         for d in &summary.diagnostics {
-            self.shell.messages.push(Message {
+            self.shell.push(Message {
                 severity: d.severity,
                 text: d.message.clone(),
                 component_id: d.component_id.clone(),
@@ -160,6 +172,9 @@ impl AppState {
             custom_normal: [0.0, 0.0, 1.0],
         });
         self.section.stats = None;
+        self.section.tolerance.restore(Default::default());
+        self.section.named = Default::default();
+        self.section.ensure_named();
         self.model.set_imported(summary);
         self.ensure_preview();
     }
@@ -167,10 +182,15 @@ impl AppState {
     pub fn compute_section(&mut self) {
         // Typed plane fields that were not submitted yet count as the plane to cut.
         self.section.commit_fields(crate::state::now_ms());
+        if let Some(error) = self.section.tolerance.error.iter().flatten().next() {
+            let text = format!("Fix the advanced tolerances first: {error}");
+            self.shell.log(Severity::Error, text);
+            return;
+        }
         let Some(imported) = &self.model.imported else {
             self.shell.log(
                 Severity::Warning,
-                "Open a STEP file before computing a section.",
+                "Open a model before computing a section.",
             );
             return;
         };
@@ -183,9 +203,10 @@ impl AppState {
         };
         let import_id = imported.import_id.clone();
         let sent = plane.clone();
+        let tolerance = self.section.tolerance.request();
         self.start(
             "Computing exact section",
-            move |client| client.section(&import_id, &plane),
+            move |client| client.section(&import_id, &plane, tolerance.as_ref()),
             move |state, section| state.finish_section(section, &sent),
         );
     }
@@ -214,7 +235,7 @@ impl AppState {
             text,
         );
         for d in &section.diagnostics {
-            self.shell.messages.push(Message {
+            self.shell.push(Message {
                 severity: d.severity,
                 text: d.message.clone(),
                 component_id: d.component_id.clone(),
@@ -240,25 +261,41 @@ impl AppState {
         let Some(section) = &self.section.last else {
             return;
         };
-        if path.extension().is_none() {
+        let zip = self.shell.settings.export.zip;
+        if zip && path.extension().is_none() {
             path.set_extension("zip");
+        } else if !zip {
+            path.set_extension(""); // the bundle becomes a folder of this name
         }
         let (import_id, section_id) = (section.import_id.clone(), section.section_id.clone());
+        let options = self.export_options();
         let target = path.clone();
         self.start(
             "Exporting DXF bundle",
             move |client| {
-                let bytes = client.export_dxf(&import_id, &section_id)?;
-                archive::write_archive(&path, &bytes)?;
-                Ok(())
+                let bytes = client.export_dxf(&import_id, &section_id, &options)?;
+                if zip {
+                    archive::write_archive(&path, &bytes)
+                } else {
+                    archive::extract_archive(&path, &bytes)
+                }
             },
             move |state, ()| {
+                state.section.set_last_export(target.display().to_string());
                 state.shell.notify(
                     "DXF bundle exported",
                     format!("Saved DXF bundle: {}", target.display()),
                 )
             },
         );
+    }
+
+    /// Frames one body in both the 3D and the 2D view (display only).
+    pub fn zoom_to(&mut self, id: &str) {
+        if let Some(imported) = &self.model.imported {
+            self.preview.fit(Some(id), &imported.bounds_mm);
+        }
+        self.section.fit(Some(id));
     }
 
     /// Selects a body (from the tree or a diagnostic) and shows the 2D drawing.
@@ -283,13 +320,27 @@ fn describe_plane(
     }
 }
 
+/// A saved section as live state; `None` when its plane kind is unknown.
+fn section_of(
+    r: &crate::project::SectionRef,
+) -> Option<crate::state::section::named::NamedSection> {
+    Some(crate::state::section::named::NamedSection {
+        name: r.name.clone(),
+        plane: PlaneSnapshot {
+            kind: crate::project::parse_kind(&r.plane.kind)?,
+            offset_mm: r.plane.offset_mm,
+            custom_normal: r.plane.normal_xyz,
+        },
+        tolerance: r.tolerance.unwrap_or_default(),
+        last_export: r.last_export.clone(),
+    })
+}
+
 impl AppState {
     /// Opens a `.c2mproj`: re-imports its STEP file, then restores plane, hidden bodies and
     /// number format. Component IDs derive from the file hash, so unknown IDs are dropped.
-    pub fn open_project(&mut self, path: PathBuf) {
-        let project = match crate::project::read_project(&path)
-            .and_then(|text| crate::project::parse_project(&text))
-        {
+    pub fn open_project_text(&mut self, path: PathBuf, text: String, restored: bool) {
+        let project = match crate::project::parse_project(&text) {
             Ok(project) => project,
             Err(error) => {
                 self.shell.log(Severity::Error, error);
@@ -314,6 +365,17 @@ impl AppState {
                     offset_mm: project.plane.offset_mm,
                     custom_normal: project.plane.normal_xyz,
                 });
+                state
+                    .section
+                    .tolerance
+                    .restore(project.tolerance.unwrap_or_default());
+                state.section.ensure_named();
+                if !project.sections.is_empty() {
+                    let list = project.sections.iter().filter_map(section_of).collect();
+                    state
+                        .section
+                        .load_named(list, project.active_section.unwrap_or(0));
+                }
                 state.model.hidden = hidden;
                 state.model.restore_groups(project.groups);
                 state.model.collapsed = project.collapsed_folders.into_iter().collect();
@@ -327,14 +389,21 @@ impl AppState {
                 }
                 if changed {
                     let text = format!(
-                        "The STEP file changed since the project was saved (SHA-256 mismatch for {}). Results may differ from the saved session.",
+                        "The model file changed since the project was saved (SHA-256 mismatch for {}). Results may differ from the saved session.",
                         project.step.path
                     );
                     state.shell.log(Severity::Warning, text);
                 } else {
                     state.shell.log(Severity::Info, "Project opened.");
                 }
+                state.shell.push_recent(path.clone());
                 state.shell.project_path = Some(path);
+                state.mark_clean();
+                if restored {
+                    // Differs from the saved project until the user saves it.
+                    state.shell.baseline = Some(String::new());
+                    state.shell.log(Severity::Info, "Restored from the autosave.");
+                }
             },
         );
     }
@@ -379,6 +448,29 @@ impl AppState {
 }
 
 impl AppState {
+    /// Fetches the exact region metrics of the shown section when a body is selected, once per
+    /// section id (cached). Not a blocking operation: the properties pane shows its status.
+    /// Returns true when a request started.
+    pub fn ensure_regions(&mut self) -> bool {
+        let (Some(section), Some(_), Some(tasks)) = (
+            self.section.last.as_ref(),
+            self.model.selected.as_ref(),
+            self.tasks.clone(),
+        ) else {
+            return false;
+        };
+        let id = section.section_id.clone();
+        if !self.section.regions.begin(&id) {
+            return false;
+        }
+        let wanted = id.clone();
+        tasks.run(
+            move |client| client.regions(&id).map(|r| r.regions),
+            move |state, result| state.section.regions.finish(&wanted, result),
+        );
+        true
+    }
+
     /// Sets a custom plane on the selected sheet body's own plane (normal and offset).
     pub fn align_plane_to_selected(&mut self) {
         let (Some(import_id), Some(body)) = (
@@ -456,7 +548,7 @@ mod tests {
         let (mut state, rx) = harness(&fake.url);
 
         state.open_step(PathBuf::from("C:/m.step"));
-        assert_eq!(state.shell.busy.as_deref(), Some("Importing STEP"));
+        assert_eq!(state.shell.busy.as_deref(), Some("Importing model"));
         settle(&mut state, &rx);
         assert!(state.shell.busy.is_none());
         assert_eq!(state.model.visible_bodies().len(), 1);
@@ -488,6 +580,34 @@ mod tests {
             b"PK\x03\x04bundle"
         );
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn regions_are_fetched_once_per_section_after_a_body_is_selected() {
+        let regions = br#"{"section_id":"s1","regions":[{"component_id":"c1","region_index":0,"outer_wire":0,
+            "hole_wires":[],"area_mm2":12.0,"perimeter_mm":14.0,"centroid":[1,2],"hole_count":0,"interior_point":[1,2]}]}"#;
+        let fake = serve(vec![
+            (200, "application/json", IMPORT.as_bytes().to_vec()),
+            (200, "application/json", SECTION.as_bytes().to_vec()),
+            (200, "application/json", regions.to_vec()),
+        ]);
+        let (mut state, rx) = harness(&fake.url);
+        state.open_step(PathBuf::from("C:/m.step"));
+        settle(&mut state, &rx);
+        state.compute_section();
+        settle(&mut state, &rx);
+        assert!(!state.ensure_regions(), "nothing selected, nothing fetched");
+        state.model.select(Some("c1".into()));
+        assert!(state.ensure_regions());
+        assert!(!state.ensure_regions(), "already in flight");
+        assert_eq!(
+            state.section.regions.get("s1"),
+            Some(&crate::state::section::regions::Load::Loading)
+        );
+        settle(&mut state, &rx);
+        assert_eq!(state.section.regions.of_body("s1", "c1")[0].area_mm2, 12.0);
+        assert!(!state.ensure_regions(), "cached");
+        assert_eq!(fake.requests.lock().unwrap().len(), 3);
     }
 
     #[test]
@@ -535,5 +655,134 @@ mod tests {
             Severity::Warning
         );
         settle(&mut state, &rx);
+    }
+
+    #[test]
+    fn every_supported_cad_extension_is_accepted_and_others_are_not() {
+        for name in ["a.step", "a.STP", "a.igs", "a.IGES", "a.brep"] {
+            assert!(is_model(Path::new(name)), "{name}");
+        }
+        for name in ["a.dxf", "a.c2mproj", "a"] {
+            assert!(!is_model(Path::new(name)), "{name}");
+        }
+    }
+
+    #[test]
+    fn export_sends_the_settings_and_can_write_a_folder_instead_of_a_zip() {
+        use std::io::Write;
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        let mut zip = zip::ZipWriter::new(&mut cursor);
+        zip.start_file("section.dxf", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(
+            b"0
+EOF",
+        )
+        .unwrap();
+        zip.finish().unwrap();
+        let fake = serve(vec![
+            (200, "application/json", IMPORT.as_bytes().to_vec()),
+            (200, "application/json", SECTION.as_bytes().to_vec()),
+            (200, "application/zip", cursor.into_inner()),
+        ]);
+        let (mut state, rx) = harness(&fake.url);
+        state.shell.edit_settings(|s| {
+            s.export.zip = false;
+            s.export.formats = vec!["svg".into()];
+            s.export.layer_mode = crate::state::settings::LayerMode::Group;
+        });
+        state.open_step(PathBuf::from("C:/m.step"));
+        settle(&mut state, &rx);
+        state.compute_section();
+        settle(&mut state, &rx);
+        let dir = std::env::temp_dir().join(format!("c2m-export-dir-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        state.export_section(dir.join("bundle.zip"));
+        settle(&mut state, &rx);
+        assert_eq!(
+            std::fs::read(dir.join("bundle").join("section.dxf")).unwrap(),
+            b"0
+EOF"
+        );
+        let request = fake.requests.lock().unwrap()[2].clone();
+        assert!(request.contains(r#""layer_mode":"group""#), "{request}");
+        assert!(request.contains(r#""formats":["dxf","svg"]"#), "{request}");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn tolerances_are_sent_only_when_set_and_a_rejected_entry_blocks_compute() {
+        let fake = serve(vec![
+            (200, "application/json", IMPORT.as_bytes().to_vec()),
+            (200, "application/json", SECTION.as_bytes().to_vec()),
+        ]);
+        let (mut state, rx) = harness(&fake.url);
+        state.open_step(PathBuf::from("C:/m.step"));
+        settle(&mut state, &rx);
+        state.section.tolerance.text[1].replace_text("0.9");
+        state.compute_section();
+        assert!(
+            state.shell.busy.is_none(),
+            "invalid tolerance blocks the run"
+        );
+        assert_eq!(
+            state.shell.messages.last().unwrap().severity,
+            Severity::Error
+        );
+        state.section.tolerance.text[1].replace_text("0.01");
+        state.compute_section();
+        settle(&mut state, &rx);
+        let request = fake.requests.lock().unwrap()[1].clone();
+        assert!(
+            request.contains(r#""tolerance":{"sliver_ratio":0.01}"#),
+            "{request}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod retry_tests {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    use super::*;
+    use crate::api::fake::serve;
+
+    #[test]
+    fn a_failed_region_fetch_is_fetched_again_after_retry() {
+        let ok = br#"{"section_id":"s1","regions":[{"component_id":"c1","region_index":0,"outer_wire":0,
+            "hole_wires":[],"area_mm2":12.0,"perimeter_mm":14.0,"centroid":[1,2],"hole_count":0,"interior_point":[1,2]}]}"#;
+        let fake = serve(vec![
+            (
+                500,
+                "application/json",
+                br#"{"error":{"code":"x","message":"boom"}}"#.to_vec(),
+            ),
+            (200, "application/json", ok.to_vec()),
+        ]);
+        let (tx, rx) = mpsc::channel();
+        let tx = std::sync::Mutex::new(tx);
+        let tasks = Tasks::new(Client::new(&fake.url, None), move |u: Update| {
+            tx.lock().unwrap().send(u).unwrap()
+        });
+        let mut state = AppState {
+            tasks: Some(tasks),
+            ..AppState::default()
+        };
+        state.section.last = Some(
+            serde_json::from_str(
+                r#"{"section_id":"s1","import_id":"i1","plane":{"kind":"XY","offset_mm":1.0},
+                "components":[],"diagnostics":[]}"#,
+            )
+            .unwrap(),
+        );
+        state.model.selected = Some("c1".into());
+        assert!(state.ensure_regions());
+        rx.recv_timeout(Duration::from_secs(5)).unwrap()(&mut state);
+        assert!(!state.ensure_regions(), "a failure stays cached");
+        assert!(state.section.regions.retry("s1"));
+        assert!(state.ensure_regions());
+        rx.recv_timeout(Duration::from_secs(5)).unwrap()(&mut state);
+        assert_eq!(state.section.regions.of_body("s1", "c1").len(), 1);
     }
 }

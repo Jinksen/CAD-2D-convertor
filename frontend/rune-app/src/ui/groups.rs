@@ -1,22 +1,20 @@
 //! Assembly folders and user groups in the model tree, and the group property pane.
 
+use std::rc::Rc;
+
 use rune::tok::{Theme, space, type_};
-use rune::{Color, El, col, row, text};
+use rune::{El, col, row, text};
 use rune_kit::{Kit, TextInput};
 
 use super::model_tree::body_row;
-use super::{button, heading, label_value, selected};
+use super::tree_menu::attach;
+use super::tree_row::{Action, Glyph, Item, row_el};
+use super::{button, heading, icons, label_value};
 use crate::api::dto::Severity;
 use crate::state::AppState;
-use crate::state::model::group_key;
+use crate::state::model::{MATERIALS, group_key};
+use crate::state::selection::Node as TreeNode;
 use crate::state::tree::Folder;
-
-/// Horizontal step per tree level.
-const INDENT: f32 = 12.0;
-
-pub fn indent(depth: usize) -> f32 {
-    space::S2 + INDENT * depth as f32
-}
 
 fn bodies(count: usize) -> String {
     if count == 1 {
@@ -26,46 +24,9 @@ fn bodies(count: usize) -> String {
     }
 }
 
-fn chevron(open: bool) -> &'static str {
-    if open { "\u{25be}" } else { "\u{25b8}" }
-}
-
-/// A collapsible tree row: chevron, name and member count.
-fn branch(t: &Theme, key: String, name: &str, count: usize, open: bool, depth: usize) -> El {
-    row()
-        .key(key)
-        .role("button")
-        .label(format!(
-            "{name}, {}, {}",
-            bodies(count),
-            if open { "expanded" } else { "collapsed" }
-        ))
-        .focusable(true)
-        .w_full()
-        .gap(space::S1)
-        .pl(indent(depth))
-        .pr(space::S2)
-        .py(3.0)
-        .items_center()
-        .hover(t.hover)
-        .child(
-            text(chevron(open))
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .a11y_hidden(),
-        )
-        .child(
-            text(name)
-                .font(type_::BODY)
-                .color(t.text)
-                .truncate()
-                .grow(1.0),
-        )
-        .child(
-            text(count.to_string())
-                .font(type_::LABEL)
-                .color(t.text_secondary),
-        )
+fn toggle(key: &str) -> Action {
+    let key = key.to_owned();
+    Rc::new(move |s: &mut AppState| s.model.toggle_collapsed(&key))
 }
 
 /// Bodies of `folder`, then its subfolders, each subfolder collapsible.
@@ -79,22 +40,37 @@ pub fn folder_rows(
     mut rows: El,
 ) -> El {
     for b in &folder.bodies {
-        rows = rows.child(body_row(s, t, k, b, dup(&b.display_name), depth));
+        rows = rows.child(body_row(
+            s,
+            t,
+            k,
+            b,
+            dup(&b.display_name),
+            depth,
+            TreeNode::Body(b.id.clone()),
+        ));
     }
     for sub in &folder.folders {
         let open = !s.model.is_collapsed(&sub.key);
-        let key = sub.key.clone();
-        rows = rows.child(
-            branch(
-                t,
-                format!("folder-{}", sub.key),
-                &sub.name,
-                sub.count(),
-                open,
-                depth,
-            )
-            .on_press(move |s: &mut AppState| s.model.toggle_collapsed(&key)),
+        let mut n = Item::new(format!("folder-{}", sub.key), &sub.name, &icons::ASSEMBLY);
+        n.aria = format!(
+            "{}, {}, {}",
+            sub.name,
+            bodies(sub.count()),
+            if open { "expanded" } else { "collapsed" }
         );
+        let node = TreeNode::Folder(sub.key.clone());
+        (n.depth, n.count, n.open) = (depth, Some(sub.count()), Some(open));
+        n.on = s.model.cursor.as_ref() == Some(&node);
+        let act = toggle(&sub.key);
+        let press = node.clone();
+        rows = rows.child(attach(
+            row_el(n, t, k).on_press(move |s: &mut AppState| {
+                s.model.cursor = Some(press.clone());
+                act(s)
+            }),
+            node,
+        ));
         if open {
             rows = folder_rows(s, t, k, sub, depth + 1, dup, rows);
         }
@@ -102,7 +78,7 @@ pub fn folder_rows(
     rows
 }
 
-/// The "Groups" section: one collapsible node per group with its matching members.
+/// The "Groups" node: one collapsible node per group with its matching members.
 pub fn group_rows(
     s: &AppState,
     t: &Theme,
@@ -113,87 +89,103 @@ pub fn group_rows(
     if s.model.groups.is_empty() {
         return rows;
     }
-    rows = rows.child(
-        text(format!("Groups ({})", s.model.groups.len()))
-            .key("groups-heading")
-            .font(type_::SECTION)
-            .color(t.text_secondary)
-            .px(space::S2)
-            .pt(space::S3)
-            .pb(space::S1),
+    let all_open = !s.model.is_collapsed("groups");
+    let mut head = Item::new(
+        "groups-heading",
+        format!("Groups ({})", s.model.groups.len()),
+        &icons::GROUP,
     );
+    (head.depth, head.open) = (1, Some(all_open));
+    head.on = s.model.cursor == Some(TreeNode::Groups);
+    let act = toggle("groups");
+    rows = rows.child(attach(
+        row_el(head, t, k).on_press(move |s: &mut AppState| {
+            s.model.cursor = Some(TreeNode::Groups);
+            act(s)
+        }),
+        TreeNode::Groups,
+    ));
+    if !all_open {
+        return rows;
+    }
     for group in &s.model.groups {
         let members = s.model.visible_members(group);
         let collapse = group_key(&group.name);
         let open = !s.model.is_collapsed(&collapse);
-        let on =
-            s.model.selected_group.as_deref() == Some(group.name.as_str()) && !s.shell.show_prefs;
+        let on = s.model.selected_group.as_deref() == Some(group.name.as_str());
         let (select, hide) = (group.name.clone(), group.name.clone());
         let hidden = s.model.group_hidden(&group.name);
         let count = group.component_ids.len();
-        rows = rows.child(
-            row()
-                .key(format!("group-{}", group.name))
-                .role("button")
-                .label(format!("Group {}, {}", group.name, bodies(count)))
-                .checked(on)
-                .focusable(true)
-                .w_full()
-                .gap(space::S2)
-                .pl(indent(0))
-                .pr(space::S2)
-                .py(3.0)
-                .items_center()
-                .fill(if on { selected(k) } else { Color::TRANSPARENT })
-                .hover(t.hover)
-                .on_press(move |s: &mut AppState| {
-                    s.shell.show_prefs = false;
-                    s.model.select_group(&select)
-                })
-                .child(
-                    text(chevron(open))
-                        .key(format!("group-toggle-{}", group.name))
-                        .role("button")
-                        .label(if open {
-                            "Collapse group"
-                        } else {
-                            "Expand group"
-                        })
-                        .focusable(true)
-                        .font(type_::LABEL)
-                        .color(t.text_secondary)
-                        .on_press(move |s: &mut AppState| s.model.toggle_collapsed(&collapse)),
-                )
-                .child(
-                    text(&group.name)
-                        .font(type_::BODY)
-                        .color(t.text)
-                        .truncate()
-                        .grow(1.0),
-                )
-                .child(
-                    text(count.to_string())
-                        .font(type_::LABEL)
-                        .color(t.text_secondary),
-                )
-                .child(
-                    text(if hidden { "hidden" } else { "shown" })
-                        .key(format!("group-eye-{}", group.name))
-                        .role("button")
-                        .label(if hidden { "Show group" } else { "Hide group" })
-                        .focusable(true)
-                        .font(type_::LABEL)
-                        .color(t.text_secondary)
-                        .on_press(move |s: &mut AppState| s.model.toggle_group_hidden(&hide)),
-                ),
-        );
+        let mut n = Item::new(format!("group-{}", group.name), &group.name, &icons::GROUP);
+        n.aria = format!("Group {}, {}", group.name, bodies(count));
+        (n.depth, n.count, n.open, n.on, n.dim) = (2, Some(count), Some(open), on, hidden);
+        n.status = hidden.then_some("hidden");
+        n.chevron_act = Some(Glyph {
+            key: format!("group-toggle-{}", group.name),
+            label: if open {
+                "Collapse group"
+            } else {
+                "Expand group"
+            }
+            .into(),
+            act: toggle(&collapse),
+        });
+        n.eye = Some((
+            Glyph {
+                key: format!("group-eye-{}", group.name),
+                label: if hidden { "Show group" } else { "Hide group" }.into(),
+                act: Rc::new(move |s: &mut AppState| s.model.toggle_group_hidden(&hide)),
+            },
+            hidden,
+        ));
+        n.drop = s.model.drop_target.as_deref() == Some(group.name.as_str());
+        if s.model.renaming && on {
+            n.edit = Some(rename_field(s, k));
+        }
+        let menu = TreeNode::Group(group.name.clone());
+        rows = rows.child(attach(
+            row_el(n, t, k).on_press(move |s: &mut AppState| {
+                let editing_here =
+                    s.model.renaming && s.model.selected_group.as_ref() == Some(&select);
+                if editing_here {
+                    return; // a press inside the name editor must not end the edit
+                }
+                s.model.select_group(&select)
+            }),
+            menu,
+        ));
         if open {
             for b in members {
-                rows = rows.child(body_row(s, t, k, b, dup(&b.display_name), 1));
+                let node = TreeNode::Member(group.name.clone(), b.id.clone());
+                rows = rows.child(body_row(s, t, k, b, dup(&b.display_name), 3, node));
             }
         }
     }
     rows
+}
+
+/// The in-place name editor of a group row (F2): Enter commits, Escape cancels.
+fn rename_field(s: &AppState, k: &Kit) -> El {
+    TextInput::new(&s.model.rename_group)
+        .label("Rename group")
+        .width(None)
+        .height(18.0)
+        .on_edit(|s: &mut AppState| &mut s.model.rename_group)
+        .on_submit(|s: &mut AppState, _| {
+            let result = s.model.commit_rename();
+            report(s, result)
+        })
+        .on_key(|s: &mut AppState, ev, tx| {
+            if ev.key != rune::Key::Escape {
+                return false;
+            }
+            s.model.renaming = false;
+            tx.blur();
+            true
+        })
+        .build(k)
+        .key("rename-inline")
+        .grow(1.0)
 }
 
 fn report(s: &mut AppState, result: Result<(), String>) {
@@ -290,16 +282,24 @@ pub fn properties(s: &AppState, t: &Theme, k: &Kit, name: &str) -> El {
                     }),
                 ),
         )
+        .child(material(s, t, k, name))
         .child(label_value(t, "Bodies", members.len().to_string()))
-        .child(label_value(
-            t,
-            "Members",
-            if members.is_empty() {
-                "None. Select a body and use Add to group.".to_string()
-            } else {
-                members.join(", ")
-            },
-        ))
+        .child(
+            col()
+                .key("group-members")
+                .w_full()
+                .gap(2.0)
+                .child(text("Members").font(type_::LABEL).color(t.text_secondary))
+                .children(
+                    if members.is_empty() {
+                        vec!["None. Select a body and use Add to group.".to_string()]
+                    } else {
+                        members.iter().map(|m| (*m).to_owned()).collect()
+                    }
+                    .into_iter()
+                    .map(|m| text(m).font(type_::BODY).color(t.text).wrap().pl(space::S2)),
+                ),
+        )
         .child(
             row()
                 .gap(space::S1)
@@ -324,6 +324,83 @@ pub fn properties(s: &AppState, t: &Theme, k: &Kit, name: &str) -> El {
     col()
         .key("group-properties")
         .w_full()
-        .child(heading(t, &format!("Group: {name}")))
+        .child(heading(t, &format!("Group {name}")))
         .child(fields)
+}
+
+/// Display name of a material label: "electrical_steel" reads "Electrical steel".
+fn material_name(label: &str) -> String {
+    let mut name = label.replace('_', " ");
+    name[..1].make_ascii_uppercase();
+    name
+}
+
+/// The group's material label for the export: a choice of the service's fixed labels, and a
+/// note for `custom`. Labels are the user's own bookkeeping, never inferred or library entries.
+fn material(s: &AppState, t: &Theme, k: &Kit, group: &str) -> El {
+    let current = s
+        .model
+        .groups
+        .iter()
+        .find(|g| g.name == group)
+        .and_then(|g| g.material.clone());
+    let mut choices = col()
+        .key("group-material")
+        .role("group")
+        .label("Material label")
+        .w_full()
+        .gap(2.0);
+    let options: Vec<Option<&str>> = std::iter::once(None)
+        .chain(MATERIALS.iter().copied().map(Some))
+        .collect();
+    for chunk in options.chunks(3) {
+        let mut line = row().gap(space::S1);
+        for option in chunk {
+            let label = option.map_or("None".to_owned(), material_name);
+            let name = group.to_owned();
+            let value = option.map(str::to_owned);
+            let key = format!("material-{}", option.unwrap_or("none"));
+            line = line.child(
+                button(k, &key, &label, true)
+                    .checked(current.as_deref() == *option)
+                    .on_press(move |s: &mut AppState| {
+                        s.model.set_material(&name, value.as_deref())
+                    }),
+            );
+        }
+        choices = choices.child(line);
+    }
+    let mut out = col()
+        .w_full()
+        .gap(space::S1)
+        .child(
+            text("Material label")
+                .font(type_::LABEL)
+                .color(t.text_secondary),
+        )
+        .child(choices);
+    if current.as_deref() == Some("custom") {
+        let name = group.to_owned();
+        out = out.child(
+            TextInput::new(&s.model.material_note)
+                .label("Custom material note")
+                .placeholder("Note, Enter applies (max 80 characters)")
+                .width(None)
+                .height(22.0)
+                .on_edit(|s: &mut AppState| &mut s.model.material_note)
+                .on_submit(move |s: &mut AppState, _| {
+                    let text = s.model.material_note.text.clone();
+                    s.model.set_material_note(&name, &text)
+                })
+                .build(k)
+                .key("material-note"),
+        );
+    }
+    out.child(
+        text("Written to the export manifest and tables as your own label. It is not a Maxwell library material; assign the real material in Maxwell.")
+            .font(type_::LABEL)
+            .color(t.text_secondary)
+            .wrap()
+            .w_full(),
+    )
 }

@@ -12,8 +12,87 @@ Selection synchronizes across the model tree, 3D preview, 2D section viewport, c
 
 The visual direction is neutral graphite with restrained accent color, compact controls, and tabular engineering data instead of consumer-dashboard cards.
 
-The workspace is bounded to the window height. Long component lists and diagnostics scroll within their panels so the drawing and status bar remain reachable. The ribbon exposes Open STEP, a named section-plane group, Compute, and DXF export; planes and Compute are disabled until a model is loaded, and DXF stays disabled until the computed section is exportable. Ribbon Compute and DXF open the Section settings so their results and saved path are visible. The 2D view explains its initial empty state, fits rendered section curves, offers fit and zoom controls, and reports intersected bodies plus actual region and diagnostic counts. Changing planes before an export download completes cancels the pending Save dialog.
+The workspace is bounded to the window height. Long component lists and diagnostics scroll within their panels so the drawing and status bar remain reachable. The ribbon exposes Open model, a named section-plane group, Compute, and DXF export; planes and Compute are disabled until a model is loaded, and DXF stays disabled until the computed section is exportable. Ribbon Compute and DXF open the Section settings so their results and saved path are visible. The 2D view explains its initial empty state, fits rendered section curves, offers fit and zoom controls, and reports intersected bodies plus actual region and diagnostic counts. Changing planes before an export download completes cancels the pending Save dialog.
 
 The compiled trial opens a native Save dialog for the draft DXF ZIP. Successful saves report the chosen path and explain that the archive must be extracted for Maxwell. Cancellation leaves the section available; write failures appear as actionable errors. Moving or recomputing the plane clears the previous export notice.
 
 Numbers and quantities follow ISO 80000-1, as described in [number-format.md](number-format.md). The Model Builder always shows **Units and Number Format**. It sets the display length unit, decimal places, decimal marker, digit grouping and trailing zeros. Section offsets and normals are typed in that notation, and the unit is shown beside the field. Geometry and DXF export stay in millimetres.
+
+## Model tree
+
+The tree follows the Inventor browser / COMSOL Model Builder pattern: the model file is the root; under it sit the Section node (`XY, z = 37.500 mm`), Bodies (assembly folders) and Groups. Selecting the Section node shows the section settings in the right pane; selecting the model, a body or a group shows that context's properties. Settings are not a tree node; the Settings ribbon button (Ctrl+,) opens a modal dialog, see [settings.md](settings.md).
+
+Rows share one primitive (`ui/tree_row.rs`): fixed 22 pt height, indent guide lines, chevron, a monochrome icon per node type (model file, assembly, body, group, section), a colour swatch for bodies, a single-line name with ellipsis and a tooltip with the full name when cut, a muted right-aligned count, and an eye toggle that shows on hover or focus and stays visible when the item is hidden. Hidden and isolated rows are dimmed and also carry the text `hidden` or `isolated`, so status never relies on colour alone.
+
+### Tree interactions
+
+- Right-click opens a context menu per node type: body (Hide/Show, Isolate, Zoom to, Add to group, Properties), group (Hide/Show, Isolate, Rename, Delete group), model and section (Properties), folders (Collapse/Expand).
+- Ctrl-click toggles and Shift-click extends a multi-selection. It applies to Hide/Show, Isolate and Add to group. The single selection that drives properties, 3D and 2D is the last clicked body.
+- F2 renames the selected group in its row (Enter commits, Escape cancels). Dragging a body row onto a group adds the picked bodies to it.
+- Up/Down move through the visible rows, Left collapses or goes to the parent, Right expands or goes to the first child, Enter opens the properties of the row.
+
+Rune has no element-to-element drop target, so the drag finds the group row from the pointer travel (all tree rows have the same height). Group zoom is not offered; Zoom to frames one body in both views.
+
+### Cross-highlight and filter
+
+Hovering a body row highlights the body in the 2D and 3D views, and hovering a body in either view highlights its row and scrolls it into view. Hover is display only and never changes the selection. The filter marks the matching part of each name, shows a match count and has a clear button. The tree header has Expand all and Collapse all.
+
+## Ribbon
+
+Groups, each with a caption: File (Open model, Open project, Recent, Save), Section (plane XY/XZ/YZ/Custom, Compute section), Export (DXF), Edit (Undo, Redo) and View (2D/3D), then Settings at the right. Every button has a tooltip with its shortcut. The plane and Compute exist only in the ribbon; the Section pane keeps the offset, custom normal and align fields.
+
+## Export and group materials
+
+Export uses the Export settings (layers, colours, formats, default folder, ZIP or folder). The group pane has a **Material label** choice (None, Air, Copper, Aluminum, Electrical steel, Structural steel, Permanent magnet, Insulation, Custom) and a note for Custom. The label is the user's own bookkeeping, stored in the project and sent with the export; it is not a Maxwell library material. Groups without members are not sent.
+
+## Advanced tolerances
+
+The Section pane has a collapsed **Advanced tolerances** block with the three validation overrides of the section request: small region (1e-8 to 1 mm2, default 1e-4), sliver ratio (1e-6 to 0.05, default 5e-4) and join distance (1e-6 to 1e-3 mm, default 1e-5). The bounds are shown under each field; Enter or Compute checks the entry, and an out-of-range or non-numeric value is rejected inline and blocks Compute until fixed. Empty means the default. A non-default value marks the block "(modified)" and the field with `*`, is saved in the project (`tolerance`) and is sent only when set. Changing it makes the shown section stale.
+
+## Unsaved changes and recent projects
+
+The window title reads `* name - CAD2Maxwell` while the session differs from the project text at the last open or save, so undoing a change clears the marker. Opening a model or project (dialog, drop, recent list) and Ctrl+Q ask first: **Save**, **Discard changes** or **Cancel**. Save writes to the project path, or asks for one, and continues only when the save succeeded. The prompt can be turned off in Settings, General. The window's own close button cannot be intercepted by the pinned Rune revision, so closing the window with unsaved changes keeps the recovery file (see below) instead of asking.
+
+**Recent...** in the File group opens the list (newest first, count from Settings, stored in the preferences file). Missing files show `Not found` with Open disabled and can be removed.
+
+## Welcome screen
+
+With no model open the viewport shows a welcome block: Open model, Open project, Open demo motor, the recent projects, a link to the documentation (https://jinksen.github.io/CAD-2D-convertor/) and a hint that files can be dropped on the window. The demo motor is looked up as `docs/demo/demo-motor.step` in the folders above the executable or the working directory, or as `demo/demo-motor.step` next to the executable; if it is not found the button is disabled and the text says where it looked.
+
+## Named sections
+
+A project holds one or more named sections, for example "Mid stack z = 25 mm" and "End winding z = 48 mm". Each keeps its plane, offset, advanced tolerances and the path it was last exported to. With two or more, they are listed under the Section node and a click switches to one (the computed result is cleared; compute again). The Section pane adds a section from the current plane, renames and deletes the active one; names are unique (case-insensitive) and the last section cannot be deleted.
+
+## Autosave
+
+While a project has a path and unsaved changes, `<name>.c2mproj.autosave` is written beside it every three minutes (`AUTOSAVE_INTERVAL`) and when the window closes. A successful save deletes it. Opening a project whose autosave is newer asks: **Restore autosave** (the restored session counts as unsaved until saved) or **Open saved project**. A session without a project path is never autosaved.
+
+## Symmetry and sectors
+
+**Detect symmetry** in the Section pane asks the service for the rotational symmetry of the shown section and lists order, sector angle and confidence (order 1 means none found). **Create 1/N sector** appears only for order 2 or more and is the only thing that cuts: it adds the returned sector as a new named section ("Sector 1 of N") and shows it. The sector carries no overlap validation; the pane says so. Detection is a hint from region areas and centroids and never acts on its own.
+
+## Properties pane
+
+The right pane shows exactly one titled context, chosen by the tree selection: `Section XY`, `Body Rotor`, `Group North poles` or `Model motor.step`. Section statistics sit under the Section context and in the status bar. Long values wrap and group members are listed one per line instead of being truncated.
+
+## Messages panel
+
+The panel is collapsed when it only holds info messages and opens on the next warning or error. It has a severity filter (All, Errors, Warnings, Info), and the status bar shows error and warning counts that open it filtered to that severity. Drag its top edge to resize it (double-click resets); the height is remembered in the preferences file.
+
+## Side panels
+
+Drag the splitters between the model tree, the viewport and the properties pane to resize them; double-click a splitter or press the arrow keys on it (focused) to reset or nudge. Each side panel collapses to a thin strip with its heading button. Widths, collapsed state and the messages height are stored in the Rune preferences file under `layout` and restored on start.
+
+## 2D view aids
+
+Holes in a region stay empty: the display fill bridges each hole into its outer ring, so what is behind shows through (the section data and DXF are untouched). The view has a scale bar in the display unit (bottom right), a cursor readout with x and y in the display unit plus the export name of the body under the pointer (bottom left), origin axes (red x, green y), an optional grid (Grid toggle in the 2D toolbar) and a legend of visible groups with the colour of their first colored member (top right).
+
+## 3D view aids
+
+The 3D view has an axis triad in the bottom left corner (X red, Y green, Z blue, with letters) that follows the camera, and a label for the section plane and its offset in the display unit at the top left. The usage hint is the tooltip of the `?` button in the 3D toolbar, so it never truncates. Triangles and edges that cross the camera near plane are clipped against it, so the model no longer shows holes when the eye is inside or close to it. Hovering a body reads the id buffer of the last frame (one array lookup) and redraws only when the hovered body changes.
+
+## Measuring in 2D
+
+The 2D toolbar has a tool switch: Select, Distance and Radius. Distance takes two clicks; each point snaps to a curve end or arc centre within 8 px, otherwise it is the raw point. The reading shows the distance and dx, dy in the display unit. Radius takes one click on an arc or circle and shows its radius and centre; other curves report "No arc or circle under the pointer." Measuring never changes the selection, the section or the export.
+
+Selecting a body also lists its exact regions in the properties pane: area, perimeter, centroid and hole count, taken from `GET /api/v1/sections/{section_id}/regions` (OpenCascade values, not recomputed in the UI). The reply is cached per section id; the pane shows "Computing exact region metrics" while it loads and the service message if it fails. Metrics are per region of the selected body; picking one region among several of the same body is not available yet.

@@ -44,9 +44,21 @@ class SectionPlane(FiniteModel):
         return self
 
 
+class SectionTolerance(FiniteModel):
+    """Optional validation-tolerance overrides; omitted fields keep the default policy."""
+
+    small_region_mm2: float | None = Field(default=None, ge=1e-8, le=1.0)
+    sliver_ratio: float | None = Field(default=None, ge=1e-6, le=0.05)
+    join_mm: float | None = Field(default=None, ge=1e-6, le=1e-3)
+
+    def is_default(self) -> bool:
+        return all(value is None for value in self.model_dump().values())
+
+
 class SectionRequest(FiniteModel):
     import_id: str = Field(min_length=1)
     plane: SectionPlane
+    tolerance: SectionTolerance | None = None
 
 
 class Line2D(FiniteModel):
@@ -104,6 +116,7 @@ class SectionResponse(FiniteModel):
     plane: SectionPlane
     components: list[SectionComponent]
     diagnostics: list[SectionDiagnostic]
+    tolerance: SectionTolerance | None = None
 
 
 class ComponentPlaneResponse(FiniteModel):
@@ -113,3 +126,25 @@ class ComponentPlaneResponse(FiniteModel):
     normal_xyz: Point3
     offset_mm: float
     planar_area_mm2: float
+
+
+class RegionMetric(FiniteModel):
+    """Exact (OpenCascade) metrics of one region: an outer wire minus the holes inside it.
+
+    Wire indices refer to the component's `wires` list in the section response.
+    """
+
+    component_id: str
+    region_index: int
+    outer_wire: int
+    hole_wires: list[int]
+    area_mm2: float
+    perimeter_mm: float
+    centroid: Point2
+    hole_count: int
+    interior_point: Point2
+
+
+class RegionsResponse(FiniteModel):
+    section_id: str
+    regions: list[RegionMetric]

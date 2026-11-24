@@ -10,6 +10,10 @@ use crate::format::{NumberFormat, parse_number};
 
 pub mod camera;
 pub mod geometry;
+pub mod measure;
+pub mod named;
+pub mod regions;
+pub mod tolerance;
 
 use camera::{Size, ViewBox};
 
@@ -108,6 +112,13 @@ pub struct View2d {
     camera: Option<(String, ViewBox)>,
     /// Camera at the start of a drag.
     pub drag_origin: Option<ViewBox>,
+    /// Optional grid in the 2D view.
+    pub grid: bool,
+    /// Pointer in section coordinates (mm, y up) while over the view.
+    pub cursor: Option<[f64; 2]>,
+    /// Active 2D tool and its measurement.
+    pub tool: measure::Tool,
+    pub measure: measure::Measure,
     scene: RefCell<Option<Rc<Scene>>>,
 }
 
@@ -122,6 +133,14 @@ pub struct SectionState {
     pub last: Option<SectionResponse>,
     pub stats: Option<SectionStats>,
     pub view: View2d,
+    /// Exact region metrics per section id.
+    pub regions: regions::RegionCache,
+    /// Validation tolerance overrides sent with the section request.
+    pub tolerance: tolerance::ToleranceState,
+    /// The project's named sections; empty until one is needed.
+    pub named: named::Sections,
+    /// Last symmetry hint and the section id it belongs to.
+    pub symmetry: Option<(String, crate::api::dto::Symmetry)>,
     /// Text of the plane fields: offset, then the custom normal components.
     pub offset_text: TextEdit,
     pub normal_text: [TextEdit; 3],
@@ -143,6 +162,10 @@ impl Default for SectionState {
             last: None,
             stats: None,
             view: View2d::default(),
+            regions: regions::RegionCache::default(),
+            tolerance: tolerance::ToleranceState::default(),
+            named: named::Sections::default(),
+            symmetry: None,
             offset_text: TextEdit::default(),
             normal_text: Default::default(),
             field_error: None,
@@ -323,6 +346,9 @@ impl SectionState {
             self.stats = None;
         }
         self.field_error = error;
+        if self.tolerance.commit_all() {
+            self.stats = None;
+        }
     }
 
     /// Exact basis (normal, x, y) of the current plane.

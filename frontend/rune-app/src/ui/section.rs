@@ -4,16 +4,16 @@ use rune::tok::{Theme, space, type_};
 use rune::{El, TextEdit, col, edit_access, row, text};
 use rune_kit::{Kit, TextInput};
 
-use super::{button, choice, heading, label_value, severity_color};
+use super::{button, heading, label_value, severity_color};
 use crate::api::dto::Severity;
-use crate::state::section::PlaneKind;
+use crate::state::section::{PlaneKind, tolerance};
 use crate::state::{AppState, now_ms};
 
 const OFFSET_STEP_MM: f64 = 1.0;
 const AXES: [&str; 3] = ["x", "y", "z"];
 
 /// The axis a principal plane is offset along, as an ISO quantity symbol.
-fn plane_axis(kind: PlaneKind) -> &'static str {
+pub(super) fn plane_axis(kind: PlaneKind) -> &'static str {
     match kind {
         PlaneKind::XY => "z",
         PlaneKind::XZ => "y",
@@ -64,36 +64,204 @@ fn field(
         )
 }
 
+/// "Advanced tolerances": the three validation overrides, collapsed by default. Bounds are
+/// shown, an invalid entry is rejected inline and a non-default value is marked.
+fn tolerances(s: &AppState, t: &Theme, k: &Kit) -> El {
+    let tol = &s.section.tolerance;
+    let open = tol.open;
+    let title = format!(
+        "Advanced tolerances{}",
+        if tol.is_default() { "" } else { " (modified)" }
+    );
+    let mut out = col()
+        .key("advanced-tolerances")
+        .w_full()
+        .gap(space::S1)
+        .child(
+            button(k, "toggle-tolerances", &title, true)
+                .checked(open)
+                .on_press(|s: &mut AppState| s.section.tolerance.open = !s.section.tolerance.open),
+        );
+    if !open {
+        return out;
+    }
+    for (i, f) in tolerance::FIELDS.iter().enumerate() {
+        let range = format!(
+            "Default {}, range {} to {} {}",
+            tolerance::show(f.default),
+            tolerance::show(f.min),
+            tolerance::show(f.max),
+            f.unit
+        );
+        let label = format!("{}{}", f.label, if tol.is_set(i) { " *" } else { "" });
+        out = out
+            .child(field(
+                t,
+                k,
+                f.key,
+                &label,
+                &tol.text[i],
+                &tolerance::show(f.default),
+                edit_access(move |s: &mut AppState| &mut s.section.tolerance.text[i]),
+            ))
+            .child(note(t, range));
+        if let Some(error) = &tol.error[i] {
+            out = out.child(
+                text(error.clone())
+                    .font(type_::LABEL)
+                    .color(severity_color(Severity::Error, t))
+                    .wrap()
+                    .w_full(),
+            );
+        }
+    }
+    out.child(note(
+        t,
+        "Empty fields use the defaults. * marks a value that differs from them; it is saved in the project and applies at the next Compute.",
+    ))
+}
+
+/// Named sections of the project: switch in the tree, add, rename and delete here.
+fn named_sections(s: &AppState, t: &Theme, k: &Kit) -> El {
+    let named = &s.section.named;
+    let many = named.list.len() > 1;
+    let mut out = col()
+        .key("named-sections")
+        .w_full()
+        .gap(space::S1)
+        .child(note(
+            t,
+            format!(
+                "Named sections: {} (active: {}). Switch in the model tree.",
+                named.list.len(),
+                s.section.active_name().unwrap_or("Section 1")
+            ),
+        ))
+        .child(field(
+            t,
+            k,
+            "section-name",
+            "Section name",
+            &named.name_edit,
+            "Section name",
+            edit_access(|s: &mut AppState| &mut s.section.named.name_edit),
+        ))
+        .child(
+            row()
+                .gap(space::S1)
+                .child(button(k, "section-add", "Add section", true).on_press(
+                    |s: &mut AppState| {
+                        let name = s.section.named.name_edit.text.clone();
+                        s.section.named.error = s.section.add_named(&name).err();
+                    },
+                ))
+                .child(
+                    button(k, "section-rename", "Rename", true).on_press(|s: &mut AppState| {
+                        let name = s.section.named.name_edit.text.clone();
+                        s.section.named.error = s.section.rename_active(&name).err();
+                    }),
+                )
+                .child(
+                    button(k, "section-delete", "Delete", many).on_press(|s: &mut AppState| {
+                        let active = s.section.named.active;
+                        s.section.named.error = s.section.delete_named(active).err();
+                    }),
+                ),
+        );
+    if let Some(error) = &named.error {
+        out = out.child(
+            text(error.clone())
+                .font(type_::LABEL)
+                .color(severity_color(Severity::Error, t))
+                .wrap()
+                .w_full(),
+        );
+    }
+    if let Some(path) = named
+        .list
+        .get(named.active)
+        .and_then(|n| n.last_export.as_ref())
+    {
+        out = out.child(label_value(t, "Last export", path.clone()));
+    }
+    out
+}
+
+/// Symmetry hint and the explicit 1/N sector action.
+fn symmetry(s: &AppState, t: &Theme, k: &Kit) -> El {
+    let busy = s.shell.busy.is_some();
+    let computed = s.section.last.is_some() && s.section.stats.is_some();
+    let shown = s.section.last.as_ref().map(|l| l.section_id.as_str());
+    let found = s
+        .section
+        .symmetry
+        .as_ref()
+        .filter(|(id, _)| Some(id.as_str()) == shown)
+        .map(|(_, f)| f);
+    let mut out = col().key("symmetry").w_full().gap(space::S1).child(
+        button(k, "detect-symmetry", "Detect symmetry", computed && !busy)
+            .on_press(AppState::detect_symmetry),
+    );
+    match found {
+        Some(f) if f.order > 1 => {
+            out = out
+                .child(label_value(t, "Order", f.order.to_string()))
+                .child(label_value(
+                    t,
+                    "Sector angle",
+                    format!("{:.2} deg", f.sector_angle_deg),
+                ))
+                .child(label_value(
+                    t,
+                    "Confidence",
+                    format!("{:.0} %", f.confidence * 100.0),
+                ))
+                .child(
+                    button(
+                        k,
+                        "create-sector",
+                        &format!("Create 1/{} sector", f.order),
+                        !busy,
+                    )
+                    .on_press(AppState::create_sector),
+                )
+                .child(note(
+                    t,
+                    "The sector is cut from the exact section and added as a new named section. It carries no overlap validation: check the cut regions yourself before exporting.",
+                ));
+        }
+        Some(_) => out = out.child(note(t, "No rotational symmetry found.")),
+        None => {
+            out = out.child(note(
+                t,
+                "Detection is a hint from region areas and centroids; nothing is cut until you press Create.",
+            ))
+        }
+    }
+    out
+}
+
 pub fn settings(s: &AppState, t: &Theme, k: &Kit) -> El {
     let fmt = s.shell.number_format;
     s.section.fmt.set(fmt);
     let sec = &s.section;
-    let kinds = [
-        PlaneKind::XY,
-        PlaneKind::XZ,
-        PlaneKind::YZ,
-        PlaneKind::Custom,
-    ];
-    let plane_row = choice(
-        k,
-        "plane",
-        "Plane",
-        &["XY", "XZ", "YZ", "Custom"],
-        kinds.iter().position(|p| *p == sec.plane),
-        move |s, i| s.section.set_plane(kinds[i], now_ms()),
-    );
     let panel = col()
         .key("section-settings")
         .w_full()
-        .child(heading(t, "Section"))
-        .child(
-            col()
-                .w_full()
-                .padding(space::S2)
-                .gap(space::S2)
-                .child(note(t, "Exact planar cut of all bodies"))
-                .child(plane_row),
-        );
+        .child(heading(
+            t,
+            &format!(
+                "Section {}",
+                match sec.plane {
+                    PlaneKind::Custom => "Custom",
+                    kind => crate::project::kind_name(kind),
+                }
+            ),
+        ))
+        .child(col().w_full().padding(space::S2).gap(space::S2).child(note(
+            t,
+            "Exact planar cut of all bodies. Pick the plane and compute from the ribbon.",
+        )));
     let Some(imported) = &s.model.imported else {
         return panel.child(
             text("No model imported.")
@@ -183,29 +351,19 @@ pub fn settings(s: &AppState, t: &Theme, k: &Kit) -> El {
                 .w_full(),
         );
     }
-    let computing = s.shell.busy.as_deref() == Some("Computing exact section");
+    form = form.child(note(
+        t,
+        format!(
+            "History: {} undo, {} redo",
+            sec.past.len(),
+            sec.future.len()
+        ),
+    ));
+
     form = form
-        .child(
-            button(
-                k,
-                "section-compute",
-                if computing {
-                    "Computing…"
-                } else {
-                    "Compute section"
-                },
-                !busy,
-            )
-            .on_press(AppState::compute_section),
-        )
-        .child(note(
-            t,
-            format!(
-                "History: {} undo, {} redo",
-                sec.past.len(),
-                sec.future.len()
-            ),
-        ));
+        .child(tolerances(s, t, k))
+        .child(named_sections(s, t, k))
+        .child(symmetry(s, t, k));
 
     // Run status and result.
     let mut result = col().w_full().padding(space::S2).gap(space::S1);
@@ -288,8 +446,13 @@ mod tests {
     fn the_custom_plane_exposes_normal_fields_and_the_other_planes_do_not() {
         let mut rt = runtime(loaded());
         assert!(rt.find("normal-x").is_none());
-        press(&mut rt, "plane/segment3");
-        assert_eq!(rt.state.section.plane, PlaneKind::Custom);
+        assert!(
+            rt.find("plane").is_none(),
+            "the plane is picked in the ribbon only"
+        );
+        rt.state.section.set_plane(PlaneKind::Custom, 0);
+        rt.invalidate();
+        rt.frame(1.0 / 60.0);
         assert!(rt.find("normal-z").is_some() && rt.find("align-plane").is_some());
     }
 
@@ -299,7 +462,61 @@ mod tests {
         press(&mut rt, "offset-inc");
         assert_eq!(rt.state.section.offset_mm, Some(16.0));
         assert_eq!(rt.state.section.offset_text.text, "16.000");
-        press(&mut rt, "plane/segment1");
+        rt.state.section.set_plane(PlaneKind::XZ, 1_000_000);
         assert_eq!(rt.state.section.offset_text.text, "");
+    }
+
+    #[test]
+    fn advanced_tolerances_are_collapsed_validated_inline_and_marked_when_modified() {
+        let mut rt = runtime(loaded());
+        assert!(rt.find("tol-join").is_none(), "collapsed by default");
+        press(&mut rt, "toggle-tolerances");
+        assert!(rt.find("tol-join").is_some());
+        rt.state.section.tolerance.text[2].replace_text("0.5");
+        rt.state.section.commit_fields(0);
+        rt.invalidate();
+        rt.frame(1.0 / 60.0);
+        let json = rt.accessibility_json().to_string();
+        assert!(json.contains("Join distance must be between"), "{json}");
+        assert!(rt.state.section.tolerance.is_default());
+        rt.state.section.tolerance.text[0].replace_text("1e-3");
+        rt.state.section.commit_fields(0);
+        rt.invalidate();
+        rt.frame(1.0 / 60.0);
+        let json = rt.accessibility_json().to_string();
+        assert!(json.contains("Advanced tolerances (modified)"));
+        assert!(json.contains("Small region *"));
+    }
+
+    #[test]
+    fn symmetry_shows_order_angle_confidence_and_an_explicit_sector_button_with_the_note() {
+        let mut s = loaded();
+        s.section.last = Some(
+            serde_json::from_str(
+                r#"{"section_id":"s1","import_id":"i1","plane":{"kind":"XY","offset_mm":1.0},
+                "components":[],"diagnostics":[]}"#,
+            )
+            .unwrap(),
+        );
+        s.section.stats = Some(Default::default());
+        let mut rt = runtime(s);
+        assert!(
+            rt.find("create-sector").is_none(),
+            "nothing before a detection"
+        );
+        rt.state.section.symmetry = Some((
+            "s1".into(),
+            crate::api::dto::Symmetry {
+                order: 12,
+                sector_angle_deg: 30.0,
+                center: [0.0, 0.0],
+                confidence: 0.98,
+            },
+        ));
+        rt.invalidate();
+        rt.frame(1.0 / 60.0);
+        let json = rt.accessibility_json().to_string();
+        assert!(json.contains("Create 1/12 sector") && json.contains("30.00 deg"));
+        assert!(json.contains("98 %") && json.contains("no overlap validation"));
     }
 }

@@ -1,9 +1,13 @@
 //! Application state, composed of per-feature sub-states so features can evolve independently.
 //! Workflows that touch several sub-states or the service live in `tasks`.
 
+pub mod layout;
 pub mod model;
 pub mod preview;
+pub mod recent;
 pub mod section;
+pub mod selection;
+pub mod settings;
 pub mod shell;
 pub mod tree;
 

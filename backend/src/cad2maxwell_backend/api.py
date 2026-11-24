@@ -12,8 +12,10 @@ from starlette.concurrency import run_in_threadpool
 from cad2maxwell_backend.api_security import install_request_security
 from cad2maxwell_backend.export.archive import export_archive
 from cad2maxwell_backend.export.dxf import DxfExportError
+from cad2maxwell_backend.geometry.model_reader import IMPORT_SUFFIXES, read_model
 from cad2maxwell_backend.geometry.preview_mesh import PreviewMeshError, generate_preview
-from cad2maxwell_backend.geometry.step_importer import read_step
+from cad2maxwell_backend.machine.models import SectorRequest, SymmetryResponse
+from cad2maxwell_backend.machine.service import create_sector, symmetry
 from cad2maxwell_backend.models.exports import ExportRequest
 from cad2maxwell_backend.models.health import HealthResponse
 from cad2maxwell_backend.models.imports import (
@@ -25,6 +27,7 @@ from cad2maxwell_backend.models.imports import (
 from cad2maxwell_backend.models.preview import PreviewMeshResponse
 from cad2maxwell_backend.models.sections import (
     ComponentPlaneResponse,
+    RegionsResponse,
     SectionRequest,
     SectionResponse,
 )
@@ -36,6 +39,7 @@ from cad2maxwell_backend.services.section_service import (
     SectionService,
     UnknownComponent,
     UnknownImport,
+    UnknownSection,
 )
 from cad2maxwell_backend.services.section_sessions import SectionSessions
 
@@ -51,8 +55,8 @@ ALLOWED_ORIGINS = (
 
 
 def create_app(import_service: ImportService | None = None) -> FastAPI:
-    app = FastAPI(title="CAD2Maxwell Backend", version="0.2.0")
-    service = import_service or ImportService(read_step, ImportSessions())
+    app = FastAPI(title="CAD2Maxwell Backend", version="0.3.0")
+    service = import_service or ImportService(read_model, ImportSessions())
     app.state.import_service = service
     section_service = SectionService(service.sessions, SectionSessions())
     app.state.section_service = section_service
@@ -97,8 +101,8 @@ def create_app(import_service: ImportService | None = None) -> FastAPI:
     async def import_step_file(request: Request, filename: str) -> ImportResponse | JSONResponse:
         if (not filename or Path(filename).name != filename or "\\" in filename
                 or any(ord(char) < 32 or char in '<>:"|?*' for char in filename)
-                or Path(filename).suffix.casefold() not in {".step", ".stp"}):
-            return _error(422, "invalid_import_path", "Choose a STEP or STP file.")
+                or Path(filename).suffix.casefold() not in IMPORT_SUFFIXES):
+            return _error(422, "invalid_import_path", "Choose a STEP, IGES or BREP file.")
         try:
             with TemporaryDirectory(prefix="cad2maxwell-import-") as directory:
                 path = Path(directory) / filename
@@ -107,10 +111,10 @@ def create_app(import_service: ImportService | None = None) -> FastAPI:
                     async for chunk in request.stream():
                         total += len(chunk)
                         if total > MAX_UPLOAD_BYTES:
-                            return _error(413, "import_too_large", "The STEP file exceeds 512 MiB.")
+                            return _error(413, "import_too_large", "The file exceeds 512 MiB.")
                         stream.write(chunk)
                 if total == 0:
-                    return _error(400, "rejected_step_file", "The STEP file is empty.")
+                    return _error(400, "rejected_step_file", "The file is empty.")
                 imported = await run_in_threadpool(service.import_path, str(path))
                 response = imported.model_copy(update={"path": filename})
                 service.sessions.keep_response(response)
@@ -183,6 +187,34 @@ def create_app(import_service: ImportService | None = None) -> FastAPI:
             ))
             return JSONResponse(status_code=500, content=payload.model_dump())
 
+    @app.get("/api/v1/sections/{section_id}/regions", response_model=RegionsResponse)
+    def section_regions(section_id: str) -> RegionsResponse | JSONResponse:
+        try:
+            return section_service.regions(section_id)
+        except UnknownSection:
+            return _error(404, "unknown_section", "Compute the section again.")
+        except SectionError as exc:
+            return _error(422, "region_metrics_failed", str(exc))
+
+    @app.get("/api/v1/sections/{section_id}/symmetry", response_model=SymmetryResponse)
+    def section_symmetry(section_id: str) -> SymmetryResponse | JSONResponse:
+        try:
+            return symmetry(section_service, section_id)
+        except UnknownSection:
+            return _error(404, "unknown_section", "Compute the section again.")
+        except SectionError as exc:
+            return _error(422, "symmetry_failed", str(exc))
+
+    @app.post("/api/v1/sections/{section_id}/sector", response_model=SectionResponse)
+    def section_sector(section_id: str, request: SectorRequest) -> SectionResponse | JSONResponse:
+        # Never called automatically: the user asks for the 1/N sector explicitly.
+        try:
+            return create_sector(section_service, section_id, request)
+        except UnknownSection:
+            return _error(404, "unknown_section", "Compute the section again.")
+        except SectionError as exc:
+            return _error(422, "sector_failed", str(exc))
+
     @app.post("/api/v1/export/dxf")
     def download_dxf(request: ExportRequest) -> Response:
         imported = service.sessions.get_response(request.import_id)
@@ -192,7 +224,9 @@ def create_app(import_service: ImportService | None = None) -> FastAPI:
         if section.import_id != request.import_id:
             return _error(409, "export_session_mismatch", "The section belongs to another import.")
         try:
-            archive = export_archive(imported, section)
+            archive = export_archive(
+                imported, section, request, section_service.sections.get(request.section_id),
+            )
         except DxfExportError as exc:
             return _error(422, "export_not_ready", str(exc))
         return Response(

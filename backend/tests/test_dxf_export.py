@@ -41,7 +41,7 @@ def test_export_keeps_units_component_layer_and_traceability(tmp_path: Path) -> 
     assert len(drawing.modelspace().query("LINE")) == 4
     assert {entity.dxf.layer for entity in drawing.modelspace()} == {"Civka"}
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
-    assert manifest["schema_version"] == 1
+    assert manifest["schema_version"] == 2
     assert manifest["validation_status"] == "draft_unvalidated"
     assert manifest["components"][0]["source_name"] == imported.components[0].source_name
     assert manifest["components"][0]["export_name"] == "Civka"
@@ -75,3 +75,36 @@ def test_reversed_ellipse_arc_keeps_its_endpoints(tmp_path: Path) -> None:
               (ellipse.end_point.x, ellipse.end_point.y)]
     for got, want in zip(sorted(actual), sorted(expected), strict=True):
         assert got == pytest.approx(want)
+
+
+def test_tolerance_override_is_validated_cached_and_recorded(tmp_path: Path) -> None:
+    from pydantic import ValidationError
+
+    from cad2maxwell_backend.models.sections import SectionTolerance
+
+    with pytest.raises(ValidationError):
+        SectionTolerance(small_region_mm2=100.0)
+    with pytest.raises(ValidationError):
+        SectionTolerance(join_mm=1e-2)
+    with pytest.raises(ValidationError):
+        SectionTolerance(sliver_ratio=0.0)
+
+    imports = ImportService(read_step, ImportSessions())
+    imported = imports.import_path(str(named_colored_box(tmp_path / "coil.step")))
+    service = SectionService(imports.sessions, SectionSessions())
+    plane = SectionPlane(kind="XY", offset_mm=15)
+    default = service.create(SectionRequest(import_id=imported.import_id, plane=plane))
+    # The 10x20 box is far above the 1 mm2 bound: no warning, but a different cache entry.
+    strict = service.create(SectionRequest(
+        import_id=imported.import_id, plane=plane,
+        tolerance=SectionTolerance(small_region_mm2=1.0, sliver_ratio=0.05),
+    ))
+    assert strict.section_id != default.section_id
+    assert default.tolerance is None
+    assert any(item.code == "sliver_section_region" or item.code == "small_section_region"
+               for item in strict.diagnostics) or strict.tolerance is not None
+    result = export_dxf(imported, strict, tmp_path / "strict.dxf")
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["tolerance"] == {"small_region_mm2": 1.0, "sliver_ratio": 0.05}
+    default_result = export_dxf(imported, default, tmp_path / "default.dxf")
+    assert "tolerance" not in json.loads(default_result.manifest_path.read_text(encoding="utf-8"))

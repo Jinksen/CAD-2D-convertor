@@ -7,7 +7,7 @@ from OCP.gp import gp_Dir, gp_Pln, gp_Pnt
 from OCP.TopoDS import TopoDS_Shape
 from step_fixtures import inch_box, named_colored_box, repeated_occurrences, unnamed_box
 
-from cad2maxwell_backend.geometry import step_importer
+from cad2maxwell_backend.geometry import xcaf_model
 from cad2maxwell_backend.geometry.bounds import shape_bounds_mm
 from cad2maxwell_backend.geometry.step_importer import StepImportError, read_step
 from cad2maxwell_backend.models.imports import BoundingBox
@@ -99,7 +99,7 @@ def test_invalid_body_bounds_skip_only_that_body(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     path = repeated_occurrences(tmp_path / "one_invalid.step")
-    original_bounds = step_importer.shape_bounds_mm
+    original_bounds = xcaf_model.shape_bounds_mm
     calls = 0
 
     def first_body_invalid(shape: TopoDS_Shape) -> BoundingBox | None:
@@ -107,7 +107,7 @@ def test_invalid_body_bounds_skip_only_that_body(
         calls += 1
         return None if calls == 1 else original_bounds(shape)
 
-    monkeypatch.setattr(step_importer, "shape_bounds_mm", first_body_invalid)
+    monkeypatch.setattr(xcaf_model, "shape_bounds_mm", first_body_invalid)
     model = read_step(path)
 
     assert len(model.bodies) == 1

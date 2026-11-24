@@ -3,19 +3,22 @@ from dataclasses import replace
 from cad2maxwell_backend.formatting import format_quantity
 from cad2maxwell_backend.geometry.bounds import misses_plane
 from cad2maxwell_backend.geometry.dominant_plane import NoPlanarFaceError, dominant_plane
+from cad2maxwell_backend.geometry.region_metrics import region_metrics
 from cad2maxwell_backend.geometry.section import SectionError, plane_frame, section_shape
 from cad2maxwell_backend.geometry.section_classification import classify_wires
 from cad2maxwell_backend.geometry.section_edges import check_section_edges
 from cad2maxwell_backend.geometry.section_regions import check_section_regions
 from cad2maxwell_backend.geometry.section_validation import find_region_overlaps
-from cad2maxwell_backend.geometry.tolerance import DEFAULT_TOLERANCE
+from cad2maxwell_backend.geometry.tolerance import DEFAULT_TOLERANCE, TolerancePolicy
 from cad2maxwell_backend.models.sections import (
     ComponentPlaneResponse,
+    RegionsResponse,
     SectionComponent,
     SectionDiagnostic,
     SectionPlane,
     SectionRequest,
     SectionResponse,
+    SectionTolerance,
 )
 from cad2maxwell_backend.naming import stable_component_id
 from cad2maxwell_backend.services.import_sessions import ImportSessions
@@ -26,11 +29,21 @@ class UnknownImport(ValueError):
     """The process-local import session is no longer available."""
 
 
+class UnknownSection(ValueError):
+    """The section session is no longer available."""
+
+
 class UnknownComponent(ValueError):
     """The import session has no body with the requested component ID."""
 
 
-def _cache_key(plane: SectionPlane) -> tuple[object, ...]:
+def _policy(override: SectionTolerance | None) -> TolerancePolicy:
+    values = {k: v for k, v in (override.model_dump() if override else {}).items()
+              if v is not None}
+    return replace(DEFAULT_TOLERANCE, **values)
+
+
+def _cache_key(plane: SectionPlane, tolerance: TolerancePolicy) -> tuple[object, ...]:
     """Plane identity with values quantized to the linear tolerance."""
     def q(values: tuple[float, ...] | float | None) -> tuple[int, ...]:
         if values is None:
@@ -38,7 +51,7 @@ def _cache_key(plane: SectionPlane) -> tuple[object, ...]:
         flat = values if isinstance(values, tuple) else (values,)
         return tuple(round(value / DEFAULT_TOLERANCE.linear_mm) for value in flat)
     return (plane.kind, q(plane.offset_mm), q(plane.origin_xyz), q(plane.normal_xyz),
-            q(plane.x_dir_xyz))
+            q(plane.x_dir_xyz), tolerance)
 
 
 class SectionService:
@@ -63,11 +76,22 @@ class SectionService:
                 )
         raise UnknownComponent
 
+    def regions(self, section_id: str) -> RegionsResponse:
+        exact = self.sections.get(section_id)
+        response = self.sections.get_response(section_id)
+        if exact is None or response is None:
+            raise UnknownSection
+        metrics = [metric for component in response.components
+                   for metric in region_metrics(component.component_id,
+                                                exact[component.component_id], response.plane)]
+        return RegionsResponse(section_id=section_id, regions=metrics)
+
     def create(self, request: SectionRequest) -> SectionResponse:
         record = self._imports.get_record(request.import_id)
         if record is None:
             raise UnknownImport
-        cache_key = _cache_key(request.plane)
+        policy = _policy(request.tolerance)
+        cache_key = _cache_key(request.plane, policy)
         cached = self.sections.find_cached(request.import_id, cache_key)
         if cached is not None:
             return cached
@@ -86,10 +110,10 @@ class SectionService:
             if misses_plane(body.bounds_mm, frame.origin, frame.normal,
                             DEFAULT_TOLERANCE.linear_mm):
                 continue
-            wires = section_shape(body.shape, request.plane)
+            wires = section_shape(body.shape, request.plane, policy)
             if not wires:
                 continue
-            diagnostics.extend(check_section_edges(wires, component_id))
+            diagnostics.extend(check_section_edges(wires, component_id, policy))
             if all(wire.dto.closed for wire in wires):
                 try:
                     roles = classify_wires(wires, request.plane)
@@ -104,7 +128,8 @@ class SectionService:
                         for wire, role in zip(wires, roles, strict=True)
                     )
                     diagnostics.extend(check_section_regions(
-                        wires, request.plane, component_id, names.get(component_id, component_id),
+                        wires, request.plane, component_id,
+                        names.get(component_id, component_id), policy,
                     ))
             components.append(SectionComponent(
                 component_id=component_id, wires=[wire.dto for wire in wires],
@@ -136,6 +161,8 @@ class SectionService:
         response = SectionResponse(
             section_id=section_id, import_id=request.import_id, plane=request.plane,
             components=components, diagnostics=diagnostics,
+            tolerance=request.tolerance if request.tolerance and not request.tolerance.is_default()
+            else None,
         )
         self.sections.keep_response(response)
         return response
@@ -143,4 +170,5 @@ class SectionService:
 
 __all__ = [
     "NoPlanarFaceError", "SectionError", "SectionService", "UnknownComponent", "UnknownImport",
+    "UnknownSection",
 ]

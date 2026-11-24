@@ -228,6 +228,49 @@ impl SectionResponse {
     }
 }
 
+/// Optional validation-tolerance overrides of a section request; absent fields use the
+/// service defaults.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+pub struct Tolerance {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub small_region_mm2: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sliver_ratio: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub join_mm: Option<f64>,
+}
+
+/// One export group as the service takes it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ExportGroup {
+    pub name: String,
+    pub members: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub material: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub material_note: Option<String>,
+}
+
+/// Export request options besides the import and section ids.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ExportOptions {
+    pub layer_mode: String,
+    pub color_mode: String,
+    pub groups: Vec<ExportGroup>,
+    pub formats: Vec<String>,
+}
+
+impl Default for ExportOptions {
+    fn default() -> Self {
+        ExportOptions {
+            layer_mode: "component".into(),
+            color_mode: "original".into(),
+            groups: vec![],
+            formats: vec!["dxf".into()],
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[allow(dead_code)] // used by the 3D preview and section features in phase 3
 pub struct ComponentPlane {
@@ -235,6 +278,32 @@ pub struct ComponentPlane {
     pub normal_xyz: Vec3,
     pub offset_mm: f64,
     pub planar_area_mm2: f64,
+}
+
+/// Exact (OpenCascade) metrics of one region: an outer wire minus its holes.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct RegionMetric {
+    pub component_id: String,
+    pub region_index: usize,
+    pub area_mm2: f64,
+    pub perimeter_mm: f64,
+    pub centroid: Point2,
+    pub hole_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct RegionsResponse {
+    pub section_id: String,
+    pub regions: Vec<RegionMetric>,
+}
+
+/// Rotational symmetry hint of a section; `order` 1 means none was found.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Symmetry {
+    pub order: u32,
+    pub sector_angle_deg: f64,
+    pub center: Point2,
+    pub confidence: f64,
 }
 
 /// Preview mesh as sent: buffers are base64 little-endian typed arrays.

@@ -6,8 +6,8 @@ pub mod dto;
 use std::time::Duration;
 
 use dto::{
-    ComponentPlane, Health, ImportSummary, PreviewMesh, PreviewMeshWire, SectionPlane,
-    SectionResponse,
+    ComponentPlane, ExportOptions, Health, ImportSummary, PreviewMesh, PreviewMeshWire,
+    RegionsResponse, SectionPlane, SectionResponse, Symmetry, Tolerance,
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -168,7 +168,7 @@ impl Client {
             "application/json",
         )?;
         let summary: ImportSummary =
-            Self::decode(&reply, "The STEP file could not be imported.", invalid)?;
+            Self::decode(&reply, "The model file could not be imported.", invalid)?;
         summary.validate().map_err(|_| invalid.to_string())?;
         Ok(summary)
     }
@@ -192,13 +192,14 @@ impl Client {
         &self,
         import_id: &str,
         plane: &SectionPlane,
+        tolerance: Option<&Tolerance>,
     ) -> Result<SectionResponse, String> {
         let invalid = "The geometry service returned an invalid section response.";
-        let reply = self.call(
-            "section",
-            Some(json!({ "import_id": import_id, "plane": plane })),
-            "application/json",
-        )?;
+        let mut body = json!({ "import_id": import_id, "plane": plane });
+        if let Some(tolerance) = tolerance {
+            body["tolerance"] = json!(tolerance);
+        }
+        let reply = self.call("section", Some(body), "application/json")?;
         let section: SectionResponse =
             Self::decode(&reply, "The exact section could not be completed.", invalid)?;
         if section.import_id != import_id || section.plane != *plane || section.validate().is_err()
@@ -230,9 +231,59 @@ impl Client {
         Ok(plane)
     }
 
+    /// Exact area, perimeter, centroid and hole count of every region of a computed section.
+    pub fn regions(&self, section_id: &str) -> Result<RegionsResponse, String> {
+        let path = format!("sections/{}/regions", segment(section_id));
+        let reply = self.call(&path, None, "application/json")?;
+        let regions: RegionsResponse = Self::decode(
+            &reply,
+            "The region metrics could not be computed.",
+            "The geometry service returned an invalid region response.",
+        )?;
+        if regions.section_id != section_id {
+            return Err("The geometry service returned an invalid region response.".into());
+        }
+        Ok(regions)
+    }
+
+    /// Rotational symmetry of a computed section (a hint, never applied automatically).
+    pub fn symmetry(&self, section_id: &str) -> Result<Symmetry, String> {
+        let path = format!("sections/{}/symmetry", segment(section_id));
+        let reply = self.call(&path, None, "application/json")?;
+        Self::decode(
+            &reply,
+            "The symmetry could not be determined.",
+            "The geometry service returned an invalid symmetry response.",
+        )
+    }
+
+    /// The explicit 1/N sector of a computed section, as a new section of the same import.
+    pub fn sector(&self, section: &SectionResponse, order: u32) -> Result<SectionResponse, String> {
+        let invalid = "The geometry service returned an invalid sector response.";
+        let path = format!("sections/{}/sector", segment(&section.section_id));
+        let reply = self.call(&path, Some(json!({ "order": order })), "application/json")?;
+        let sector: SectionResponse =
+            Self::decode(&reply, "The sector could not be created.", invalid)?;
+        if sector.import_id != section.import_id
+            || sector.plane != section.plane
+            || sector.section_id == section.section_id
+            || sector.validate().is_err()
+        {
+            return Err(invalid.into());
+        }
+        Ok(sector)
+    }
+
     /// The DXF bundle (ZIP bytes) of a computed section.
-    pub fn export_dxf(&self, import_id: &str, section_id: &str) -> Result<Vec<u8>, String> {
-        let body = json!({ "import_id": import_id, "section_id": section_id });
+    pub fn export_dxf(
+        &self,
+        import_id: &str,
+        section_id: &str,
+        options: &ExportOptions,
+    ) -> Result<Vec<u8>, String> {
+        let mut body = json!(options);
+        body["import_id"] = json!(import_id);
+        body["section_id"] = json!(section_id);
         let reply = self.call("export/dxf", Some(body), "application/zip")?;
         if !(200..300).contains(&reply.status) {
             return Err(Self::failure(&reply, "The DXF could not be exported."));
@@ -342,7 +393,7 @@ mod tests {
     fn section_round_trips_plane_and_decodes_curves() {
         let fake = serve(vec![(200, "application/json", SECTION.as_bytes().to_vec())]);
         let plane = SectionPlane::XY { offset_mm: 15.0 };
-        let section = client(&fake.url).section("i1", &plane).unwrap();
+        let section = client(&fake.url).section("i1", &plane, None).unwrap();
         assert_eq!(section.components[0].wires[0].curves.len(), 2);
         assert!(
             fake.requests.lock().unwrap()[0].contains(r#""plane":{"kind":"XY","offset_mm":15.0}"#)
@@ -353,7 +404,7 @@ mod tests {
     fn section_for_another_plane_is_rejected() {
         let fake = serve(vec![(200, "application/json", SECTION.as_bytes().to_vec())]);
         let err = client(&fake.url)
-            .section("i1", &SectionPlane::XY { offset_mm: 1.0 })
+            .section("i1", &SectionPlane::XY { offset_mm: 1.0 }, None)
             .unwrap_err();
         assert_eq!(
             err,
@@ -417,9 +468,13 @@ mod tests {
             (200, "text/plain", b"nope".to_vec()),
         ]);
         let c = client(&fake.url);
-        assert_eq!(c.export_dxf("i1", "s1").unwrap(), b"PK\x03\x04zz");
         assert_eq!(
-            c.export_dxf("i1", "s1").unwrap_err(),
+            c.export_dxf("i1", "s1", &ExportOptions::default()).unwrap(),
+            b"PK\x03\x04zz"
+        );
+        assert_eq!(
+            c.export_dxf("i1", "s1", &ExportOptions::default())
+                .unwrap_err(),
             "The geometry service returned an invalid DXF download."
         );
     }
@@ -473,6 +528,39 @@ mod tests {
     }
 
     #[test]
+    fn regions_decode_and_must_belong_to_the_requested_section() {
+        let body = |id: &str| {
+            format!(
+                r#"{{"section_id":"{id}","regions":[{{"component_id":"c1","region_index":0,"outer_wire":0,
+                "hole_wires":[1],"area_mm2":96.5,"perimeter_mm":42.0,"centroid":[5.0,5.0],"hole_count":1,
+                "interior_point":[1.0,1.0]}}]}}"#
+            )
+            .into_bytes()
+        };
+        let fake = serve(vec![
+            (200, "application/json", body("s 1")),
+            (200, "application/json", body("other")),
+            (
+                404,
+                "application/json",
+                br#"{"error":{"message":"Compute the section again."}}"#.to_vec(),
+            ),
+        ]);
+        let c = client(&fake.url);
+        let r = c.regions("s 1").unwrap();
+        assert_eq!((r.regions[0].area_mm2, r.regions[0].hole_count), (96.5, 1));
+        assert!(
+            fake.requests.lock().unwrap()[0].starts_with("GET /api/v1/sections/s%201/regions ")
+        );
+        assert!(
+            c.regions("s 1")
+                .unwrap_err()
+                .contains("invalid region response")
+        );
+        assert_eq!(c.regions("s 1").unwrap_err(), "Compute the section again.");
+    }
+
+    #[test]
     fn requests_match_the_ts_clients() {
         use crate::state::section::{PlaneKind, SectionState};
         let fake = serve(
@@ -489,8 +577,8 @@ mod tests {
         let _ = c.import_step(r"C:\models\Motor.step");
         let _ = c.preview("imp 1/\u{fc}!'()*~");
         let _ = c.component_plane("imp-1", "body 1");
-        let _ = c.export_dxf("imp-1", "sec-1");
-        let _ = c.section("imp-1", &state.request(&bounds).unwrap());
+        let _ = c.export_dxf("imp-1", "sec-1", &ExportOptions::default());
+        let _ = c.section("imp-1", &state.request(&bounds).unwrap(), None);
 
         let (head, body) = sent(&fake, 0);
         assert!(
@@ -512,7 +600,11 @@ mod tests {
         let (head, body) = sent(&fake, 3);
         assert!(head.starts_with("POST /api/v1/export/dxf "), "{head}");
         assert!(head.to_lowercase().contains("accept: application/zip"));
-        assert_eq!(body, json!({"import_id": "imp-1", "section_id": "sec-1"}));
+        assert_eq!(
+            body,
+            json!({"import_id": "imp-1", "section_id": "sec-1", "layer_mode": "component",
+                "color_mode": "original", "groups": [], "formats": ["dxf"]})
+        );
         // Default plane: XY through the model midpoint (z = 15).
         let (head, body) = sent(&fake, 4);
         assert!(head.starts_with("POST /api/v1/section "), "{head}");
@@ -620,10 +712,14 @@ mod tests {
         let summary = c.import_step(&step).unwrap();
         let mut state = crate::state::section::SectionState::default();
         let plane = state.request(&summary.bounds_mm).unwrap();
-        let section = c.section(&summary.import_id, &plane).unwrap();
+        let section = c.section(&summary.import_id, &plane, None).unwrap();
         state.last = Some(section.clone());
         let zip = c
-            .export_dxf(&summary.import_id, &section.section_id)
+            .export_dxf(
+                &summary.import_id,
+                &section.section_id,
+                &ExportOptions::default(),
+            )
             .unwrap();
         assert!(zip.starts_with(b"PK\x03\x04"));
         let mesh = c.preview(&summary.import_id).unwrap();
@@ -665,9 +761,13 @@ mod tests {
             let mut state = SectionState::default();
             state.plane = kind;
             let plane = state.request(&summary.bounds_mm).unwrap();
-            let section = c.section(&summary.import_id, &plane).unwrap();
+            let section = c.section(&summary.import_id, &plane, None).unwrap();
             let zip = c
-                .export_dxf(&summary.import_id, &section.section_id)
+                .export_dxf(
+                    &summary.import_id,
+                    &section.section_id,
+                    &ExportOptions::default(),
+                )
                 .unwrap();
             std::fs::write(out.join(format!("rust_{name}.zip")), zip).unwrap();
         }

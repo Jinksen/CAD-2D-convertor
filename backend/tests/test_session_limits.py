@@ -91,9 +91,9 @@ def test_prefilter_skips_missed_bodies_without_changing_result(
     import_id = imports.put("abc", bodies)
     calls: list[Any] = []
 
-    def spy(shape: Any, plane: SectionPlane) -> Any:
+    def spy(shape: Any, plane: SectionPlane, *rest: Any) -> Any:
         calls.append(shape)
-        return section_shape(shape, plane)
+        return section_shape(shape, plane, *rest)
 
     monkeypatch.setattr("cad2maxwell_backend.services.section_service.section_shape", spy)
     filtered = SectionService(imports, SectionSessions()).create(_xy(import_id, 5))
@@ -116,9 +116,9 @@ def test_identical_request_hits_cache_and_plane_change_misses(
     first = service.create(_xy(import_id, 5))
     calls: list[int] = []
 
-    def counting(shape: Any, plane: SectionPlane) -> Any:
+    def counting(shape: Any, plane: SectionPlane, *rest: Any) -> Any:
         calls.append(1)
-        return section_shape(shape, plane)
+        return section_shape(shape, plane, *rest)
 
     monkeypatch.setattr("cad2maxwell_backend.services.section_service.section_shape", counting)
 

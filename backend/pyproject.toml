@@ -1,6 +1,6 @@
 [project]
 name = "cad2maxwell-backend"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local geometry service for CAD2Maxwell"
 requires-python = ">=3.12"
 dependencies = [

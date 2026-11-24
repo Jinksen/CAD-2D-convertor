@@ -2,8 +2,7 @@
 //! edges, an alpha-blended plane guide and an id buffer used for picking. Rows are split into
 //! bands that run on scoped threads, so it needs no GPU path and no dependencies.
 //!
-//! shortcut: triangles/lines with a vertex behind the near plane are dropped, not clipped; upgrade
-//! if holes show when the eye is inside the model.
+//! Triangles and lines that cross the near plane are clipped against it in view space.
 
 use std::thread;
 
@@ -43,6 +42,8 @@ struct Sv {
     /// 1 / view depth (0: behind the near plane); larger is closer and interpolates linearly.
     z: f32,
     shade: f32,
+    /// View-space (right, up, depth), kept for clipping against the near plane.
+    v: [f32; 3],
 }
 
 #[derive(Default)]
@@ -114,16 +115,59 @@ impl Proj {
     fn point(&self, p: [f32; 3], shade: f32) -> Sv {
         let d = [p[0] - self.eye[0], p[1] - self.eye[1], p[2] - self.eye[2]];
         let dot = |a: [f32; 3]| d[0] * a[0] + d[1] * a[1] + d[2] * a[2];
-        let depth = dot(self.fwd);
-        if depth < self.near {
-            return Sv::default();
+        self.project([dot(self.right), dot(self.up), dot(self.fwd)], shade)
+    }
+
+    /// Screen position of a view-space point; behind the near plane `z` is 0.
+    fn project(&self, v: [f32; 3], shade: f32) -> Sv {
+        if v[2] < self.near {
+            return Sv {
+                v,
+                shade,
+                ..Sv::default()
+            };
         }
-        let inv = 1.0 / depth;
+        let inv = 1.0 / v[2];
         Sv {
-            x: self.cx + dot(self.right) * inv * self.fx,
-            y: self.cy - dot(self.up) * inv * self.fy,
+            x: self.cx + v[0] * inv * self.fx,
+            y: self.cy - v[1] * inv * self.fy,
             z: inv,
             shade,
+            v,
+        }
+    }
+
+    /// The point of segment `p`-`q` on the near plane (one end in front, one behind).
+    fn cut(&self, p: Sv, q: Sv) -> Sv {
+        let t = (self.near - p.v[2]) / (q.v[2] - p.v[2]);
+        let v = std::array::from_fn(|i| p.v[i] + (q.v[i] - p.v[i]) * t);
+        self.project(v, p.shade + (q.shade - p.shade) * t)
+    }
+
+    /// The triangle as up to two triangles in front of the near plane.
+    fn clip_triangle(&self, tri: [Sv; 3]) -> Vec<[Sv; 3]> {
+        let mut poly: Vec<Sv> = Vec::with_capacity(4);
+        for i in 0..3 {
+            let (p, q) = (tri[i], tri[(i + 1) % 3]);
+            if p.z > 0.0 {
+                poly.push(p);
+            }
+            if (p.z > 0.0) != (q.z > 0.0) {
+                poly.push(self.cut(p, q));
+            }
+        }
+        (1..poly.len().saturating_sub(1))
+            .map(|i| [poly[0], poly[i], poly[i + 1]])
+            .collect()
+    }
+
+    /// The part of the segment in front of the near plane.
+    fn clip_line(&self, a: Sv, b: Sv) -> Option<(Sv, Sv)> {
+        match (a.z > 0.0, b.z > 0.0) {
+            (true, true) => Some((a, b)),
+            (true, false) => Some((a, self.cut(a, b))),
+            (false, true) => Some((self.cut(b, a), b)),
+            (false, false) => None,
         }
     }
 }
@@ -237,6 +281,15 @@ fn line(a: Sv, b: Sv, y0: usize, y1: usize, w: usize, mut px: impl FnMut(usize, 
     }
 }
 
+/// The triangle itself when fully in front of the near plane, else its clipped pieces.
+fn triangles(proj: &Proj, tri: [Sv; 3]) -> Vec<[Sv; 3]> {
+    if tri.iter().all(|v| v.z > 0.0) {
+        vec![tri]
+    } else {
+        proj.clip_triangle(tri)
+    }
+}
+
 struct Band<'a> {
     y0: usize,
     y1: usize,
@@ -295,7 +348,7 @@ impl Frame {
                 .zip(self.depth.chunks_mut(rows * width))
                 .zip(self.ids.chunks_mut(rows * width));
             for (i, ((rgba, depth), ids)) in bands.enumerate() {
-                let (lines, guide) = (&lines, &guide);
+                let (lines, guide, proj) = (&lines, &guide, &proj);
                 s.spawn(move || {
                     let y0 = i * rows;
                     let band = Band {
@@ -305,7 +358,7 @@ impl Frame {
                         depth,
                         ids,
                     };
-                    draw_band(band, width, scene, svs, lines, guide);
+                    draw_band(band, width, scene, svs, lines, guide, proj);
                 });
             }
         });
@@ -328,6 +381,7 @@ fn draw_band(
     svs: &[Vec<Sv>],
     lines: &[(Sv, Sv, [u8; 3], bool)],
     guide: &Option<[Sv; 4]>,
+    proj: &Proj,
 ) {
     let Band {
         y0,
@@ -345,14 +399,9 @@ fn draw_band(
     for (body, sv) in scene.bodies.iter().zip(svs) {
         let (base, em) = (body.color, body.emissive);
         for t in body.indices.chunks_exact(3) {
-            fill(
-                sv[t[0] as usize],
-                sv[t[1] as usize],
-                sv[t[2] as usize],
-                y0,
-                y1,
-                w,
-                |x, y, z, sh| {
+            let tri = [sv[t[0] as usize], sv[t[1] as usize], sv[t[2] as usize]];
+            for [a, b, c] in triangles(proj, tri) {
+                fill(a, b, c, y0, y1, w, |x, y, z, sh| {
                     let i = (y - y0) * w + x;
                     if z > depth[i] {
                         depth[i] = z;
@@ -361,21 +410,23 @@ fn draw_band(
                             rgba[i * 4 + k] = (base[k] * sh + em[k]).clamp(0.0, 255.0) as u8;
                         }
                     }
-                },
-            );
+                });
+            }
         }
     }
     if let Some([a, b, c, d]) = *guide {
-        for (p, q, r) in [(a, b, c), (a, c, d)] {
-            fill(p, q, r, y0, y1, w, |x, y, z, _| {
-                let i = (y - y0) * w + x;
-                if z >= depth[i] {
-                    for k in 0..3 {
-                        let old = f32::from(rgba[i * 4 + k]);
-                        rgba[i * 4 + k] = (old + (GUIDE_FILL[k] - old) * GUIDE_ALPHA) as u8;
+        for tri in [[a, b, c], [a, c, d]] {
+            for [p, q, r] in triangles(proj, tri) {
+                fill(p, q, r, y0, y1, w, |x, y, z, _| {
+                    let i = (y - y0) * w + x;
+                    if z >= depth[i] {
+                        for k in 0..3 {
+                            let old = f32::from(rgba[i * 4 + k]);
+                            rgba[i * 4 + k] = (old + (GUIDE_FILL[k] - old) * GUIDE_ALPHA) as u8;
+                        }
                     }
-                }
-            });
+                });
+            }
         }
     }
     let mut put = |x: usize, y: usize, z: f32, color: [u8; 3], on_top: bool| {
@@ -386,18 +437,41 @@ fn draw_band(
     };
     for (body, sv) in scene.bodies.iter().zip(svs) {
         for e in body.edges.chunks_exact(2) {
-            line(
-                sv[e[0] as usize],
-                sv[e[1] as usize],
-                y0,
-                y1,
-                w,
-                |x, y, z| put(x, y, z, scene.edge_color, false),
-            );
+            if let Some((a, b)) = proj.clip_line(sv[e[0] as usize], sv[e[1] as usize]) {
+                line(a, b, y0, y1, w, |x, y, z| {
+                    put(x, y, z, scene.edge_color, false);
+                });
+            }
         }
     }
     for &(a, b, color, on_top) in lines {
-        line(a, b, y0, y1, w, |x, y, z| put(x, y, z, color, on_top));
+        if let Some((a, b)) = proj.clip_line(a, b) {
+            line(a, b, y0, y1, w, |x, y, z| put(x, y, z, color, on_top));
+        }
+    }
+}
+
+/// Paints the axis triad (X red, Y green, Z blue) over `rgba` from `origin`, with the screen
+/// offsets of `triad`. Pure pixel work, after the scene render.
+pub fn draw_triad(rgba: &mut [u8], w: usize, h: usize, origin: [f32; 2], axes: [[f32; 2]; 3]) {
+    const COLORS: [[u8; 3]; 3] = [[0xe0, 0x3c, 0x3c], [0x2e, 0xa0, 0x4a], [0x2f, 0x6f, 0xe0]];
+    if w == 0 || h == 0 {
+        return;
+    }
+    for (axis, color) in axes.iter().zip(COLORS) {
+        let steps = axis[0].abs().max(axis[1].abs()).ceil().max(1.0) as usize;
+        for i in 0..=steps {
+            let t = i as f32 / steps as f32;
+            let (cx, cy) = (origin[0] + axis[0] * t, origin[1] + axis[1] * t);
+            // A 2 px wide stroke.
+            for (dx, dy) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)] {
+                let (x, y) = ((cx + dx - 0.5) as i64, (cy + dy - 0.5) as i64);
+                if (0..w as i64).contains(&x) && (0..h as i64).contains(&y) {
+                    let i = (y as usize * w + x as usize) * 4;
+                    rgba[i..i + 3].copy_from_slice(&color);
+                }
+            }
+        }
     }
 }
 
@@ -529,6 +603,65 @@ pub(crate) mod tests {
             guided[(100 * 200 + 100) * 4 + 2]
         );
         assert!(guided.chunks_exact(4).any(|p| p[..3] == GUIDE_EDGE));
+    }
+
+    #[test]
+    fn geometry_crossing_the_near_plane_is_clipped_not_dropped() {
+        // The eye is at the origin looking along +Y; a wall at x = 0.3 runs from behind the eye
+        // to 5 ahead of it, so both its triangles and its edge cross the near plane.
+        let wall: Mesh = (
+            vec![
+                0.3, -5.0, -0.1, 0.3, 5.0, -0.1, 0.3, 5.0, 0.1, 0.3, -5.0, 0.1,
+            ],
+            vec![0.577; 12],
+            vec![0, 1, 2, 0, 2, 3],
+            vec![0, 1],
+        );
+        let meshes = [wall];
+        let cam = Camera {
+            target: [0.0, 1.0, 0.0],
+            yaw: -std::f64::consts::FRAC_PI_2,
+            pitch: 0.0,
+            distance: 1.0,
+        };
+        assert!(cam.eye().iter().all(|c| c.abs() < 1e-9));
+        let mut frame = Frame::default();
+        let rgba = frame.render(200, 200, &cam, &scene(&meshes));
+        assert_eq!(
+            frame.pick(150, 100),
+            Some(0),
+            "wall surface survives clipping"
+        );
+        let edge = rgba.chunks_exact(4).filter(|p| p[..3] == [0, 0, 0]).count();
+        assert!(edge > 20, "clipped edge drawn: {edge}");
+        // Fully behind the eye: nothing.
+        let behind = Camera {
+            yaw: std::f64::consts::FRAC_PI_2,
+            ..cam
+        };
+        let mut other = Frame::default();
+        other.render(200, 200, &behind, &scene(&meshes));
+        assert_eq!(other.pick(150, 100), None);
+    }
+
+    #[test]
+    fn the_triad_paints_each_axis_in_its_color_and_stays_inside_the_buffer() {
+        let mut rgba = vec![0u8; 50 * 50 * 4];
+        draw_triad(
+            &mut rgba,
+            50,
+            50,
+            [10.0, 40.0],
+            [[20.0, 0.0], [0.0, -20.0], [200.0, 200.0]],
+        );
+        let px = |x: usize, y: usize| &rgba[(y * 50 + x) * 4..][..3];
+        assert_eq!(px(30, 40), &[0xe0, 0x3c, 0x3c]);
+        assert_eq!(px(10, 20), &[0x2e, 0xa0, 0x4a]);
+        assert_eq!(
+            px(10, 40),
+            &[0x2f, 0x6f, 0xe0],
+            "a clipped axis does not panic"
+        );
     }
 
     /// UV sphere shell with `n` x `n` quads (2 n^2 triangles) around `at`.

@@ -4,7 +4,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 from cad2maxwell_backend.domain.import_result import ImportedModel
-from cad2maxwell_backend.geometry.step_importer import StepImportError
+from cad2maxwell_backend.geometry.model_reader import IMPORT_SUFFIXES
+from cad2maxwell_backend.geometry.xcaf_model import ModelImportError
 from cad2maxwell_backend.models.imports import ImportComponent, ImportResponse
 from cad2maxwell_backend.naming import assign_export_names, stable_component_id
 from cad2maxwell_backend.services.import_sessions import ImportSessions
@@ -13,31 +14,31 @@ from cad2maxwell_backend.services.import_sessions import ImportSessions
 class ImportServiceError(Exception):
     status_code = 500
     code = "internal_import_error"
-    public_message = "The STEP import could not be completed."
+    public_message = "The import could not be completed."
 
 
 class InvalidImportPath(ImportServiceError):
     status_code = 422
     code = "invalid_import_path"
-    public_message = "Provide an absolute path to a local STEP or STP file."
+    public_message = "Provide an absolute path to a local STEP, IGES or BREP file."
 
 
 class MissingImportFile(ImportServiceError):
     status_code = 404
     code = "missing_import_file"
-    public_message = "The STEP file was not found."
+    public_message = "The file was not found."
 
 
 class UnreadableImportFile(ImportServiceError):
     status_code = 403
     code = "unreadable_import_file"
-    public_message = "The STEP file cannot be read."
+    public_message = "The file cannot be read."
 
 
 class RejectedStepFile(ImportServiceError):
     status_code = 400
     code = "rejected_step_file"
-    public_message = "The file contains no importable STEP solids."
+    public_message = "The file contains no importable solids."
 
 
 def _validated_path(raw_path: str) -> Path:
@@ -48,7 +49,7 @@ def _validated_path(raw_path: str) -> Path:
         path = Path(raw_path)
     except ValueError as exc:
         raise InvalidImportPath from exc
-    if not path.is_absolute() or path.suffix.casefold() not in {".step", ".stp"}:
+    if not path.is_absolute() or path.suffix.casefold() not in IMPORT_SUFFIXES:
         raise InvalidImportPath
     try:
         resolved = path.resolve(strict=False)
@@ -92,7 +93,7 @@ class ImportService:
         source_sha256 = _sha256_file(path)
         try:
             model = self._importer(path)
-        except StepImportError as exc:
+        except ModelImportError as exc:
             raise RejectedStepFile from exc
         except FileNotFoundError as exc:
             raise MissingImportFile from exc

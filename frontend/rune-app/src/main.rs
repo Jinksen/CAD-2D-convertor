@@ -4,9 +4,13 @@
 mod api;
 mod archive;
 mod backend;
+mod export;
 mod format;
+mod machine;
 mod project;
+mod recovery;
 mod render3d;
+mod session;
 mod state;
 mod tasks;
 mod ui;
@@ -29,13 +33,20 @@ fn main() {
         Some(url) => Client::new(url, backend.token.clone()),
         None => Client::from_env(backend.token.clone()),
     };
+    // Window, taskbar and Alt+Tab icon; a failure only leaves the default icon.
+    if let Err(error) = rune::set_app_icon(include_bytes!("../assets/icon-256.png").to_vec()) {
+        eprintln!("{error}");
+    }
     let spec = AppSpec {
         min_size: Some((960.0, 600.0)),
         on_key: Some(ui::on_key),
         poll: Some(ui::poll),
         ..AppSpec::new("CAD2Maxwell", (1440.0, 900.0), AppState::default, ui::view)
     };
-    let app = App::new(spec);
+    // The close button cannot be intercepted: keep unsaved work as an autosave instead.
+    let app = App::new(spec).on_close(|s, _| {
+        s.autosave_now();
+    });
     // `AppHandle::update` runs the closure on the UI thread and wakes the event loop.
     let handle = app.handle();
     let tasks = Tasks::new(client, move |update| {
@@ -47,6 +58,7 @@ fn main() {
             tasks: Some(tasks),
             ..AppState::default()
         };
+        state.section.view.grid = state.shell.settings.viewport.grid_default;
         state.check_service(HEALTH_ATTEMPTS);
         state
     })

@@ -1,16 +1,17 @@
 <div align="center">
 
-<img src="docs/images/logo.svg" width="72" alt="CAD2Maxwell logo">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg">
+  <img src="docs/images/logo.svg" width="72" alt="CAD2Maxwell logo">
+</picture>
 
 # CAD2Maxwell
 
-**Exact 2D sections from 3D STEP models, ready for ANSYS Maxwell 2D.**
-
-Open a STEP assembly, pick a plane, check the section and export a 1:1 DXF in millimetres.
-Every 2D region traces back to its source body.
+**CAD models to exact 2D sections for ANSYS Maxwell 2D and other 2D FEM tools.**
 
 [![CI](https://github.com/Jinksen/CAD-2D-convertor/actions/workflows/ci.yml/badge.svg)](https://github.com/Jinksen/CAD-2D-convertor/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Jinksen/CAD-2D-convertor?include_prereleases&sort=semver)](https://github.com/Jinksen/CAD-2D-convertor/releases)
+[![Docs](https://img.shields.io/badge/docs-site-blue.svg)](https://jinksen.github.io/CAD-2D-convertor/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%20x64-0078d4)
 
@@ -20,23 +21,30 @@ Every 2D region traces back to its source body.
 
 ## Why
 
-Preparing a 2D electromagnetic model usually means a CAD drawing setup, manual cleanup and
-guessing which polyline belonged to which part. CAD2Maxwell cuts the exact B-Rep with
-OpenCascade, keeps names and colours, validates the result and refuses to export a broken
-section. What lands in Maxwell is what you modelled.
+Preparing a 2D electromagnetic model usually means manual drawing cleanup and guessing which
+polyline belonged to which part. CAD2Maxwell cuts the exact B-Rep with OpenCascade, keeps names
+and colours, validates the result and refuses to export a broken section. Every 2D region traces
+back to its source body.
+
+## Workflow
+
+1. **Open model.** STEP, IGES or BREP (Ctrl+O), or drop the file on the window.
+2. **Pick a plane.** XY / XZ / YZ with an offset, or a custom plane aligned to a selected sheet.
+3. **Compute** (Ctrl+Enter). Regions are closed contours; holes stay empty.
+4. **Check.** Read the diagnostics, measure, compare with the 3D preview.
+5. **Export** (Ctrl+E). DXF plus manifest, optionally CSV, SVG, FEMM, Gmsh or PyAEDT.
 
 ## Features
 
-| | |
-|---|---|
-| **Exact geometry** | B-Rep sectioning with OpenCascade. No mesh slicing; lines, arcs and circles stay analytic. |
-| **Traceability** | Source names, colours and assembly paths are kept. A JSON manifest maps every 2D region to its body; export names are ASCII-safe and deterministic. |
-| **Validation** | Defects block export, small features are flagged, nothing is repaired silently (see [Export checks](#export-checks)). Click a diagnostic to jump to the body. |
-| **Any plane** | XY / XZ / YZ with an offset, or a custom tilted plane aligned to a selected sheet in one click. Plane edits have undo/redo; the shown section is marked stale until you compute again. |
-| **Organization** | The Model Builder nests bodies in collapsible folders that follow the STEP assemblies. Your own groups (for example *Magnets* or *Phase A coils*) can be shown, hidden or isolated together. |
-| **Engineering UI** | Model Builder tree, property pane, 2D viewport with zoom-at-cursor and pan, 3D preview with feature edges and standard views, visibility and isolate, light and dark themes, ISO 80000-1 number formatting. |
-| **Projects** | Save the session as a `.c2mproj` (STEP path and hash, plane, preferences, visibility, groups; never geometry) and reopen it later. A STEP inside the project folder is also found after the folder is moved. |
-| **Local only** | Runs fully offline. The geometry service listens on `127.0.0.1` with a per-session token; no telemetry. |
+| Area | What you get | Details |
+|------|--------------|---------|
+| Import | STEP, IGES (solid B-Reps) and OCCT BREP with names, colours and assembly structure. | [Projects and formats](docs/projects-and-formats.md) |
+| Section | Axis or tilted planes, advanced tolerances, several named sections, symmetry hint with explicit 1/N sector. | [Geometry](docs/geometry.md) |
+| Validation | Open contours, invalid faces, duplicates and overlaps block export; small features warn. | [Export checks](#export-checks) |
+| Export | DXF 1:1 mm + manifest v2 (layer and colour modes, material labels); CSV, SVG, FEMM, Gmsh, PyAEDT. | [DXF export](docs/dxf-export.md) |
+| Workspace | Model tree, 2D and 3D viewports, measuring, exact region metrics, light/dark theme, settings dialog. | [UX](docs/ux.md), [Settings](docs/settings.md) |
+| Projects | `.c2mproj` files, unsaved-changes prompt, autosave with recovery, recent projects. | [Projects and formats](docs/projects-and-formats.md) |
+| Local only | Offline. Service listens on `127.0.0.1` with a per-session token. No telemetry. | [Architecture](docs/architecture.md) |
 
 <table>
 <tr>
@@ -49,18 +57,31 @@ section. What lands in Maxwell is what you modelled.
 </tr>
 </table>
 
+## Supported formats
+
+| Format | Direction | Notes |
+|--------|-----------|-------|
+| STEP `.step` `.stp` | Import | Names, colours, assemblies (XCAF). |
+| IGES `.igs` `.iges` | Import | Solid B-Reps only; surface-only files are rejected, not sewn. |
+| OCCT BREP `.brep` | Import | No names or colours; unit assumed mm and reported. |
+| DXF + JSON manifest | Export | R2013, 1:1 mm, analytic LINE/ARC/CIRCLE/ELLIPSE. Always written. |
+| CSV | Export | Region table: area, perimeter, centroid, holes. |
+| SVG | Export | 1 unit = 1 mm, exact arcs. |
+| FEMM `.lua` | Export | Exact arcs, block labels per region. |
+| Gmsh `.geo` | Export | Arcs split below 180 degrees, physical surfaces per body and group. |
+| PyAEDT `.py` | Export | Text script; PyAEDT is not required to run the app. |
+| STL, OBJ, 3MF | Rejected | Triangle meshes cannot carry exact geometry; slicing them is not exact sectioning. |
+| Parasolid, ACIS, JT | Not supported | No free OpenCascade reader. Export STEP instead. |
+
 ## Quick start
 
-1. [Download](#download) and install CAD2Maxwell (or build it from source with the [one-time setup](#one-time-setup)).
-2. Start **CAD2Maxwell** from the Start menu.
-3. **Open STEP** (Ctrl+O) and choose a `.step` / `.stp` file. Try [`docs/demo/demo-motor.step`](docs/demo/demo-motor.step).
-4. Pick a plane in the ribbon (keys **1 / 2 / 3** for XY / XZ / YZ) and set the offset in **Section** settings.
-   For laminations that are not axis-aligned, select one sheet and click **Align to selected body**.
-5. **Compute** (Ctrl+Enter). Filled regions are closed contours; holes stay empty.
-6. **DXF** (Ctrl+E) saves a ZIP with `section.dxf` (1:1, mm) and `section.json`.
-7. Import `section.dxf` into Maxwell 2D using the [Maxwell import checklist](docs/maxwell-import-checklist.md).
+1. [Download](#download) and install, or build from source with the [one-time setup](#one-time-setup).
+2. Start **CAD2Maxwell**. **Open model** (Ctrl+O) or **Open demo motor** ([`docs/demo/demo-motor.step`](docs/demo/demo-motor.step)).
+3. Pick a plane (keys **1 / 2 / 3**) and set the offset in **Section**. For a tilted lamination, select one sheet and click **Align to selected body**.
+4. **Compute** (Ctrl+Enter), then **DXF** (Ctrl+E). The ZIP holds `section.dxf` (1:1, mm) and `section.json`.
+5. Import the DXF into Maxwell 2D with the [Maxwell import checklist](docs/maxwell-import-checklist.md).
 
-The [walkthrough](docs/first-trial.md) covers the details and troubleshooting.
+The [walkthrough](docs/first-trial.md) has details and troubleshooting.
 
 ## Download
 
@@ -80,7 +101,9 @@ The app writes its service log to `%LOCALAPPDATA%\com.cad2maxwell.desktop\logs\b
 
 | Key | Action |
 |-----|--------|
-| Ctrl+O | Open STEP (to open a project, use *Open project…* or drop a `.c2mproj` on the window) |
+| Ctrl+O | Open model (to open a project, use *Open project…* or drop a `.c2mproj` on the window) |
+| Ctrl+, | Settings |
+| Ctrl+Q | Quit (asks about unsaved changes) |
 | Ctrl+S / Ctrl+Shift+S | Save project / save as |
 | Ctrl+Enter | Compute section |
 | Ctrl+E | Export DXF |
@@ -92,7 +115,7 @@ The app writes its service log to `%LOCALAPPDATA%\com.cad2maxwell.desktop\logs\b
 | V | Show or hide the selected body or group |
 | I | Isolate the selected body or group |
 | Esc | Clear selection |
-| Wheel, drag | 2D: zoom at cursor, pan. 3D: zoom, orbit with the left button, pan with the others |
+| Wheel, drag | 2D: zoom at cursor, pan. 3D: zoom, orbit with the left button, pan with the others (see the mouse presets in Settings) |
 | Arrows, + / − | Pan and zoom the 2D view |
 
 ## Export checks
@@ -130,6 +153,23 @@ uv run --project backend python -m cad2maxwell_backend.cli `
 
 The output path must be absolute and unused; the command writes `section.dxf` and `section.json`.
 
+### Batch job
+
+`--job job.json` writes one export per section into an existing absolute output folder. Names are ASCII (`A-Z a-z 0-9 _ -`), the job is validated before anything runs, and nothing is written if any target already exists. `formats` accepts `dxf` (default), `csv`, `svg`, `femm`, `gmsh` and `pyaedt`; each is written as `<name>.<ext>` (`.csv`, `.svg`, `.lua`, `.geo`, `.py`) next to `<name>.dxf` and `<name>.json`. If any of these files exists, nothing is written.
+
+```json
+{"input": "C:\\Projects\\Motor\\assembly.step", "output_dir": "C:\\Projects\\Motor\\sweep",
+ "sections": [{"name": "mid", "plane": "XY", "offset_mm": 25.0},
+              {"name": "end", "plane": "XY", "offset_mm": 48.0, "formats": ["dxf"]}]}
+```
+
+The input may be STEP, IGES or BREP. Backslashes in JSON strings are written as `\\` (or use `/`).
+
+## Documentation
+
+Site: <https://jinksen.github.io/CAD-2D-convertor/>. Sources and index: [docs/README.md](docs/README.md).
+Product source of truth: [`CAD2Maxwell_PROJECT_SPEC.md`](CAD2Maxwell_PROJECT_SPEC.md). Release history: [CHANGELOG.md](CHANGELOG.md).
+
 ## Architecture
 
 ```text
@@ -137,26 +177,23 @@ Rune native UI ──► Rust service adapter ──► local FastAPI service �
  (no CAD objects)   (dialogs, process)      (sessions, validation)     (STEP/XCAF, B-Rep section)
 ```
 
-The UI only ever sees typed DTOs; exact shapes stay in the Python process. Sessions are bounded,
-section results are cached per plane, and bodies whose bounding box misses the plane are skipped.
-More in [architecture](docs/architecture.md), [geometry](docs/geometry.md),
-[DXF export](docs/dxf-export.md), [UX](docs/ux.md) and [settings](docs/settings.md); all pages are
-listed in the [documentation index](docs/README.md). Planned project and format work is in
-[projects and formats](docs/projects-and-formats.md) and the
-[UI, settings and formats spec](docs/superpowers/specs/2026-11-24-ui-settings-formats.md).
-[`CAD2Maxwell_PROJECT_SPEC.md`](CAD2Maxwell_PROJECT_SPEC.md) is the product source of truth.
+The UI only sees typed DTOs; exact shapes stay in the Python process. See [architecture](docs/architecture.md) and [geometry](docs/geometry.md).
 
 ## Known limitations
 
-- Exports are marked `draft_unvalidated` until the [Maxwell import checklist](docs/maxwell-import-checklist.md) has been run on real models.
-- **Align to selected body** needs a body with planar faces, such as a sheet.
-- The 3D preview is coarsened above 50,000 triangles; sectioning always uses the exact geometry.
-- Development scripts (`dev.ps1`, `run.ps1`) use port 8000; installed builds pick a free port, so several windows can run at once.
-- Windows x64 only; builds are not code-signed yet.
+- Exports are marked `draft_unvalidated`: the [Maxwell import checklist](docs/maxwell-import-checklist.md) has only been run on simple samples.
+- FEMM, Gmsh and PyAEDT outputs are checked structurally in tests; they have not been opened in those tools. Ellipses are rejected by the FEMM and Gmsh writers.
+- Motor-CAD DXF import is unverified; there is no preset.
+- Region-based formats (CSV, SVG, FEMM, Gmsh, PyAEDT) need a section computed in the same session.
+- The window close button cannot ask about unsaved changes (pinned Rune revision); a recovery file is kept instead.
+- Material labels are your own notes, not Maxwell library materials. The symmetry hint compares areas and centroids, not outlines.
+- **Align to selected body** needs a body with planar faces. The 3D preview is coarsened above 50,000 triangles; sectioning uses exact geometry.
+- IGES levels are not mapped. Picking one region among several of the same body is not available.
+- Windows x64 only, GPU-capable desktop required. Builds are not code-signed.
 
 ## Development
 
-The desktop UI is a native Rust app built with the pre-release [Rune](https://github.com/anomalyco/rune) framework (`frontend/rune-app`, pinned revision). Read [docs/rune-migration.md](docs/rune-migration.md) for the pin, gate results and known gaps before changing the desktop architecture.
+The desktop UI is a native Rust app on the pre-release [Rune](https://github.com/anomalyco/rune) framework (`frontend/rune-app`, pinned revision). Read [docs/rune-migration.md](docs/rune-migration.md) before changing the desktop architecture.
 
 ```powershell
 .\scripts\dev.ps1             # desktop app (cargo run) with a local backend
@@ -165,8 +202,7 @@ The desktop UI is a native Rust app built with the pre-release [Rune](https://gi
 uv run --project backend python scripts/demo/make_demo_motor.py   # regenerate the demo model
 ```
 
-CI runs `scripts/test.ps1` on pull requests and pushes to `main` when GitHub Actions is enabled for the repository; otherwise run it locally before merging. See [CONTRIBUTING.md](CONTRIBUTING.md),
-[SECURITY.md](SECURITY.md) and [AGENTS.md](AGENTS.md) (also covers using the PyCharm MCP tools).
+Development scripts use port 8000; installed builds pick a free port. CI runs `scripts/test.ps1` when GitHub Actions is enabled; otherwise run it locally. See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), [AGENTS.md](AGENTS.md) and the [release checklist](docs/release.md).
 
 ## License
 

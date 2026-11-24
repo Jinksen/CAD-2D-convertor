@@ -4,6 +4,7 @@ use rune::{Env, Mods, Runtime};
 
 use super::*;
 use crate::api::dto::{SectionCurve, SectionPlane, SectionWire};
+use crate::state::section::measure::Tool;
 use crate::state::section::{PlaneKind, SectionStats};
 
 fn line(a: P, b: P) -> SectionCurve {
@@ -82,6 +83,14 @@ fn synthetic(curves: usize) -> SectionResponse {
     section_of(comps)
 }
 
+/// Strokes of the drawing aids: the scale bar (3) and each origin axis in view.
+fn aid_strokes(s: &AppState) -> usize {
+    let size = s.section.view.size.unwrap();
+    let shown = visible_box(&Map::new(view_of(s), size), size, 0.0);
+    3 + usize::from(shown[0] <= 0.0 && shown[2] >= 0.0)
+        + usize::from(shown[1] <= 0.0 && shown[3] >= 0.0)
+}
+
 fn state_with(section: SectionResponse) -> AppState {
     let mut s = AppState::default();
     s.section.stats = Some(SectionStats::of(&section));
@@ -140,8 +149,14 @@ fn paint_of<'a>(
         hidden,
         color: none,
         selected: None,
+        hover: None,
         related: None,
         stale: false,
+        grid: s.section.view.grid,
+        fill_opacity: 0.28,
+        line_width: 1.0,
+        fmt: crate::format::NumberFormat::default(),
+        measure: &s.section.view.measure,
     }
 }
 
@@ -235,6 +250,23 @@ fn a_drag_pans_and_a_plain_click_selects_the_body_under_it() {
 }
 
 #[test]
+fn hovering_a_body_in_the_2d_view_highlights_it_and_leaving_clears_it() {
+    let mut rt = runtime(state_with(two_bodies()));
+    let (cx, cy) = rt.find("section-canvas").expect("canvas");
+    let view = view_of(&rt.state);
+    let size = rt.state.section.view.size.unwrap();
+    let b = Map::new(view, size).px([22.0, 2.0]);
+    let origin = (cx - size.width as f32 / 2.0, cy - size.height as f32 / 2.0);
+    rt.pointer_move(origin.0 + b[0], origin.1 + b[1]);
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.state.model.hover.as_deref(), Some("b"));
+    assert!(rt.state.model.selected.is_none(), "hover never selects");
+    rt.pointer_move(1.0, 1.0);
+    rt.frame(1.0 / 60.0);
+    assert!(rt.state.model.hover.is_none());
+}
+
+#[test]
 fn picking_ignores_hidden_bodies_and_treats_a_hole_as_empty() {
     let s = state_with(two_bodies());
     let scene = s.section.scene().unwrap();
@@ -264,7 +296,7 @@ fn picking_ignores_hidden_bodies_and_treats_a_hole_as_empty() {
 }
 
 #[test]
-fn holes_are_painted_over_and_errors_suppress_fills_but_not_outlines() {
+fn holes_are_bridged_out_of_the_fill_and_errors_suppress_fills_but_not_outlines() {
     let mut s = state_with(two_bodies());
     let look = Look::of(&rune::tok::theme(false));
     let build = |s: &AppState| {
@@ -291,10 +323,10 @@ fn holes_are_painted_over_and_errors_suppress_fills_but_not_outlines() {
             related_component_id: None,
         });
     let outlined = format!("{:?}", build(&s));
-    // Fills: square, hole (canvas color) and the second square; strokes in both cases.
-    assert_eq!(filled.matches("Fill {").count(), 3);
+    // Fills: the square with its hole bridged out, and the second square; strokes in both cases.
+    assert_eq!(filled.matches("Fill {").count(), 2);
     assert_eq!(outlined.matches("Fill {").count(), 0);
-    assert_eq!(outlined.matches("Stroke {").count(), 3);
+    assert_eq!(outlined.matches("Stroke {").count(), 3 + aid_strokes(&s));
 }
 
 #[test]
@@ -310,7 +342,7 @@ fn off_screen_wires_are_culled() {
             s.section.view.size.unwrap(),
             &look,
         );
-        format!("{shape:?}").matches("Stroke {").count()
+        format!("{shape:?}").matches("Stroke {").count() - aid_strokes(s)
     };
     assert_eq!(count(&s), 3);
     // Zoom in on body b: body a (and its hole) are gone.
@@ -388,11 +420,158 @@ fn bench_real_sections() {
         state.offset_mm = None;
         let plane = state.request(&summary.bounds_mm).unwrap();
         let t0 = Instant::now();
-        let section = client.section(&summary.import_id, &plane).unwrap();
+        let section = client.section(&summary.import_id, &plane, None).unwrap();
         println!(
             "BENCH service section {kind:?} took {:.0} ms",
             t0.elapsed().as_secs_f64() * 1e3
         );
         report(&format!("real-{kind:?}"), section);
     }
+}
+
+fn strokes(s: &AppState) -> usize {
+    let scene = s.section.scene().unwrap();
+    let (hidden, none) = (|_: &str| false, |_: &str| None);
+    let look = Look::of(&rune::tok::theme(false));
+    let shape = build_shape(
+        &paint_of(s, &scene, &hidden, &none),
+        view_of(s),
+        s.section.view.size.unwrap(),
+        &look,
+    );
+    format!("{shape:?}").matches("Stroke {").count()
+}
+
+#[test]
+fn the_grid_toggle_adds_lines_and_the_scale_bar_is_always_drawn() {
+    let mut s = state_with(two_bodies());
+    let off = strokes(&s);
+    s.section.view.grid = true;
+    assert!(strokes(&s) > off + 4, "grid lines under the geometry");
+    let mut rt = runtime(state_with(two_bodies()));
+    let (x, y) = rt.find("toggle-grid").expect("grid button");
+    rt.pointer_down(x, y);
+    rt.pointer_up(x, y);
+    rt.frame(1.0 / 60.0);
+    assert!(rt.state.section.view.grid);
+    assert!(rt.find("section-scale").is_some());
+}
+
+#[test]
+fn the_readout_shows_cursor_coordinates_in_the_display_unit_and_the_hovered_name() {
+    let mut s = state_with(two_bodies());
+    s.model
+        .set_imported(crate::state::model::tests::summary(&["a", "b"]));
+    s.shell.number_format.length_unit = crate::format::LengthUnit::Cm;
+    assert!(overlay::readout(&s).is_none(), "no pointer, no readout");
+    s.section.view.cursor = Some([20.0, 5.0]);
+    let text = overlay::readout(&s).unwrap();
+    assert!(
+        text.contains("2.000\u{a0}cm") && text.contains("0.500\u{a0}cm"),
+        "{text}"
+    );
+    s.model.hover = Some("b".into());
+    assert!(overlay::readout(&s).unwrap().ends_with("b_1"));
+}
+
+#[test]
+fn pointer_moves_track_the_cursor_in_section_coordinates() {
+    let mut rt = runtime(state_with(two_bodies()));
+    let (cx, cy) = rt.find("section-canvas").expect("canvas");
+    let size = rt.state.section.view.size.unwrap();
+    let origin = (cx - size.width as f32 / 2.0, cy - size.height as f32 / 2.0);
+    let at = Map::new(view_of(&rt.state), size).px([22.0, 2.0]);
+    rt.pointer_move(origin.0 + at[0], origin.1 + at[1]);
+    rt.frame(1.0 / 60.0);
+    let c = rt.state.section.view.cursor.expect("cursor");
+    assert!(
+        (c[0] - 22.0).abs() < 0.1 && (c[1] - 2.0).abs() < 0.1,
+        "{c:?}"
+    );
+    assert!(rt.find("section-readout").is_some());
+}
+
+#[test]
+fn the_legend_lists_visible_groups_with_their_color() {
+    let mut s = state_with(two_bodies());
+    s.model
+        .set_imported(crate::state::model::tests::summary(&["a", "b"]));
+    s.model.groups = vec![
+        crate::state::model::BodyGroup {
+            name: "Stator".into(),
+            component_ids: vec!["a".into()],
+            ..crate::state::model::BodyGroup::default()
+        },
+        crate::state::model::BodyGroup {
+            name: "Rotor".into(),
+            component_ids: vec!["b".into()],
+            ..crate::state::model::BodyGroup::default()
+        },
+    ];
+    assert_eq!(overlay::legend(&s).len(), 2);
+    assert_eq!(
+        overlay::legend(&s)[0],
+        ("Stator".to_string(), Some([255, 0, 0]))
+    );
+    s.model.toggle_group_hidden("Rotor");
+    let names: Vec<_> = overlay::legend(&s).into_iter().map(|e| e.0).collect();
+    assert_eq!(names, ["Stator"]);
+}
+
+fn click_at(rt: &mut Runtime<AppState>, world: P) {
+    let (cx, cy) = rt.find("section-canvas").expect("canvas");
+    let size = rt.state.section.view.size.unwrap();
+    let origin = (cx - size.width as f32 / 2.0, cy - size.height as f32 / 2.0);
+    let p = Map::new(view_of(&rt.state), size).px(world);
+    rt.pointer_down(origin.0 + p[0], origin.1 + p[1]);
+    rt.pointer_up(origin.0 + p[0], origin.1 + p[1]);
+    rt.frame(1.0 / 60.0);
+}
+
+#[test]
+fn the_distance_tool_snaps_to_corners_and_reads_the_distance_in_the_display_unit() {
+    let mut s = state_with(two_bodies());
+    s.shell.number_format.length_unit = crate::format::LengthUnit::Cm;
+    let mut rt = runtime(s);
+    assert!(rt.find("measure-reading").is_none(), "Select shows no hint");
+    assert!(
+        rt.find("tool-2d").is_some(),
+        "tool control in the 2D toolbar"
+    );
+    rt.state.section.view.tool = Tool::Distance;
+    rt.invalidate();
+    rt.frame(1.0 / 60.0);
+    assert!(rt.find("measure-reading").is_some(), "the tool hint");
+    // Near (not on) the corners (0,0) and (10,10): both snap.
+    click_at(&mut rt, [0.05, -0.04]);
+    assert_eq!(rt.state.section.view.measure.first, Some([0.0, 0.0]));
+    assert!(rt.state.model.selected.is_none(), "measuring never selects");
+    click_at(&mut rt, [10.03, 9.97]);
+    let text = overlay::measure_text(&rt.state).unwrap();
+    assert!(text.starts_with("Distance 1.414\u{a0}cm"), "{text}");
+    assert!(text.contains("dx 1.000\u{a0}cm"), "{text}");
+}
+
+#[test]
+fn the_radius_tool_reads_a_circle_and_reports_a_miss() {
+    let mut rt = runtime(state_with(two_bodies()));
+    rt.state.section.view.tool = Tool::Radius;
+    click_at(&mut rt, [7.0, 5.0]);
+    let text = overlay::measure_text(&rt.state).unwrap();
+    assert!(text.starts_with("Radius 2.000\u{a0}mm"), "{text}");
+    assert!(text.contains("(5.000\u{a0}mm, 5.000\u{a0}mm)"), "{text}");
+    click_at(&mut rt, [1.0, 1.0]);
+    assert_eq!(
+        overlay::measure_text(&rt.state).as_deref(),
+        Some("No arc or circle under the pointer.")
+    );
+}
+
+#[test]
+fn measure_marks_add_strokes_over_the_geometry() {
+    let mut s = state_with(two_bodies());
+    let before = strokes(&s);
+    s.section.view.measure.click_distance([0.0, 0.0]);
+    s.section.view.measure.click_distance([10.0, 10.0]);
+    assert_eq!(strokes(&s), before + 5, "two crosses and the line");
 }

@@ -2,37 +2,43 @@
 //!
 //! Curves stay analytic in state; each view build tessellates only what is on screen, at a
 //! tolerance of a fraction of a pixel, so arcs look round at any zoom and the section data (and
-//! the DXF export) are never touched. Holes are painted in the canvas color over their body's
-//! fill because Rune fills are simple polygons without holes.
+//! the DXF export) are never touched. Rune fills are simple polygons without holes, so each hole
+//! is bridged into its outer ring (`fill`) to leave it genuinely empty.
 
 use rune::tok::{Theme, space, type_};
 use rune::{
-    Color, Drag, El, Key, KeyEvent, LineCap, MagnifyEvent, Phase, PointerButton, Shape, Tx,
-    WheelEvent, canvas as draw, col, row, text,
+    Color, Drag, El, Key, KeyEvent, LineCap, MagnifyEvent, Phase, PointerButton, PointerEvent,
+    Shape, Tx, WheelEvent, canvas as draw, col, row, text,
 };
 
 use rune_kit::Kit;
 
-use super::button;
+use super::{button, choice};
 use crate::api::dto::{SectionComponent, SectionResponse, SectionWire, Severity, WireRole};
+use crate::format::NumberFormat;
 use crate::state::AppState;
 use crate::state::section::Scene;
 use crate::state::section::camera::{self, Size, ViewBox};
 use crate::state::section::geometry::{self, outline_color};
+use crate::state::section::measure::Measure;
+use crate::state::section::measure::Tool;
 
 const PAN_DRAG_PX: f32 = 3.0;
 /// Pointer tolerance for picking a curve, in pixels.
 const PICK_PX: f64 = 4.0;
+/// A measurement point snaps to a curve end or arc centre within this many pixels.
+const SNAP_PX: f64 = 8.0;
 /// Wires smaller than this on screen are not drawn.
 const MIN_WIRE_PX: f64 = 0.3;
-/// Ear clipping is quadratic; longer polygons are stroked but not filled.
-const MAX_FILL_POINTS: usize = 3000;
-
 type P = [f64; 2];
 
 struct Look {
     dark: bool,
-    bg: Color,
+    /// Grid lines, origin axes and scale bar ink.
+    faint: Color,
+    axis_x: Color,
+    axis_y: Color,
+    ink: Color,
     selected: Color,
     related: Color,
     default: Color,
@@ -47,7 +53,10 @@ impl Look {
         let dark = t.bg.luminance() < 0.5;
         Look {
             dark,
-            bg: t.bg,
+            faint: t.text_secondary.alpha(0.18),
+            axis_x: rgb(if dark { [230, 100, 100] } else { [190, 40, 40] }).alpha(0.7),
+            axis_y: rgb(if dark { [100, 200, 120] } else { [30, 130, 60] }).alpha(0.7),
+            ink: t.text_secondary,
             selected: rgb(if dark { [98, 160, 234] } else { [26, 95, 180] }),
             related: rgb(if dark { [255, 163, 72] } else { [179, 92, 0] }),
             default: rgb(if dark {
@@ -149,7 +158,15 @@ pub struct Paint<'a> {
     pub color: &'a dyn Fn(&str) -> Option<[u8; 3]>,
     pub selected: Option<&'a str>,
     pub related: Option<&'a str>,
+    /// Body under the pointer in the tree or this view: display highlight only.
+    pub hover: Option<&'a str>,
     pub stale: bool,
+    pub grid: bool,
+    /// Region fill alpha and ordinary outline width, from the viewport settings.
+    pub fill_opacity: f32,
+    pub line_width: f32,
+    pub fmt: NumberFormat,
+    pub measure: &'a Measure,
 }
 
 fn build_shape(p: &Paint, view: ViewBox, size: Size, look: &Look) -> Shape {
@@ -167,7 +184,7 @@ fn build_shape(p: &Paint, view: ViewBox, size: Size, look: &Look) -> Shape {
     let base = |id: &str| -> (Color, Color) {
         if p.selected == Some(id) {
             (look.selected, look.selected)
-        } else if p.related == Some(id) {
+        } else if p.related == Some(id) || p.hover == Some(id) {
             (look.related, look.related)
         } else if let Some(c) = (p.color)(id) {
             (rgb(c), rgb(outline_color(c, look.dark)))
@@ -175,7 +192,7 @@ fn build_shape(p: &Paint, view: ViewBox, size: Size, look: &Look) -> Shape {
             (look.default, look.default)
         }
     };
-    let mut shape = Shape::new();
+    let mut shape = overlay::under(Shape::new(), &map, size, look, p.grid);
     if fills_ok {
         for &i in &p.scene.paint_order {
             let comp = &s.components[i];
@@ -183,29 +200,28 @@ fn build_shape(p: &Paint, view: ViewBox, size: Size, look: &Look) -> Shape {
             if !complete || (p.hidden)(&comp.component_id) {
                 continue;
             }
-            let fill = base(&comp.component_id).0;
-            for w in drawn[i].iter().filter(|w| w.closed) {
-                let pts = &w.lines[0];
-                if pts.len() > MAX_FILL_POINTS {
-                    continue;
+            let fill_color = base(&comp.component_id).0.alpha(p.fill_opacity * dim);
+            for (pts, holes) in fill::rings(&drawn[i]) {
+                let cut: Vec<&[P]> = holes.iter().map(|h| h.as_slice()).collect();
+                if let Some(poly) = fill::with_holes(&pts, &cut) {
+                    let poly: Vec<[f32; 2]> =
+                        poly.iter().map(|p| [p[0] as f32, p[1] as f32]).collect();
+                    shape = shape.fill(poly, fill_color);
                 }
-                let color = if w.role == Some(WireRole::Hole) {
-                    look.bg
-                } else {
-                    fill.alpha(0.28 * dim)
-                };
-                shape = shape.fill(pts.clone(), color);
             }
         }
     }
     // Strokes: ordinary bodies first, then the related and selected ones on top.
-    let rank = |id: &str| u8::from(p.related == Some(id)) + 2 * u8::from(p.selected == Some(id));
+    let rank = |id: &str| {
+        u8::from(p.related == Some(id) || p.hover == Some(id))
+            + 2 * u8::from(p.selected == Some(id))
+    };
     let mut order: Vec<usize> = (0..s.components.len()).collect();
     order.sort_by_key(|&i| rank(&s.components[i].component_id));
     for i in order {
         let id = &s.components[i].component_id;
         let alpha = if (p.hidden)(id) { 0.2 } else { dim };
-        let width = if rank(id) == 0 { 1.0 } else { 2.0 };
+        let width = p.line_width * if rank(id) == 0 { 1.0 } else { 2.0 };
         let color = base(id).1.alpha(alpha);
         for w in &drawn[i] {
             for line in &w.lines {
@@ -213,7 +229,8 @@ fn build_shape(p: &Paint, view: ViewBox, size: Size, look: &Look) -> Shape {
             }
         }
     }
-    shape
+    let shape = overlay::marks(shape, &map, look, p.measure);
+    overlay::over(shape, &map, size, look, &p.fmt)
 }
 
 /// The body under a screen point: a curve within a few pixels, else the smallest region.
@@ -271,7 +288,13 @@ fn paint<'a>(
         color,
         selected: s.model.selected.as_deref(),
         related: s.model.related.as_deref(),
+        hover: s.model.hover.as_deref(),
         stale: s.section.stats.is_none(),
+        grid: s.section.view.grid,
+        fill_opacity: s.shell.settings.viewport.fill_opacity,
+        line_width: s.shell.settings.viewport.line_width,
+        fmt: s.shell.number_format,
+        measure: &s.section.view.measure,
     }
 }
 
@@ -325,7 +348,30 @@ fn on_drag(s: &mut AppState, d: &mut Drag, tx: &mut Tx) {
     }
 }
 
+/// The body under the pointer in the shown section.
+fn body_at(s: &AppState, at: P) -> Option<String> {
+    let (section, scene, view, size) = (
+        s.section.last.as_ref()?,
+        s.section.scene()?,
+        s.section.camera()?,
+        s.section.view.size?,
+    );
+    let hidden = |id: &str| s.model.hidden.contains(id);
+    let none = |_: &str| None;
+    pick(&paint(s, section, &scene, &hidden, &none), view, size, at)
+}
+
+/// Highlights the body in the tree too and scrolls its row into view.
+pub(super) fn hover_from_view(s: &mut AppState, id: Option<String>, tx: &mut Tx) {
+    if s.model.hover_body(id.clone()) {
+        tx.scroll_into_view(format!("body-{}", id.unwrap_or_default()));
+    }
+}
+
 fn click(s: &mut AppState, at: P) {
+    if measuring::click(s, at) {
+        return;
+    }
     let (Some(section), Some(scene), Some(view), Some(size)) = (
         &s.section.last,
         s.section.scene(),
@@ -357,7 +403,7 @@ pub fn canvas(s: &AppState, t: &Theme, k: &Kit) -> El {
             .child(note(if s.model.imported.is_some() {
                 "No section computed. Choose a plane and press Compute section."
             } else {
-                "Open or drop a STEP file."
+                "Open or drop a CAD file."
             }));
     };
     let scene = s.section.scene();
@@ -411,6 +457,22 @@ pub fn canvas(s: &AppState, t: &Theme, k: &Kit) -> El {
             button(k, "zoom-out", "−", true)
                 .on_press(|s: &mut AppState| s.section.zoom(1.25, None)),
         )
+        .child(choice(
+            k,
+            "tool-2d",
+            "2D tool",
+            &Tool::ALL.map(Tool::label),
+            Tool::ALL.iter().position(|t| *t == s.section.view.tool),
+            |s, i| {
+                s.section.view.tool = Tool::ALL[i];
+                s.section.view.measure.clear();
+            },
+        ))
+        .child(
+            button(k, "toggle-grid", "Grid", true)
+                .checked(s.section.view.grid)
+                .on_press(|s: &mut AppState| s.section.view.grid = !s.section.view.grid),
+        )
         .child(note(status));
     let surface = draw(shape)
         .key("section-canvas")
@@ -448,15 +510,37 @@ pub fn canvas(s: &AppState, t: &Theme, k: &Kit) -> El {
             true
         })
         .on_key(|s: &mut AppState, e: &KeyEvent, _| on_key(s, e))
+        .on_pointer_move_local(|s: &mut AppState, e: PointerEvent, tx: &mut Tx| {
+            let at = [f64::from(e.x), f64::from(e.y)];
+            s.section.view.cursor = s
+                .section
+                .camera()
+                .zip(s.section.view.size)
+                .map(|(v, size)| camera::screen_to_view(v, size, at))
+                .map(|w| [w[0], -w[1]]);
+            let id = body_at(s, at);
+            hover_from_view(s, id, tx);
+        })
+        .on_hover_change(|s: &mut AppState, over, _| {
+            if !over {
+                s.section.view.cursor = None;
+                s.model.hover = None;
+            }
+        })
         .pointer_buttons([PointerButton::Middle])
         .on_drag(on_drag);
-    col()
+    let map = view.zip(size).map(|(v, sz)| Map::new(v, sz));
+    let area = col()
         .w_full()
         .grow(1.0)
         .min_h(0.0)
-        .child(tools)
         .child(surface)
+        .children(overlay::labels(s, t, map.as_ref(), size));
+    col().w_full().grow(1.0).min_h(0.0).child(tools).child(area)
 }
 
+mod fill;
+mod measuring;
+mod overlay;
 #[cfg(test)]
 mod tests;

@@ -3,17 +3,20 @@
 
 use rune::tok::{Theme, space, type_};
 use rune::{
-    Drag, El, Key, KeyEvent, Phase, PointerButton, SurfaceFit, Tx, WheelEvent, col, row, text,
+    Drag, El, Key, KeyEvent, Phase, PointerButton, PointerEvent, SurfaceFit, Tx, WheelEvent, col,
+    el, row, text,
 };
 
 use rune_kit::Kit;
 
+use super::preview_aids as aids;
 use super::{button, heading};
-use crate::api::dto::{BoundsMm, SectionPlane};
-use crate::render3d::raster::{Body, Line, Scene, guide_outline};
-use crate::render3d::{StandardView, plane_guide};
+use crate::api::dto::BoundsMm;
+use crate::render3d::raster::{Body, Line, Scene, draw_triad, guide_outline};
+use crate::render3d::{StandardView, plane_guide, triad};
 use crate::state::AppState;
 use crate::state::preview::{MeshStatus, RenderKey, ViewportMode};
+use crate::state::settings::{Button, DragAction};
 
 /// Default body color when the source has none (Three.js scene's 0x78a9ca).
 const DEFAULT_COLOR: [u8; 3] = [0x78, 0xa9, 0xca];
@@ -23,7 +26,9 @@ const CLICK_SLOP: f32 = 4.0;
 
 pub fn viewport(s: &AppState, t: &Theme, k: &Kit) -> El {
     let three_d = s.preview.mode == ViewportMode::ThreeD;
-    let body = if three_d {
+    let body = if s.model.imported.is_none() && s.shell.busy.is_none() {
+        super::welcome::welcome(s, t, k)
+    } else if three_d {
         canvas(s, t)
     } else {
         super::section_view::canvas(s, t, k)
@@ -44,12 +49,12 @@ pub fn viewport(s: &AppState, t: &Theme, k: &Kit) -> El {
             },
         ));
     if three_d {
-        c = c.child(toolbar(s, t, k));
+        c = c.child(toolbar(s, k));
     }
     c.child(body)
 }
 
-fn toolbar(s: &AppState, t: &Theme, k: &Kit) -> El {
+fn toolbar(s: &AppState, k: &Kit) -> El {
     let ready = s.preview.status == MeshStatus::Ready;
     let mut r = row()
         .key("view-toolbar")
@@ -78,42 +83,12 @@ fn toolbar(s: &AppState, t: &Theme, k: &Kit) -> El {
             ),
         );
     }
-    r.child(
-        text(help(s))
-            .font(type_::LABEL)
-            .color(t.text_secondary)
-            .truncate()
-            .grow(1.0),
-    )
+    r.child(el().grow(1.0))
+        .child(button(k, "view-help", "?", true).help(aids::HINT))
 }
 
 fn bounds(s: &AppState) -> Option<BoundsMm> {
     Some(s.model.imported.as_ref()?.bounds_mm.clone())
-}
-
-fn help(s: &AppState) -> String {
-    let plane = s
-        .model
-        .imported
-        .as_ref()
-        .and_then(|i| s.section.request(&i.bounds_mm))
-        .map(|p| match p {
-            SectionPlane::XY { offset_mm } => format!("XY plane, z = {offset_mm:.3} mm"),
-            SectionPlane::XZ { offset_mm } => format!("XZ plane, y = {offset_mm:.3} mm"),
-            SectionPlane::YZ { offset_mm } => format!("YZ plane, x = {offset_mm:.3} mm"),
-            SectionPlane::Custom { .. } => "Custom plane".to_string(),
-        })
-        .unwrap_or_default();
-    let coarse = match &s.preview.mesh {
-        Some(m) if m.coarsened => format!(
-            " | Coarse display mesh ({:.3} mm); sectioning uses exact geometry",
-            m.deflection_mm
-        ),
-        _ => String::new(),
-    };
-    format!(
-        "{plane} | Drag to orbit, right or middle drag to pan, wheel to zoom, click a body to select, F fit selection, Shift+F fit all{coarse}"
-    )
 }
 
 fn canvas(s: &AppState, t: &Theme) -> El {
@@ -129,19 +104,32 @@ fn canvas(s: &AppState, t: &Theme) -> El {
             s.ensure_preview();
         });
     let message = match &s.preview.status {
-        _ if s.model.imported.is_none() => "Open or drop a STEP file.".to_string(),
+        _ if s.model.imported.is_none() => "Open or drop a CAD file.".to_string(),
         MeshStatus::Empty | MeshStatus::Loading => "Generating 3D preview…".to_string(),
         MeshStatus::Failed(message) => message.clone(),
         MeshStatus::Ready => {
             draw(s, t);
             return base
                 .pixels_fit(&s.preview.pixels, SurfaceFit::Fill)
+                .children(aids::labels(s, t))
                 .on_wheel(|s: &mut AppState, e: WheelEvent, _| {
                     s.preview.camera.zoom(f64::from(e.dy));
                     true
                 })
                 .focusable(true)
                 .on_key(|s: &mut AppState, e: &KeyEvent, _| on_key(s, e))
+                .on_pointer_move_local(|s: &mut AppState, e: PointerEvent, tx: &mut Tx| {
+                    let (w, h) = s.preview.viewport;
+                    let id = (w > 0.0 && h > 0.0)
+                        .then(|| body_at(s, e.x / w, e.y / h))
+                        .flatten();
+                    super::section_view::hover_from_view(s, id, tx);
+                })
+                .on_hover_change(|s: &mut AppState, over, _| {
+                    if !over {
+                        s.model.hover = None;
+                    }
+                })
                 .pointer_buttons([PointerButton::Middle, PointerButton::Secondary])
                 .on_drag(drag);
         }
@@ -171,9 +159,19 @@ fn on_key(s: &mut AppState, e: &KeyEvent) -> bool {
     true
 }
 
-/// Left drag orbits (a short one is a click that picks), other buttons pan.
+/// What a drag does depends on the mouse preset; a short left drag is a click that picks.
 fn drag(s: &mut AppState, d: &mut Drag, tx: &mut Tx) {
-    let pan = tx.button() != PointerButton::Primary;
+    let button = match tx.button() {
+        PointerButton::Primary => Button::Left,
+        PointerButton::Middle => Button::Middle,
+        _ => Button::Right,
+    };
+    let action = s
+        .shell
+        .settings
+        .viewport
+        .mouse
+        .action(button, tx.mods().shift);
     let p = &mut s.preview;
     match d.phase {
         Phase::Down => p.drag_from = p.camera,
@@ -181,34 +179,36 @@ fn drag(s: &mut AppState, d: &mut Drag, tx: &mut Tx) {
         _ => {
             let (dx, dy, h) = (f64::from(d.dx), f64::from(d.dy), f64::from(d.h));
             let mut camera = p.drag_from;
-            if pan {
-                camera.pan(dx, dy, h);
-            } else {
-                camera.orbit(dx, dy, h);
+            match action {
+                DragAction::Pan => camera.pan(dx, dy, h),
+                DragAction::Orbit => camera.orbit(dx, dy, h),
+                DragAction::None => {}
             }
             p.camera = camera;
-            if d.phase == Phase::Up && !pan && d.dx.hypot(d.dy) < CLICK_SLOP {
+            if d.phase == Phase::Up && button == Button::Left && d.dx.hypot(d.dy) < CLICK_SLOP {
                 pick(s, d.x / d.w, d.y / d.h);
             }
         }
     }
 }
 
+/// The body under the point given as a fraction of the viewport.
+fn body_at(s: &AppState, fx: f32, fy: f32) -> Option<String> {
+    let frame = s.preview.frame.borrow();
+    let (x, y) = (
+        (fx * frame.width as f32) as usize,
+        (fy * frame.height as f32) as usize,
+    );
+    let body = frame.pick(x, y)?;
+    let mesh = s.preview.mesh.as_ref()?;
+    mesh.components
+        .get(body as usize)
+        .map(|c| c.component_id.clone())
+}
+
 /// Selects the body under the point given as a fraction of the viewport.
 fn pick(s: &mut AppState, fx: f32, fy: f32) {
-    let id = {
-        let frame = s.preview.frame.borrow();
-        let (x, y) = (
-            (fx * frame.width as f32) as usize,
-            (fy * frame.height as f32) as usize,
-        );
-        let Some(body) = frame.pick(x, y) else { return };
-        let Some(mesh) = &s.preview.mesh else { return };
-        mesh.components
-            .get(body as usize)
-            .map(|c| c.component_id.clone())
-    };
-    if let Some(id) = id {
+    if let Some(id) = body_at(s, fx, fy) {
         s.model.select(Some(id));
     }
 }
@@ -224,6 +224,8 @@ fn draw(s: &AppState, t: &Theme) {
     } else {
         1.0
     };
+    // Preview quality scales the software renderer's resolution; the surface stretches to fit.
+    let scale = scale * s.shell.settings.viewport.quality.render_scale();
     let size = (
         (p.viewport.0 * scale).round() as usize,
         (p.viewport.1 * scale).round() as usize,
@@ -241,8 +243,14 @@ fn draw(s: &AppState, t: &Theme) {
         camera: p.camera,
         hidden: s.model.hidden.clone(),
         selected: s.model.selected.clone(),
+        hover: s.model.hover.clone(),
         guide,
-        background: [t.bg.r, t.bg.g, t.bg.b].map(|c| (c * 255.0).round() as u8),
+        background: s
+            .shell
+            .settings
+            .viewport
+            .background_3d
+            .rgb([t.bg.r, t.bg.g, t.bg.b].map(|c| (c * 255.0).round() as u8)),
     };
     if p.drawn.borrow().as_ref() == Some(&key) {
         return;
@@ -262,6 +270,8 @@ fn draw(s: &AppState, t: &Theme) {
             color: c.color.unwrap_or(DEFAULT_COLOR).map(f32::from),
             emissive: if key.selected.as_deref() == Some(c.component_id.as_str()) {
                 SELECTED_TINT
+            } else if key.hover.as_deref() == Some(c.component_id.as_str()) {
+                SELECTED_TINT.map(|v| v * 0.5)
             } else {
                 [0.0; 3]
             },
@@ -279,10 +289,18 @@ fn draw(s: &AppState, t: &Theme) {
         background: key.background,
         edge_color: [0x1f, 0x23, 0x28],
     };
-    let rgba = p
+    let mut rgba = p
         .frame
         .borrow_mut()
         .render(size.0, size.1, &p.camera, &scene);
+    let inset = aids::TRIAD_INSET * scale;
+    draw_triad(
+        &mut rgba,
+        size.0,
+        size.1,
+        [inset, size.1 as f32 - inset],
+        triad(&p.camera, f64::from(aids::TRIAD_LEN as f32 * scale)),
+    );
     p.pixels.set(size.0 as u32, size.1 as u32, rgba);
     p.last_frame_ms
         .set(started.elapsed().as_secs_f32() * 1000.0);
@@ -405,6 +423,25 @@ mod tests {
     }
 
     #[test]
+    fn the_inventor_preset_does_not_orbit_on_a_left_drag_and_quality_scales_the_render() {
+        let mut rt = runtime();
+        rt.state.shell.settings.viewport.mouse = crate::state::settings::MousePreset::Inventor;
+        rt.state.shell.settings.viewport.quality = crate::state::settings::Quality::Draft;
+        rt.invalidate();
+        rt.frame(1.0 / 60.0);
+        let (w, _) = rt.state.preview.pixels.size();
+        assert!(w < 400, "draft quality renders at half resolution: {w}");
+        let (x, y) = rt.find("preview3d").expect("viewport");
+        let before = rt.state.preview.camera;
+        rt.pointer_move(x, y);
+        rt.pointer_down(x, y);
+        rt.pointer_move(x + 60.0, y + 30.0);
+        rt.pointer_up(x + 60.0, y + 30.0);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.state.preview.camera.yaw, before.yaw);
+    }
+
+    #[test]
     fn f_fits_the_selection_and_shift_f_fits_everything() {
         let mut rt = runtime();
         let s = &mut rt.state;
@@ -430,6 +467,32 @@ mod tests {
         assert!(key(s, "F", true));
         assert_ne!(s.preview.camera, panned);
         assert!(!key(s, "x", false));
+    }
+
+    #[test]
+    fn the_plane_label_triad_letters_and_hint_tooltip_are_present() {
+        let mut rt = runtime();
+        rt.state.shell.number_format.length_unit = crate::format::LengthUnit::Cm;
+        rt.state.section.offset_mm = Some(25.0);
+        rt.invalidate();
+        rt.frame(1.0 / 60.0);
+        for key in ["plane-label", "triad-x", "triad-y", "triad-z", "view-help"] {
+            assert!(rt.find(key).is_some(), "{key}");
+        }
+        let label = super::aids::plane_label(&rt.state).unwrap();
+        assert_eq!(label, "XY plane, z = 2.500\u{a0}cm");
+        assert!(super::aids::mesh_note(&rt.state).is_none());
+        rt.state.preview.mesh = rt.state.preview.mesh.take().map(|m| {
+            std::sync::Arc::new(PreviewMesh {
+                coarsened: true,
+                ..(*m).clone()
+            })
+        });
+        assert!(
+            super::aids::mesh_note(&rt.state)
+                .unwrap()
+                .contains("exact geometry")
+        );
     }
 
     #[test]

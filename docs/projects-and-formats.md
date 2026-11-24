@@ -13,15 +13,25 @@ Status: proposal plus the first slice, implemented in the same PR (0.3).
 
 Groups are display organization only. They do not change sectioning, validation, export names or the DXF.
 
+## Project file fields
+
+All fields after `plane` are optional, so older files load and older apps ignore them; the version stays 1.
+
+| Field | Content |
+|-------|---------|
+| `tolerance` | optional `small_region_mm2`, `sliver_ratio`, `join_mm` overrides; absent means the service defaults |
+| `sections[]`, `active_section` | named sections: `name`, `plane` (`kind`, `normal_xyz`, `offset_mm`), optional `tolerance` and `last_export`. Files without them load as one section named "Section 1" built from `plane` and `tolerance`, which still mirror the active section |
+| `groups[]` | `name`, `component_ids`, optional `material` (one of the export's fixed labels) and `material_note` (custom only, 80 characters) |
+
 ## Next: project file
 
 In order of value:
 
-1. **Unsaved-changes marker and prompt.** Show `*` in the title after a change, and ask before closing or opening another model. The project already serializes the full session, so comparing the last-saved text with `project_file()` is enough.
-2. **Several named sections per project.** For example "Mid stack z = 25 mm" and "End winding z = 48 mm". Each one stores plane, offset and the export path it was last written to. This is the most common reason to reopen a project.
+1. ~~**Unsaved-changes marker and prompt.**~~ Done (see [ux.md](ux.md)). Show `*` in the title after a change, and ask before closing or opening another model. The project already serializes the full session, so comparing the last-saved text with `project_file()` is enough.
+2. ~~**Several named sections per project.**~~ Done. For example "Mid stack z = 25 mm" and "End winding z = 48 mm". Each one stores plane, offset and the export path it was last written to. This is the most common reason to reopen a project.
 3. **Groups in the export.** Write each body's groups to the JSON manifest and offer DXF layers per group (ASCII-safe names, as for export names). In Maxwell, a layer per group is one material or excitation assignment instead of one per body. This needs a backend change and a manifest schema version bump.
-4. **Recent projects.** A short list in the ribbon, stored in preferences, not in the project.
-5. **Recovery file.** Write `<name>.c2mproj.autosave` every few minutes and offer it on the next open if it is newer than the project.
+4. ~~**Recent projects.**~~ Done. A short list in the ribbon, stored in preferences, not in the project.
+5. ~~**Recovery file.**~~ Done (see [ux.md](ux.md)). Write `<name>.c2mproj.autosave` every few minutes and offer it on the next open if it is newer than the project.
 6. **Published schema.** A JSON Schema for `.c2mproj` in `docs/`, with the rule already in use: new fields are optional, and the version only increases when an older app would misread the file.
 
 Not planned: storing geometry or section results in the project. The project stays a small, readable reference to the STEP file plus settings, and the STEP hash detects changes.
@@ -35,8 +45,8 @@ The core constraint applies to every format: exact B-Rep in, analytic curves out
 | Format | Verdict | Notes |
 |--------|---------|-------|
 | STEP AP203/214/242 | Supported | Names, colours and assembly structure through XCAF. |
-| IGES (`.igs`, `.iges`) | Recommended next | Open CASCADE reads it with `IGESCAFControl_Reader`, including names, colours and levels. It is the second most common neutral CAD format for older motor models. About one reader function plus tests. |
-| OCCT BREP (`.brep`) | Cheap, low value | Exact geometry but no names or colours. Useful for test fixtures and FreeCAD exports. |
+| IGES (`.igs`, `.iges`) | Supported (backend) | `IGESCAFControl_Reader`: names, colours and assembly structure through the shared XCAF traversal; units are read from the global section and converted to mm by OCCT. Only files with solid B-Reps import; surface-only IGES (trimmed faces) is rejected, never sewn silently. IGES levels are not mapped yet. |
+| OCCT BREP (`.brep`) | Supported (backend) | Solids become bodies named `<file stem>_<n>`. No names or colours; `brep_no_metadata` and `assumed_source_unit` (mm) diagnostics. |
 | Inventor `.ipt` / `.iam` | Adapter only | Through the planned Inventor COM add-in that exports STEP. It is never a dependency of the core. |
 | Parasolid, ACIS `.sat`, JT | Not possible | Open CASCADE has no free readers for them. Ask users for STEP. |
 | STL, OBJ, 3MF | Rejected | Triangle meshes. Sectioning them would be mesh slicing. |
@@ -46,10 +56,12 @@ The core constraint applies to every format: exact B-Rep in, analytic curves out
 | Format | Verdict | Notes |
 |--------|---------|-------|
 | DXF + JSON manifest | Supported | 1:1 in millimetres, analytic arcs, deterministic names. |
-| DXF with layers per group | Recommended next | See "Groups in the export" above. |
-| Region table (CSV) | Recommended | Region name, source body, groups, area, perimeter and centroid. Useful for checking and reports, and computed from exact geometry in the backend. |
-| SVG | Useful | Documentation and reports. Arcs map to SVG arcs exactly. Same geometry as the DXF, with a different writer. |
-| PyAEDT script (`.py`) | Adapter | Builds the regions in Maxwell 2D, names them and assigns materials per group. It belongs behind an adapter. PyAEDT stays optional and is never required to run the core. |
+| DXF with layers per group | Supported (backend) | `layer_mode` group or hybrid, `color_mode` and material labels; manifest schema 2. See [dxf-export](dxf-export.md). |
+| Region table (CSV) | Supported (backend) | Region name, source body, groups, area, perimeter and centroid. Useful for checking and reports, and computed from exact geometry in the backend. |
+| SVG | Supported (backend) | Documentation and reports. Arcs map to SVG arcs exactly. Same geometry as the DXF, with a different writer. |
+| PyAEDT script (`.py`) | Supported (backend) | Builds the regions in Maxwell 2D, names them and assigns materials per group. It belongs behind an adapter. PyAEDT stays optional and is never required to run the core. |
+| FEMM `.lua` | Supported (backend) | `mi_addarc` with exact angles, block labels per region. FEMM is never a dependency. |
+| Gmsh `.geo` | Supported (backend) | `Circle` arcs under 180 degrees, physical surfaces per body and group. |
 | Motor-CAD DXF | Check first | Motor-CAD imports DXF. Verify which layer and closure rules it needs before adding a preset. |
 | ACIS `.sat` | Not possible | No free writer in Open CASCADE. DXF covers Maxwell 2D import. |
 
@@ -64,14 +76,14 @@ The core constraint applies to every format: exact B-Rep in, analytic curves out
 | FEMM `.lua` | Export (adapter), free 2D magnetics without ANSYS | [#69](https://github.com/Jinksen/CAD-2D-convertor/issues/69) |
 | Gmsh `.geo` | Export (adapter), for Gmsh, Elmer and GetDP | [#70](https://github.com/Jinksen/CAD-2D-convertor/issues/70) |
 | PyAEDT script | Export (adapter) | [#71](https://github.com/Jinksen/CAD-2D-convertor/issues/71) |
-| Motor-CAD DXF, 2D STEP faces, DXF R12, PNG/PDF report | Spikes | [#72](https://github.com/Jinksen/CAD-2D-convertor/issues/72) |
+| Motor-CAD DXF, 2D STEP faces, DXF R12, PNG/PDF report | Spikes done, see [format-spikes](research/format-spikes.md) | [#72](https://github.com/Jinksen/CAD-2D-convertor/issues/72) |
 
 DXF layer and colour modes and groups in the manifest are [#63](https://github.com/Jinksen/CAD-2D-convertor/issues/63).
 
 ### Suggested order
 
 1. Groups in the manifest and as DXF layers, since they make the groups added in 0.3 useful in Maxwell.
-2. IGES import.
+2. ~~IGES import~~ (done in the backend; the Rune file dialog filter is separate).
 3. Unsaved-changes prompt and named sections.
 4. Region table CSV and SVG.
 5. The PyAEDT adapter, after DXF import has been verified with the [Maxwell import checklist](maxwell-import-checklist.md).
