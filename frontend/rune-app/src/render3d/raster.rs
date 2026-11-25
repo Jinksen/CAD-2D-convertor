@@ -54,6 +54,8 @@ pub struct Frame {
     ids: Vec<u32>,
     depth: Vec<f32>,
     svs: Vec<Vec<Sv>>,
+    /// Set while `render_smooth` draws its double-size frame.
+    thick: bool,
 }
 
 const EDGE_BIAS: f32 = 3e-4;
@@ -92,6 +94,7 @@ struct Proj {
     cx: f32,
     cy: f32,
     near: f32,
+    thick: bool,
 }
 
 impl Proj {
@@ -109,6 +112,7 @@ impl Proj {
             cx: w as f32 / 2.0,
             cy: h as f32 / 2.0,
             near: (cam.distance * 0.01).max(1e-4) as f32,
+            thick: false,
         }
     }
 
@@ -162,6 +166,24 @@ impl Proj {
     }
 
     /// The part of the segment in front of the near plane.
+    /// The line, plus copies one pixel right and down when supersampling, so a 2 px stroke
+    /// keeps its 1 px weight once the frame is averaged down.
+    fn strokes(&self, a: Sv, b: Sv) -> impl Iterator<Item = (Sv, Sv)> {
+        let shifts: &[[f32; 2]] = if self.thick {
+            &[[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+        } else {
+            &[[0.0, 0.0]]
+        };
+        shifts.iter().map(move |&[dx, dy]| {
+            let at = |v: Sv| Sv {
+                x: v.x + dx,
+                y: v.y + dy,
+                ..v
+            };
+            (at(a), at(b))
+        })
+    }
+
     fn clip_line(&self, a: Sv, b: Sv) -> Option<(Sv, Sv)> {
         match (a.z > 0.0, b.z > 0.0) {
             (true, true) => Some((a, b)),
@@ -303,7 +325,8 @@ impl Frame {
     pub fn render(&mut self, width: usize, height: usize, cam: &Camera, scene: &Scene) -> Vec<u8> {
         let (width, height) = (width.max(1), height.max(1));
         (self.width, self.height) = (width, height);
-        let proj = Proj::new(cam, width, height);
+        let mut proj = Proj::new(cam, width, height);
+        proj.thick = self.thick;
         self.ids.resize(width * height, 0);
         self.depth.resize(width * height, 0.0);
         self.svs.resize_with(scene.bodies.len(), Vec::new);
@@ -363,6 +386,34 @@ impl Frame {
             }
         });
         rgba
+    }
+
+    /// `render` at twice the size, each 2×2 block averaged into one pixel: anti-aliased edges.
+    /// `width`/`height` (and so `pick`) then refer to the double-size frame.
+    pub fn render_smooth(
+        &mut self,
+        width: usize,
+        height: usize,
+        cam: &Camera,
+        scene: &Scene,
+    ) -> Vec<u8> {
+        let (width, height) = (width.max(1), height.max(1));
+        self.thick = true;
+        let big = self.render(width * 2, height * 2, cam, scene);
+        self.thick = false;
+        let mut out = vec![0u8; width * height * 4];
+        for y in 0..height {
+            for x in 0..width {
+                for c in 0..4 {
+                    let at = |dx: usize, dy: usize| {
+                        u16::from(big[((2 * y + dy) * width * 2 + 2 * x + dx) * 4 + c])
+                    };
+                    out[(y * width + x) * 4 + c] =
+                        ((at(0, 0) + at(1, 0) + at(0, 1) + at(1, 1) + 2) / 4) as u8;
+                }
+            }
+        }
+        out
     }
 
     /// The body id drawn at pixel (x, y) of the last render.
@@ -438,15 +489,19 @@ fn draw_band(
     for (body, sv) in scene.bodies.iter().zip(svs) {
         for e in body.edges.chunks_exact(2) {
             if let Some((a, b)) = proj.clip_line(sv[e[0] as usize], sv[e[1] as usize]) {
-                line(a, b, y0, y1, w, |x, y, z| {
-                    put(x, y, z, scene.edge_color, false);
-                });
+                for (a, b) in proj.strokes(a, b) {
+                    line(a, b, y0, y1, w, |x, y, z| {
+                        put(x, y, z, scene.edge_color, false);
+                    });
+                }
             }
         }
     }
     for &(a, b, color, on_top) in lines {
         if let Some((a, b)) = proj.clip_line(a, b) {
-            line(a, b, y0, y1, w, |x, y, z| put(x, y, z, color, on_top));
+            for (a, b) in proj.strokes(a, b) {
+                line(a, b, y0, y1, w, |x, y, z| put(x, y, z, color, on_top));
+            }
         }
     }
 }
@@ -544,6 +599,32 @@ pub(crate) mod tests {
             background: [10, 20, 30],
             edge_color: [0, 0, 0],
         }
+    }
+
+    #[test]
+    fn a_smooth_render_keeps_its_size_and_picking_and_blends_the_edges() {
+        let cubes = [cube(2.0, [-1.0, -1.0, -1.0])];
+        // Turned so the silhouette edges are slanted and staircase without smoothing.
+        let cam = Camera::looking([0.0; 3], StandardView::Iso.direction(), 1.8, 1.0);
+        let colors = |rgba: &[u8]| {
+            let mut v: Vec<&[u8]> = rgba.chunks_exact(4).collect();
+            v.sort();
+            v.dedup();
+            v.len()
+        };
+        let mut frame = Frame::default();
+        let plain = frame.render(200, 200, &cam, &scene(&cubes));
+        let smooth = frame.render_smooth(200, 200, &cam, &scene(&cubes));
+        assert_eq!(smooth.len(), 200 * 200 * 4);
+        assert_eq!((frame.width, frame.height), (400, 400));
+        assert_eq!(frame.pick(200, 200), Some(0));
+        assert_eq!(&smooth[..4], &[10, 20, 30, 255], "background stays exact");
+        assert!(
+            colors(&smooth) > colors(&plain) * 2,
+            "edges get intermediate colours: {} vs {}",
+            colors(&smooth),
+            colors(&plain)
+        );
     }
 
     #[test]

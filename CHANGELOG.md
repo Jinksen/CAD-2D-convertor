@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- 3D preview is anti-aliased in Normal and Fine quality (2× supersampling, edges keep their weight). Draft stays a plain render.
+
 ## 0.3.0
 
 Workspace
