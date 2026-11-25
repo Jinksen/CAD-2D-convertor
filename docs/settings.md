@@ -46,7 +46,9 @@ Notation rules are in [number-format.md](number-format.md).
 | Preview quality | Draft, Normal, Fine | Normal |
 | Mouse preset | CAD2Maxwell, Inventor, ANSYS | CAD2Maxwell |
 
-Preview quality scales the resolution of the software renderer (0.5x, 1x, 1.5x); the mesh
+Preview quality scales the resolution of the software renderer (0.5x, 1x, 1.5x). Normal and
+Fine are anti-aliased: each frame is rendered at twice that size and averaged down 2×2, with
+edges drawn 2 px wide so they keep their weight; Draft skips this for slow machines. The mesh
 itself comes from the service. Mouse presets for the 3D view:
 
 | Preset | Orbit | Pan | Pick |

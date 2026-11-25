@@ -16,7 +16,7 @@ use crate::render3d::raster::{Body, Line, Scene, draw_triad, guide_outline};
 use crate::render3d::{StandardView, plane_guide, triad};
 use crate::state::AppState;
 use crate::state::preview::{MeshStatus, RenderKey, ViewportMode};
-use crate::state::settings::{Button, DragAction};
+use crate::state::settings::{Button, DragAction, Quality};
 
 /// Default body color when the source has none (Three.js scene's 0x78a9ca).
 const DEFAULT_COLOR: [u8; 3] = [0x78, 0xa9, 0xca];
@@ -289,10 +289,16 @@ fn draw(s: &AppState, t: &Theme) {
         background: key.background,
         edge_color: [0x1f, 0x23, 0x28],
     };
-    let mut rgba = p
-        .frame
-        .borrow_mut()
-        .render(size.0, size.1, &p.camera, &scene);
+    // Draft stays a plain render for slow machines; the others are anti-aliased.
+    let mut rgba = if s.shell.settings.viewport.quality == Quality::Draft {
+        p.frame
+            .borrow_mut()
+            .render(size.0, size.1, &p.camera, &scene)
+    } else {
+        p.frame
+            .borrow_mut()
+            .render_smooth(size.0, size.1, &p.camera, &scene)
+    };
     let inset = aids::TRIAD_INSET * scale;
     draw_triad(
         &mut rgba,
